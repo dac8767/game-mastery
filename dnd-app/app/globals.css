@@ -1,0 +1,448 @@
+/* Table View — dark theme built for a dim room and a bright map. */
+
+:root {
+  --bg: #141210;
+  --bg-raised: #1e1b18;
+  --bg-inset: #0d0c0a;
+  --border: #322d28;
+  --text: #e8e2d9;
+  --text-dim: #9c948a;
+  --accent: #c9a227; /* candlelight gold */
+  --accent-soft: rgba(201, 162, 39, 0.14);
+  --healthy: #4caf6e;
+  --injured: #d9b13b;
+  --bloodied: #d95f3b;
+  --down: #6f6862;
+  --temp-hp: #4f9fd9;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  min-height: 100dvh;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+/* ---------- Shared layout ---------- */
+
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 3rem;
+}
+
+.page-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.page-header h1 {
+  font-size: 1.15rem;
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+
+.page-header .wordmark {
+  color: var(--accent);
+  font-variant: small-caps;
+  letter-spacing: 0.08em;
+}
+
+.muted {
+  color: var(--text-dim);
+}
+
+.text-button {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  padding: 0;
+}
+
+.text-button:hover {
+  color: var(--text);
+}
+
+.centered-note {
+  text-align: center;
+  color: var(--text-dim);
+  margin-top: 4rem;
+}
+
+/* ---------- Sign-in ---------- */
+
+.signin-wrap {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.signin-card {
+  width: 100%;
+  max-width: 22rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.75rem;
+}
+
+.signin-card h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.3rem;
+  color: var(--accent);
+  font-variant: small-caps;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+.signin-card .subtitle {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  margin: 0 0 1.25rem;
+}
+
+.signin-card label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin: 0.75rem 0 0.25rem;
+}
+
+.signin-card input {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--text);
+  font: inherit;
+}
+
+.signin-card input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.signin-card .submit {
+  width: 100%;
+  margin-top: 1.25rem;
+  padding: 0.6rem;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: #1a1508;
+  font-weight: 600;
+}
+
+.signin-card .submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.signin-card .flow-toggle {
+  display: block;
+  margin: 1rem auto 0;
+}
+
+.form-error {
+  color: var(--bloodied);
+  font-size: 0.85rem;
+  margin: 0.75rem 0 0;
+}
+
+/* ---------- Campaign list ---------- */
+
+.campaign-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.campaign-card {
+  display: block;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  transition: border-color 120ms ease;
+}
+
+.campaign-card:hover {
+  border-color: var(--accent);
+}
+
+.campaign-card .name {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.campaign-card .description {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  margin-top: 0.25rem;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
+/* ---------- Table (map) screen ---------- */
+
+.banner {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 10px;
+  padding: 0.6rem 1rem;
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.map-frame {
+  position: relative;
+  display: block;
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+}
+
+.map-frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.grid-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.22) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.22) 1px, transparent 1px);
+}
+
+.map-title {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+  text-align: center;
+}
+
+.empty-table {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 4rem 1rem;
+  text-align: center;
+  color: var(--text-dim);
+}
+
+/* ---------- Combat panel ---------- */
+
+.combat-panel {
+  margin-top: 1.5rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.combat-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.combat-header .encounter-name {
+  font-weight: 600;
+}
+
+.combat-header .round {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.combatant-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.combatant {
+  display: grid;
+  grid-template-columns: 2.5rem 1fr minmax(7rem, 30%);
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.combatant:last-child {
+  border-bottom: none;
+}
+
+.combatant.active {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.combatant.down-row {
+  opacity: 0.55;
+}
+
+.initiative {
+  font-size: 1.15rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--text-dim);
+}
+
+.combatant.active .initiative {
+  color: var(--accent);
+}
+
+.combatant .who .name {
+  font-weight: 600;
+}
+
+.combatant .who .name .kind {
+  color: var(--text-dim);
+  font-weight: 400;
+  font-size: 0.8rem;
+  margin-left: 0.4rem;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.25rem;
+}
+
+.chip {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  background: var(--bg-inset);
+}
+
+.chip.concentration {
+  border-color: var(--temp-hp);
+  color: var(--temp-hp);
+}
+
+/* HP readouts */
+
+.hp {
+  text-align: right;
+}
+
+.hp-numbers {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+}
+
+.hp-numbers .temp {
+  color: var(--temp-hp);
+  margin-left: 0.35rem;
+}
+
+.hp-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-inset);
+  overflow: hidden;
+  margin-top: 0.35rem;
+}
+
+.hp-bar .fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 250ms ease;
+}
+
+.hp-status {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+}
+
+.status-healthy {
+  color: var(--healthy);
+  background: rgba(76, 175, 110, 0.12);
+}
+
+.status-injured {
+  color: var(--injured);
+  background: rgba(217, 177, 59, 0.12);
+}
+
+.status-bloodied {
+  color: var(--bloodied);
+  background: rgba(217, 95, 59, 0.14);
+}
+
+.status-down {
+  color: var(--down);
+  background: rgba(111, 104, 98, 0.18);
+}
+
+@media (max-width: 540px) {
+  .combatant {
+    grid-template-columns: 2rem 1fr minmax(6rem, 38%);
+    gap: 0.5rem;
+    padding: 0.55rem 0.75rem;
+  }
+}

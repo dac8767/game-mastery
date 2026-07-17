@@ -1,0 +1,43 @@
+# Caddyfile — battle map file server behind Cloudflare Tunnel.
+#
+# Caddy listens on plain HTTP inside the Docker network; TLS is terminated
+# at Cloudflare's edge and traffic reaches this container only through the
+# tunnel, so :80 is safe here.
+
+:80 {
+	# Health check endpoint for quick diagnostics
+	respond /healthz "ok" 200
+
+	# Web-resolution copies — what the D&D app serves to players.
+	handle_path /web/* {
+		root * /srv/web
+		file_server browse
+		header {
+			# Encourage Cloudflare edge caching; version filenames on
+			# update instead of invalidating.
+			Cache-Control "public, max-age=31536000, immutable"
+		}
+	}
+
+	# Full-resolution originals — for your own use (print, editing).
+	handle_path /originals/* {
+		root * /srv/originals
+		file_server browse
+		header {
+			Cache-Control "public, max-age=86400"
+		}
+	}
+
+	# Root: simple landing that points at the two trees.
+	handle {
+		respond "Map server up. Browse /web/ or /originals/." 200
+	}
+
+	# Basic hardening: no directory access outside the roots, sane logs.
+	log {
+		output file /data/access.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}
