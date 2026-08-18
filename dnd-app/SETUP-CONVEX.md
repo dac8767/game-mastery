@@ -315,6 +315,55 @@ prod, so Steps 6–9 get repeated against prod.
 
 ---
 
+## Working from more than one computer
+
+Yes — the project is designed for this. The code lives in git and the
+database lives in Convex's cloud, so any machine with the repo and a
+login reaches the same deployment. What does *not* travel is `.env.local`
+(it's gitignored), so each machine needs a one-time link.
+
+On the second machine, do Step 0 and Step 1 as written, then:
+
+```bash
+npx convex dev --configure existing
+```
+
+**Use `--configure existing`, not a bare `npx convex dev`.** A bare run
+prompts you to create a new project or use an existing one, and choosing
+"new" silently gives you a *second, empty* database — your campaigns and
+maps will appear to have vanished when in fact you're pointed at a
+different deployment. The flag makes the choice explicit. You can skip
+the prompts entirely with `--team <team-slug> --project <project-slug>`.
+
+Then re-add the map server line to the freshly written `.env.local`:
+
+```
+NEXT_PUBLIC_MAP_SERVER=https://maps.yourdomain.com
+```
+
+**Do not re-run `npx @convex-dev/auth` on the second machine.**
+`JWT_PRIVATE_KEY`, `JWKS`, and `SITE_URL` are set on the *deployment*,
+not on your computer, so they're already in place. Regenerating the keys
+would sign out every existing session.
+
+### Two rules for multi-machine work
+
+1. **Only one `npx convex dev` watcher at a time.** Each watcher pushes
+   its own local copy of `convex/` to the shared dev deployment. If a
+   machine with older code has a watcher running, it will overwrite a
+   newer push from the other machine. When you just need a push rather
+   than a live watch, use `npx convex dev --once`.
+2. **`git pull` before you start, and commit `convex/_generated/`.** That
+   directory is committed so fresh clones typecheck, but `convex dev`
+   rewrites it — so it can show up as a diff on both machines. If it
+   ever conflicts, take either side and re-run `npx convex dev` to
+   regenerate it cleanly.
+
+Data itself never needs syncing: it's in the cloud, so a campaign you
+create from the PowerEdge is instantly visible from the laptop.
+
+---
+
 ## Gotchas
 
 - **`convex dev` must be running** for backend edits to take effect. A
