@@ -78,17 +78,6 @@ button {
   color: var(--text-dim);
 }
 
-.header-links {
-  display: flex;
-  align-items: baseline;
-  gap: 1rem;
-  font-size: 0.9rem;
-}
-
-.header-links a:hover {
-  color: var(--accent);
-}
-
 .text-button {
   background: none;
   border: none;
@@ -458,10 +447,190 @@ button {
   }
 }
 
+/* ---------- App shell: nav left, selection right ---------- */
+
+.shell {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  min-height: 100dvh;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1rem 0.75rem;
+  background: var(--bg-inset);
+  border-right: 1px solid var(--border);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.25rem 0.5rem 0.5rem;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #1a1508;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.brand-name {
+  font-variant: small-caps;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  font-size: 0.95rem;
+}
+
+.nav-campaign {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0 0.5rem 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.nav-campaign-icon {
+  color: var(--accent);
+}
+
+.nav-campaign-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-campaign .badge {
+  margin-left: 0;
+  font-size: 0.6rem;
+}
+
+.nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.42rem 0.6rem;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  color: var(--text-dim);
+  text-align: left;
+  background: none;
+  border: none;
+}
+
+.nav-item:hover {
+  background: var(--bg-raised);
+  color: var(--text);
+}
+
+.nav-item.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.nav-item.disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.nav-item.disabled:hover {
+  background: none;
+  color: var(--text-dim);
+}
+
+.nav-item.as-button {
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.nav-icon {
+  width: 1.1rem;
+  text-align: center;
+  opacity: 0.9;
+}
+
+.soon {
+  margin-left: auto;
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 0.35rem;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  display: grid;
+  gap: 1px;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+.workspace {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 1.25rem 1.5rem;
+}
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.crumbs a {
+  color: var(--text-dim);
+}
+
+.crumbs a:hover {
+  color: var(--text);
+}
+
+.crumbs .sep {
+  color: var(--text-dim);
+}
+
+.crumbs .current {
+  font-weight: 600;
+}
+
 /* ---------- NPC roster ---------- */
 
-.page-wide {
-  max-width: 1600px;
+.npc-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
 }
 
 .npc-toolbar {
@@ -469,18 +638,49 @@ button {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.quick-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.toolbar-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.quick-select {
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.82rem;
+  max-width: 12rem;
+}
+
+.quick-select.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .npc-search {
-  flex: 1 1 18rem;
-  min-width: 12rem;
-  padding: 0.45rem 0.7rem;
+  width: 13rem;
+  padding: 0.42rem 0.7rem;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--bg-inset);
   color: var(--text);
   font: inherit;
+  font-size: 0.85rem;
 }
 
 .npc-search:focus {
@@ -489,11 +689,12 @@ button {
 }
 
 .npc-btn {
-  padding: 0.45rem 0.75rem;
+  padding: 0.42rem 0.7rem;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--bg-raised);
   color: var(--text);
+  font-size: 0.85rem;
 }
 
 .npc-btn:hover {
@@ -510,7 +711,7 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   color: var(--text-dim);
 }
 
@@ -521,12 +722,26 @@ button {
   background: var(--bg-raised);
   color: var(--text);
   font: inherit;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
+}
+
+.npc-substrip {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.8rem;
 }
 
 .npc-count {
   color: var(--text-dim);
-  font-size: 0.85rem;
+}
+
+.npc-substrip .text-button {
+  font-size: 0.8rem;
+}
+
+.npc-substrip .text-button:last-child {
   margin-left: auto;
 }
 
@@ -547,7 +762,7 @@ button {
   grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
   gap: 0.9rem;
   padding: 0.9rem;
-  margin-bottom: 0.9rem;
+  margin-bottom: 0.75rem;
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -601,25 +816,30 @@ button {
 /* Grid */
 
 .npc-table-wrap {
+  flex: 1;
+  min-height: 0;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--bg-raised);
-  overflow-x: auto;
+  overflow: auto;
 }
 
 .npc-table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
-  font-size: 0.85rem;
+  table-layout: fixed;
+  font-size: 0.84rem;
 }
 
+/* `position: sticky` also makes each header the containing block the
+   resize handle anchors to. */
 .npc-table th {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
   text-align: left;
-  white-space: nowrap;
-  padding: 0.55rem 0.7rem;
+  padding: 0.55rem 0.9rem 0.55rem 0.7rem;
   background: var(--bg-inset);
   border-bottom: 1px solid var(--border);
   color: var(--text-dim);
@@ -638,19 +858,64 @@ button {
   color: var(--accent);
 }
 
-.npc-table th .arrow {
+.th-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.th-label .arrow {
   margin-left: 0.3rem;
 }
 
+/* Drag handle sits on the column's right border. */
+.col-resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 9px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.col-resize::after {
+  content: "";
+  position: absolute;
+  top: 20%;
+  right: 4px;
+  width: 1px;
+  height: 60%;
+  background: var(--border);
+}
+
+.col-resize:hover::after {
+  background: var(--accent);
+  width: 2px;
+}
+
+body.col-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
 .npc-table td {
-  padding: 0.5rem 0.7rem;
+  padding: 0.45rem 0.7rem;
   border-bottom: 1px solid var(--border);
-  vertical-align: top;
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .npc-table tbody tr:hover td {
   background: var(--accent-soft);
   cursor: pointer;
+}
+
+.npc-table tbody tr.selected td {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .npc-table .name-cell {
@@ -663,10 +928,50 @@ button {
   font-style: italic;
 }
 
+.blank {
+  color: var(--down);
+}
+
+.pic-cell {
+  padding: 0.3rem 0.7rem;
+}
+
+.row-portrait {
+  display: block;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+}
+
+.row-portrait.empty {
+  opacity: 0.35;
+}
+
 .cell-chips {
-  display: inline-flex;
+  display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
+}
+
+.chip.gender-male {
+  border-color: rgba(79, 159, 217, 0.5);
+  color: var(--temp-hp);
+  background: rgba(79, 159, 217, 0.12);
+}
+
+.chip.gender-female {
+  border-color: rgba(201, 162, 39, 0.5);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.chip.gender-other {
+  border-color: rgba(76, 175, 110, 0.5);
+  color: var(--healthy);
+  background: rgba(76, 175, 110, 0.12);
 }
 
 .chip.warn {
@@ -682,10 +987,11 @@ button {
   background: var(--bg-inset);
   color: var(--accent);
   font-weight: 600;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   letter-spacing: 0.04em;
   position: sticky;
-  top: 2rem;
+  top: 2.1rem;
+  z-index: 1;
 }
 
 .group-row .n {
@@ -789,8 +1095,35 @@ button {
   margin: 0 0 0.6rem;
 }
 
-@media (max-width: 640px) {
-  .npc-count {
-    margin-left: 0;
+@media (max-width: 900px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar .nav-list {
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+  }
+
+  .sidebar-footer {
+    margin-top: 0;
+    border-top: none;
+    padding-top: 0;
+    grid-auto-flow: column;
+  }
+
+  .soon {
+    display: none;
   }
 }

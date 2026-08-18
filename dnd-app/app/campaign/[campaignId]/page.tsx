@@ -2,9 +2,9 @@
 
 import { Authenticated, AuthLoading, Unauthenticated } from "convex/react";
 import { useParams } from "next/navigation";
-import Link from "next/link";
 import { Id } from "@/convex/_generated/dataModel";
 import { SignInForm } from "@/components/SignInForm";
+import { AppShell } from "@/components/AppShell";
 import { TableScreen } from "@/components/TableScreen";
 
 export default function CampaignPage() {
@@ -20,22 +20,9 @@ export default function CampaignPage() {
         <SignInForm />
       </Unauthenticated>
       <Authenticated>
-        <div className="page">
-          <header className="page-header">
-            <h1>
-              <Link href="/" className="wordmark">
-                Table View
-              </Link>
-            </h1>
-            <nav className="header-links">
-              <Link href={`/campaign/${campaignId}/npcs`}>NPCs</Link>
-              <Link href="/" className="muted">
-                ← Campaigns
-              </Link>
-            </nav>
-          </header>
+        <AppShell campaignId={campaignId} breadcrumb="Table">
           <TableScreen campaignId={campaignId} />
-        </div>
+        </AppShell>
       </Authenticated>
     </>
   );
