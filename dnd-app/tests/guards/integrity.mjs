@@ -197,6 +197,51 @@ export const integrity = {
       }
     }
 
+    // ---- themes must agree in four places --------------------------
+    // The schema defines them, a bootstrap script in layout.tsx applies
+    // one before first paint, globals.css defines the palettes, and
+    // Settings offers the choice. Add a theme and forget the bootstrap
+    // allowlist and it silently flashes the default on every load —
+    // annoying, and invisible to anyone who never picked that theme.
+    const themeBlock = blockAfter(
+      schemaSrc,
+      /userSettings:\s*defineTable\(/,
+      "userSettings in schema.ts"
+    );
+    const themes = [
+      ...themeBlock.matchAll(/v\.literal\("([^"]+)"\)/g),
+    ].map((m) => m[1]);
+
+    if (themes.length === 0) {
+      problems.push("could not read the theme list from the schema");
+    }
+
+    const layout = read("app", "layout.tsx");
+    const panel = read("components", "SettingsPanel.tsx");
+    const css = read("app", "globals.css");
+
+    for (const theme of themes) {
+      if (!layout.includes(`'${theme}'`)) {
+        problems.push(
+          `theme "${theme}" is missing from the bootstrap allowlist in ` +
+            "layout.tsx — it would flash the default on every load"
+        );
+      }
+      if (!panel.includes(`"${theme}"`)) {
+        problems.push(`theme "${theme}" is not offered in Settings`);
+      }
+    }
+
+    // And nothing in the CSS may claim a theme the schema doesn't have.
+    for (const [, named] of css.matchAll(/\[data-theme="([^"]+)"\]/g)) {
+      if (!themes.includes(named)) {
+        problems.push(
+          `globals.css styles [data-theme="${named}"], which is not a theme ` +
+            "the schema allows"
+        );
+      }
+    }
+
     // ---- the shared feedback table's contract ----------------------
     // Three apps write to one Supabase table. Getting `app` wrong files
     // bugs under the wrong product and nobody notices for weeks, and a
