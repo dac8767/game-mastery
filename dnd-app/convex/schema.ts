@@ -188,8 +188,20 @@ export default defineSchema({
     sortKey: v.optional(v.string()),
     sortAsc: v.optional(v.boolean()),
     groupBy: v.optional(v.string()),
+    // Airtable-style conditions: Where <field> <operator> <values>.
+    // `operator` is optional so layouts saved before operators existed
+    // still validate; they are read as "has any of".
     filters: v.optional(
-      v.array(v.object({ field: v.string(), values: v.array(v.string()) }))
+      v.array(
+        v.object({
+          field: v.string(),
+          operator: v.optional(v.string()),
+          values: v.array(v.string()),
+        })
+      )
+    ),
+    filterConjunction: v.optional(
+      v.union(v.literal("and"), v.literal("or"))
     ),
     // Grid (dense rows) or tiles (portrait-led cards).
     viewMode: v.optional(v.union(v.literal("grid"), v.literal("tiles"))),

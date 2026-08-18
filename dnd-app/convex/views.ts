@@ -25,8 +25,14 @@ const columnState = v.object({
 });
 
 const filterState = v.array(
-  v.object({ field: v.string(), values: v.array(v.string()) })
+  v.object({
+    field: v.string(),
+    operator: v.optional(v.string()),
+    values: v.array(v.string()),
+  })
 );
+
+const conjunction = v.union(v.literal("and"), v.literal("or"));
 
 export const getViewPrefs = query({
   args: { campaignId: v.id("campaigns"), view: v.string() },
@@ -51,7 +57,13 @@ export const getViewPrefs = query({
       sortKey: doc.sortKey ?? null,
       sortAsc: doc.sortAsc ?? null,
       groupBy: doc.groupBy ?? null,
-      filters: doc.filters ?? [],
+      filters: (doc.filters ?? []).map((f) => ({
+        field: f.field,
+        // Pre-operator layouts meant "has any of these values".
+        operator: f.operator ?? "hasAnyOf",
+        values: f.values,
+      })),
+      filterConjunction: doc.filterConjunction ?? null,
       viewMode: doc.viewMode ?? null,
       tilesPerRow: doc.tilesPerRow ?? null,
     };
@@ -67,6 +79,7 @@ export const saveViewPrefs = mutation({
     sortAsc: v.optional(v.boolean()),
     groupBy: v.optional(v.string()),
     filters: v.optional(filterState),
+    filterConjunction: v.optional(conjunction),
     viewMode: v.optional(v.union(v.literal("grid"), v.literal("tiles"))),
     tilesPerRow: v.optional(v.number()),
   },
@@ -89,6 +102,7 @@ export const saveViewPrefs = mutation({
       sortAsc: args.sortAsc,
       groupBy: args.groupBy,
       filters: args.filters ?? [],
+      filterConjunction: args.filterConjunction,
       viewMode: args.viewMode,
       tilesPerRow: args.tilesPerRow,
     };

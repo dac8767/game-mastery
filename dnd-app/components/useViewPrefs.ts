@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { ColumnState, reconcileColumns } from "@/components/npcColumns";
+import { Conjunction, FilterCondition } from "@/components/npcFilters";
 
 /**
  * One person's layout for one table, synced to Convex.
@@ -35,7 +36,9 @@ export function useViewPrefs(
   const [sortKey, setSortKeyRaw] = useState("name");
   const [sortAsc, setSortAscRaw] = useState(true);
   const [groupBy, setGroupByRaw] = useState("");
-  const [filters, setFiltersRaw] = useState<Record<string, string[]>>({});
+  const [filters, setFiltersRaw] = useState<FilterCondition[]>([]);
+  const [filterConjunction, setFilterConjunctionRaw] =
+    useState<Conjunction>("and");
   const [viewMode, setViewModeRaw] = useState<"grid" | "tiles">("grid");
   const [tilesPerRow, setTilesPerRowRaw] = useState(4);
 
@@ -53,8 +56,13 @@ export function useViewPrefs(
       setSortAscRaw(saved.sortAsc ?? true);
       setGroupByRaw(saved.groupBy ?? "");
       setFiltersRaw(
-        Object.fromEntries(saved.filters.map((f) => [f.field, f.values]))
+        saved.filters.map((f) => ({
+          field: f.field,
+          operator: f.operator,
+          values: f.values,
+        }))
       );
+      setFilterConjunctionRaw(saved.filterConjunction ?? "and");
       setViewModeRaw(saved.viewMode ?? "grid");
       setTilesPerRowRaw(saved.tilesPerRow ?? 4);
     }
@@ -82,9 +90,8 @@ export function useViewPrefs(
         sortKey,
         sortAsc,
         groupBy: groupBy || undefined,
-        filters: Object.entries(filters)
-          .filter(([, values]) => values.length > 0)
-          .map(([field, values]) => ({ field, values })),
+        filters,
+        filterConjunction,
         viewMode,
         tilesPerRow,
       });
@@ -96,6 +103,7 @@ export function useViewPrefs(
     sortAsc,
     groupBy,
     filters,
+    filterConjunction,
     viewMode,
     tilesPerRow,
     campaignId,
@@ -132,14 +140,18 @@ export function useViewPrefs(
   const setFilters = useCallback(
     (
       next:
-        | Record<string, string[]>
-        | ((cur: Record<string, string[]>) => Record<string, string[]>)
+        | FilterCondition[]
+        | ((cur: FilterCondition[]) => FilterCondition[])
     ) => {
       touch();
       setFiltersRaw(next);
     },
     []
   );
+  const setFilterConjunction = useCallback((c: Conjunction) => {
+    touch();
+    setFilterConjunctionRaw(c);
+  }, []);
 
   const setViewMode = useCallback((m: "grid" | "tiles") => {
     touch();
@@ -167,6 +179,8 @@ export function useViewPrefs(
     setGroupBy,
     filters,
     setFilters,
+    filterConjunction,
+    setFilterConjunction,
     viewMode,
     setViewMode,
     tilesPerRow,

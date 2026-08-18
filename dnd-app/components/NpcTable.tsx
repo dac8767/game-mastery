@@ -7,6 +7,8 @@ import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useViewPrefs } from "@/components/useViewPrefs";
 import { NpcDetail, fromInput } from "@/components/NpcDetail";
+import { FilterPanel } from "@/components/FilterPanel";
+import { matchesAll } from "@/components/npcFilters";
 import {
   COLUMNS,
   COLUMN_BY_KEY,
@@ -155,19 +157,17 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   }, [all, haystacks, search]);
 
   const filtered = useMemo(() => {
-    const active = Object.entries(prefs.filters).filter(
-      ([, v]) => v.length > 0
-    );
-    if (active.length === 0) return searched;
-    // Within one facet the selections are OR'd; across facets they're
-    // AND'd — the behavior people expect from a faceted table.
+    if (prefs.filters.length === 0) return searched;
+    // Conditions are evaluated in the browser against the single
+    // subscription — a condition costs nothing per keystroke.
     return searched.filter((n) =>
-      active.every(([key, chosen]) => {
-        const vals = facetValues(n, key);
-        return chosen.some((c) => vals.includes(c));
-      })
+      matchesAll(
+        (field) => cell(n, field),
+        prefs.filters,
+        prefs.filterConjunction
+      )
     );
-  }, [searched, prefs.filters]);
+  }, [searched, prefs.filters, prefs.filterConjunction]);
 
   const sorted = useMemo(() => {
     const rows = [...filtered];
@@ -210,6 +210,26 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
     return out;
   }, [searched, filtered, isDm]);
 
+  /** Known values per field, so conditions can offer options. */
+  const valueOptions = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const col of COLUMNS) {
+      const seen = new Set<string>();
+      for (const n of all) {
+        const raw = cell(n, col.key);
+        if (Array.isArray(raw)) {
+          for (const v of raw as string[]) if (v) seen.add(v);
+        } else if (typeof raw === "string" && raw.trim()) {
+          seen.add(raw);
+        }
+      }
+      if (seen.size > 0 && seen.size <= 200) {
+        m.set(col.key, Array.from(seen).sort());
+      }
+    }
+    return m;
+  }, [all]);
+
   const groups = useMemo(() => {
     if (!prefs.groupBy) return null;
     const map = new Map<string, Npc[]>();
@@ -249,32 +269,32 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   // widths and the cells clip, instead of the table growing to fit.
   const totalWidth = shown.reduce((sum, c) => sum + c.state.width, 0);
 
-  const activeFilterCount = Object.values(prefs.filters).reduce(
-    (sum, v) => sum + v.length,
-    0
+  const activeFilterCount = prefs.filters.length;
+
+  /** Fields a condition may target — DM-only columns only for the DM. */
+  const filterableFields = useMemo(
+    () => COLUMNS.filter((c) => isDm || !c.dmOnly),
+    [isDm]
   );
 
   const canEdit = (def: ColumnDef) =>
     isDm ? Boolean(def.editable) : Boolean(def.playerEditable);
 
-  function toggleFilter(key: string, value: string) {
-    prefs.setFilters((prev) => {
-      const cur = prev[key] ?? [];
-      const next = cur.includes(value)
-        ? cur.filter((v) => v !== value)
-        : [...cur, value];
-      const out = { ...prev, [key]: next };
-      if (next.length === 0) delete out[key];
-      return out;
-    });
+  /** The quick dropdowns are a shortcut for a `has any of` condition. */
+  function quickFilterValue(key: string): string {
+    const c = prefs.filters.find(
+      (f) => f.field === key && f.operator === "hasAnyOf"
+    );
+    return c?.values[0] ?? "";
   }
 
   function setSingleFilter(key: string, value: string) {
-    prefs.setFilters((prev) => {
-      const out = { ...prev };
-      if (!value) delete out[key];
-      else out[key] = [value];
-      return out;
+    prefs.setFilters((cur) => {
+      const rest = cur.filter(
+        (f) => !(f.field === key && f.operator === "hasAnyOf")
+      );
+      if (!value) return rest;
+      return [...rest, { field: key, operator: "hasAnyOf", values: [value] }];
     });
   }
 
@@ -370,9 +390,9 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
               <select
                 key={f.key}
                 className={`quick-select${
-                  prefs.filters[f.key]?.length ? " on" : ""
+                  quickFilterValue(f.key) ? " on" : ""
                 }`}
-                value={prefs.filters[f.key]?.[0] ?? ""}
+                value={quickFilterValue(f.key)}
                 onChange={(e) => setSingleFilter(f.key, e.target.value)}
               >
                 <option value="">{f.label}</option>
@@ -527,7 +547,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
             className="text-button"
             onClick={() => {
               setSearch("");
-              prefs.setFilters({});
+              prefs.setFilters([]);
               prefs.setGroupBy("");
             }}
           >
@@ -599,31 +619,14 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
       )}
 
       {showFilters && (
-        <div className="npc-filters">
-          {facetOptions.map((facet) => (
-            <div className="facet" key={facet.key}>
-              <div className="facet-label">{facet.label}</div>
-              <div className="facet-options">
-                {facet.options.map((opt) => {
-                  const on = (prefs.filters[facet.key] ?? []).includes(
-                    opt.value
-                  );
-                  return (
-                    <button
-                      type="button"
-                      key={opt.value}
-                      className={`facet-chip${on ? " on" : ""}`}
-                      onClick={() => toggleFilter(facet.key, opt.value)}
-                    >
-                      {opt.value}
-                      <span className="n">{opt.count}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
+        <FilterPanel
+          conditions={prefs.filters}
+          conjunction={prefs.filterConjunction}
+          fields={filterableFields}
+          valueOptions={valueOptions}
+          onChange={prefs.setFilters}
+          onConjunctionChange={prefs.setFilterConjunction}
+        />
       )}
 
       {prefs.viewMode === "tiles" ? (
