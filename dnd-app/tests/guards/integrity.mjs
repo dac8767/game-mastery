@@ -36,10 +36,12 @@ export const integrity = {
 
     // ---- what the schema actually defines -------------------------
     const schemaSrc = read("convex", "schema.ts");
-    const schemaFields = topLevelKeys(
-      blockAfter(schemaSrc, /npcs:\s*defineTable\(/, "npcs table in schema.ts"),
-      "npcs schema"
+    const npcsBlockSrc = blockAfter(
+      schemaSrc,
+      /npcs:\s*defineTable\(/,
+      "npcs table in schema.ts"
     );
+    const schemaFields = topLevelKeys(npcsBlockSrc, "npcs schema");
 
     // ---- what the query actually returns ---------------------------
     const npcsSrc = read("convex", "npcs.ts");
@@ -86,6 +88,40 @@ export const integrity = {
       }
       if (!/defaultVisible:/.test(entry)) {
         problems.push(`column \`${m[1]}\` has no defaultVisible`);
+      }
+    }
+
+    // A column's `kind` must match how the field is actually stored.
+    // Getting this wrong is invisible until someone edits: the editor
+    // parses by kind, so a scalar declared `chips` sends ["Grung"] into
+    // a v.string() field and the mutation rejects it.
+    for (const entry of columnsBlock.split(/\},\s*\n/)) {
+      const keyMatch = entry.match(/key:\s*"([^"]+)"/);
+      const kindMatch = entry.match(/kind:\s*"([^"]+)"/);
+      if (!keyMatch || !kindMatch) continue;
+      const [key, kind] = [keyMatch[1], kindMatch[1]];
+
+      const decl = npcsBlockSrc.match(new RegExp(`^\\s*${key}:\\s*(.+)$`, "m"));
+      if (!decl) continue; // covered by the dangling-key check above
+      const storage = decl[1];
+      const isArray = storage.includes("v.array(");
+
+      if (kind === "chips" && !isArray) {
+        problems.push(
+          `column \`${key}\` is kind "chips" but the schema stores a scalar — ` +
+            "editing it would send an array into a string field"
+        );
+      }
+      if (kind !== "chips" && isArray) {
+        problems.push(
+          `column \`${key}\` is kind "${kind}" but the schema stores an array`
+        );
+      }
+      if (kind === "number" && !storage.includes("v.number(")) {
+        problems.push(`column \`${key}\` is kind "number" but the schema is not`);
+      }
+      if (kind === "boolean" && !storage.includes("v.boolean(")) {
+        problems.push(`column \`${key}\` is kind "boolean" but the schema is not`);
       }
     }
 
@@ -148,13 +184,8 @@ export const integrity = {
 
     // Required (non-optional) schema fields must always be written, or
     // every row fails validation at import time.
-    const npcsBlock = blockAfter(
-      schemaSrc,
-      /npcs:\s*defineTable\(/,
-      "npcs table"
-    );
     for (const field of schemaFields) {
-      const decl = npcsBlock.match(
+      const decl = npcsBlockSrc.match(
         new RegExp(`^\\s*${field}:\\s*(.+)$`, "m")
       );
       if (!decl) continue;

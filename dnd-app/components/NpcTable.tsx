@@ -280,21 +280,27 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const canEdit = (def: ColumnDef) =>
     isDm ? Boolean(def.editable) : Boolean(def.playerEditable);
 
-  /** The quick dropdowns are a shortcut for a `has any of` condition. */
+  /**
+   * The quick dropdowns are a shortcut for a single condition. Which
+   * operator depends on how the field is stored: `has any of` for a real
+   * array, `is` for a scalar that merely renders as a pill.
+   */
+  function quickOperator(key: string): string {
+    return COLUMN_BY_KEY.get(key)?.kind === "chips" ? "hasAnyOf" : "is";
+  }
+
   function quickFilterValue(key: string): string {
-    const c = prefs.filters.find(
-      (f) => f.field === key && f.operator === "hasAnyOf"
-    );
+    const op = quickOperator(key);
+    const c = prefs.filters.find((f) => f.field === key && f.operator === op);
     return c?.values[0] ?? "";
   }
 
   function setSingleFilter(key: string, value: string) {
+    const op = quickOperator(key);
     prefs.setFilters((cur) => {
-      const rest = cur.filter(
-        (f) => !(f.field === key && f.operator === "hasAnyOf")
-      );
+      const rest = cur.filter((f) => !(f.field === key && f.operator === op));
       if (!value) return rest;
-      return [...rest, { field: key, operator: "hasAnyOf", values: [value] }];
+      return [...rest, { field: key, operator: op, values: [value] }];
     });
   }
 
@@ -849,7 +855,7 @@ function Row({
           );
         }
 
-        if (def.kind === "chips") {
+        if (def.kind === "chips" || def.chip) {
           const vals = chipValues(npc, def.key);
           return (
             <td
@@ -1000,7 +1006,8 @@ function Tile({
 
       <dl className="tile-fields">
         {fields.map(({ def }) => {
-          const chips = def.kind === "chips" ? chipValues(npc, def.key) : null;
+          const chips =
+            def.kind === "chips" || def.chip ? chipValues(npc, def.key) : null;
           const text = display(npc, def.key);
           if (chips ? chips.length === 0 : text === "") return null;
           return (

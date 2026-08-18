@@ -21,7 +21,15 @@ export type FieldKind =
 export type ColumnDef = {
   key: string;
   label: string;
+  /**
+   * How the value is STORED — this drives editing and filtering.
+   * `chips` means a real string array; a scalar that merely *renders*
+   * as a pill is `text` with `chip: true`. Conflating the two sends an
+   * array into a string field and the mutation rejects it.
+   */
   kind: FieldKind;
+  /** Render as a pill even though the value is a scalar. */
+  chip?: boolean;
   defaultWidth: number;
   defaultVisible: boolean;
   /** Never offered to players; the server sends null for these. */
@@ -44,10 +52,10 @@ export const COLUMNS: ColumnDef[] = [
     editable: true,
   },
   { key: "name", label: "Name", kind: "text", defaultWidth: 180, defaultVisible: true, editable: true },
-  { key: "job", label: "Job", kind: "chips", defaultWidth: 140, defaultVisible: true, editable: true },
+  { key: "job", label: "Job", kind: "text", chip: true, defaultWidth: 140, defaultVisible: true, editable: true },
   { key: "age", label: "Age", kind: "number", defaultWidth: 70, defaultVisible: true, editable: true },
-  { key: "gender", label: "Gender", kind: "chips", defaultWidth: 110, defaultVisible: true, editable: true },
-  { key: "species", label: "Species", kind: "chips", defaultWidth: 120, defaultVisible: true, editable: true },
+  { key: "gender", label: "Gender", kind: "text", chip: true, defaultWidth: 110, defaultVisible: true, editable: true },
+  { key: "species", label: "Species", kind: "text", chip: true, defaultWidth: 120, defaultVisible: true, editable: true },
   { key: "lineage", label: "Lineage", kind: "text", defaultWidth: 100, defaultVisible: true, editable: true },
   { key: "sexuality", label: "Sexuality", kind: "text", defaultWidth: 110, defaultVisible: true, editable: true },
   {
