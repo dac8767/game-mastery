@@ -25,7 +25,64 @@ projects, **no idle pausing**. Your rows are small metadata records — map
 paths, tags, HP numbers — so thousands of them is on the order of tens of
 megabytes. Storage is not your constraint; function calls are.
 
+### Convex is not installed on a machine you own
+
+Convex is a **hosted cloud service**. `npx convex dev` is a developer CLI
+that pushes your schema and functions up to Convex's infrastructure; the
+database itself lives there. There is no Convex daemon, container, or
+service to keep running on your own hardware, and nothing to back up
+locally.
+
+Practical consequences:
+
+- The D&D database does **not** depend on the PowerEdge being up. If that
+  box dies, map *images* stop serving; campaigns, characters, and combat
+  state are unaffected.
+- You can run this setup from any machine — laptop, desktop, or the
+  PowerEdge. It's the same cloud deployment either way.
+- Running it **from the PowerEdge is a good choice for Step 9**, because
+  the map library is already on that filesystem, so you can generate the
+  import file from the real directory tree without copying anything.
+
+The PowerEdge's actual job in this architecture is unrelated: Docker
+running `cloudflared` + Caddy to serve map images. That's `map-server/`,
+a separate setup with its own guide.
+
 ---
+
+## Step 0 — Starting from a bare machine
+
+Skip this if you already have the repo and Node 20.9+.
+
+These commands are for Pop!_OS / Ubuntu / Debian. A desktop Linux install
+(Pop!_OS included) has a browser, so the Convex login in Step 2 opens
+automatically and needs no special handling.
+
+**Install Node.js 20.9 or newer.** Next.js 16 requires `>=20.9.0`. The
+version in the default Pop!_OS/Ubuntu apt repos is far older than that
+(often Node 12 or 18), so installing plain `nodejs` from apt will fail
+later with a confusing build error. Use NodeSource:
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs
+node --version      # must print v20.9.0 or higher
+```
+
+(`nvm` works equally well if you'd rather not install Node system-wide —
+follow the install line in the nvm README, then `nvm install 22`.)
+
+**Install git and clone the repo:**
+
+```bash
+sudo apt-get install -y git
+git clone https://github.com/dac8767/game-mastery.git
+cd game-mastery
+git checkout claude/game-mastery-db-setup-jaeuln
+```
+
+That branch is where this guide lives; it hasn't been merged to `main`
+yet.
 
 ## Step 1 — Install dependencies
 
@@ -65,6 +122,24 @@ terminal and open a second one for the remaining steps.
 
 Expected on success: a list of the tables it created, then
 `Convex functions ready!`.
+
+**If you only want a one-shot push** (no watcher — useful on a machine
+where you aren't editing backend code), use:
+
+```bash
+npx convex dev --once
+```
+
+**On a headless machine with no browser**, log in first with the paste
+flow, then run `convex dev` normally:
+
+```bash
+npx convex login --no-open --login-flow paste --device-name poweredge
+npx convex login status      # confirms the token and lists your teams
+```
+
+It prints a URL to open on another machine; you paste the resulting token
+back into the terminal. Not needed on a desktop Linux install.
 
 ## Step 3 — One-time auth setup
 
