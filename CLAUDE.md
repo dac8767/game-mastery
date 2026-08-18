@@ -44,8 +44,8 @@ of scope here.
 - `convex/_generated/` is committed so fresh clones typecheck; it is
   overwritten by `npx convex dev` — never hand-edit it.
 - **Nothing is done until `npm run guards` is green** (in `dnd-app/`).
-  Six guards: typecheck-app, typecheck-convex, generated-api, integrity,
-  dm-visibility, build. `npm run guards -- --fast` skips the slow build
+  Seven guards: typecheck-app, typecheck-convex, generated-api,
+  integrity, dm-visibility, unit, build. `npm run guards -- --fast` skips the slow build
   guard while iterating. They also run on every push via
   `.github/workflows/guards.yml`.
 - The guards exist because the expensive failures are silent ones — a

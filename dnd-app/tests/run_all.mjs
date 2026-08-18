@@ -2,7 +2,7 @@
 /**
  * The guard suite. Run it before calling anything done:
  *
- *   npm run guards          all six
+ *   npm run guards          all seven
  *   npm run guards -- --fast  skip the slow build guard
  *
  * Why this exists: the failure mode that costs the most is not a crash,
@@ -20,6 +20,7 @@ import { typecheckApp, typecheckConvex } from "./guards/typecheck.mjs";
 import { generatedApi } from "./guards/generated_api.mjs";
 import { integrity } from "./guards/integrity.mjs";
 import { dmVisibility } from "./guards/dm_visibility.mjs";
+import { unit } from "./guards/unit.mjs";
 import { build } from "./guards/build.mjs";
 
 const GUARDS = [
@@ -28,6 +29,7 @@ const GUARDS = [
   generatedApi,
   integrity,
   dmVisibility,
+  unit,
   build,
 ];
 

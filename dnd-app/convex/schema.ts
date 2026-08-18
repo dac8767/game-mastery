@@ -216,6 +216,80 @@ export default defineSchema({
     tilesPerRow: v.optional(v.number()),
   }).index("by_user_campaign_view", ["userId", "campaignId", "view"]),
 
+  /**
+   * The Notebook — a tree of pages and coloured folders, each page a
+   * canvas of free-floating boxes.
+   *
+   * Ported from ScriptCraft's Scrapbook, with two deliberate changes.
+   * That version kept everything in one localStorage blob, which would
+   * not follow you between the laptop and the desktop and capped images
+   * at a shared ~5MB. And it rewrote the whole blob on every mutation.
+   *
+   * Here the tree is flat rows rather than a nested document: Convex
+   * validators cannot express a recursive node type, and a flat table
+   * with parentId is both checkable and repairable. The client builds
+   * the tree and drops orphans on load — the equivalent of that port's
+   * reconcileTree(), which exists because a half-written blob must come
+   * up empty rather than throw.
+   *
+   * Notebooks are personal: one per (user, campaign), private to that
+   * person, like their table layouts.
+   */
+  notebookNodes: defineTable({
+    userId: v.id("users"),
+    campaignId: v.id("campaigns"),
+    kind: v.union(v.literal("page"), v.literal("section")),
+    title: v.string(),
+    /** undefined = top level. Sections may nest. */
+    parentId: v.optional(v.id("notebookNodes")),
+    /** Sort key among siblings. */
+    order: v.number(),
+    color: v.optional(v.string()), // folder tint
+    collapsed: v.optional(v.boolean()),
+  })
+    .index("by_user_campaign", ["userId", "campaignId"])
+    .index("by_parent", ["parentId"]),
+
+  /**
+   * One row per box, not an array on the page.
+   *
+   * Dragging a box then rewrites one small document instead of the whole
+   * page, and a page full of images can't run into the 1MB document
+   * limit. Images are Convex file storage ids rather than base64 data
+   * URLs — the single biggest thing the handoff said to change on the
+   * way over.
+   *
+   * Stacking is `order` alone, exactly one source for it. The handoff is
+   * explicit that a z-index field beside an array position is how two
+   * orderings drift apart.
+   */
+  notebookBoxes: defineTable({
+    pageId: v.id("notebookNodes"),
+    userId: v.id("users"),
+    type: v.union(v.literal("text"), v.literal("image"), v.literal("table")),
+
+    x: v.number(),
+    y: v.number(),
+    w: v.number(),
+    h: v.number(),
+    order: v.number(),
+
+    html: v.optional(v.string()), // text boxes
+    storageId: v.optional(v.id("_storage")), // image boxes
+    rotate: v.optional(v.number()),
+    borderW: v.optional(v.number()),
+    borderColor: v.optional(v.string()),
+
+    rows: v.optional(v.array(v.array(v.string()))), // table boxes
+    colWidths: v.optional(v.array(v.number())),
+    rowHeights: v.optional(v.array(v.number())),
+    align: v.optional(
+      v.union(v.literal("left"), v.literal("center"), v.literal("right"))
+    ),
+    borderless: v.optional(v.boolean()),
+    shading: v.optional(v.string()),
+  }).index("by_page", ["pageId"]),
+
   // Map library metadata. Images live at
   // https://maps.yourdomain.com/{webPath|originalPath}
   maps: defineTable({
