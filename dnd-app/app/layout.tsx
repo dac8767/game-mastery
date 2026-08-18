@@ -17,7 +17,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning on <html> only: browser extensions stamp
+    // attributes onto the root element before React hydrates (a screen
+    // recorder adding data-scribe-recorder-ready, password managers,
+    // dark-mode forcers), and ThemeSync sets data-theme from the signed-in
+    // person's settings after mount. Neither is a real mismatch, and the
+    // warning is not suppressed for anything inside <body>, where a
+    // mismatch would mean an actual bug.
+    <html lang="en" suppressHydrationWarning>
       <body>
         <Providers>{children}</Providers>
       </body>

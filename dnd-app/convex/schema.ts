@@ -160,6 +160,14 @@ export default defineSchema({
       v.literal("parchment")
     ),
     viewAsPlayer: v.boolean(),
+    /**
+     * Break-glass switch for a platform admin. Storing it here is safe
+     * because it does nothing on its own: eligibility comes from the
+     * ADMIN_EMAILS deployment variable, which no mutation can write, and
+     * auth.hasActiveAdmin requires both. Optional so rows written before
+     * admin existed still validate.
+     */
+    adminOverride: v.optional(v.boolean()),
   }).index("by_user", ["userId"]),
 
   /**

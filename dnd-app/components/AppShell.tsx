@@ -124,6 +124,7 @@ export function AppShell({
               {campaign?.name ?? "Campaign"}
             </span>
             {campaign?.isDm && <span className="badge">DM</span>}
+            {campaign?.viaAdmin && <span className="badge admin">Admin</span>}
           </Link>
           <NavList items={CAMPAIGN_ITEMS} base={base} pathname={pathname} />
         </div>

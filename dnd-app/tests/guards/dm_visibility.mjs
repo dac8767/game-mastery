@@ -125,6 +125,39 @@ export const dmVisibility = {
       );
     }
 
+    // ---- admin must not be grantable from inside the app -----------
+    const authSrc = read("convex", "auth.ts");
+    if (!/process\.env\.ADMIN_EMAILS/.test(authSrc)) {
+      problems.push(
+        "admin eligibility must come from the ADMIN_EMAILS deployment " +
+          "variable — a table or mutation could be written by a bug"
+      );
+    }
+    if (/ctx\.db[\s\S]{0,80}(adminEmails|isAdminEligible)/.test(authSrc)) {
+      problems.push(
+        "admin eligibility appears to be read from the database rather " +
+          "than the environment"
+      );
+    }
+    // The override alone must never be sufficient.
+    if (
+      !/hasActiveAdmin[\s\S]{0,400}isAdminEligible/.test(authSrc) ||
+      !/hasActiveAdmin[\s\S]{0,400}adminOverride === true/.test(authSrc)
+    ) {
+      problems.push(
+        "hasActiveAdmin must require BOTH env-var eligibility and the " +
+          "stored override; either alone would be a self-grant"
+      );
+    }
+    if (
+      !/args\.adminOverride === true && !\(await isAdminEligible/.test(settings)
+    ) {
+      problems.push(
+        "settings.saveMySettings lets a non-eligible caller switch " +
+          "adminOverride on"
+      );
+    }
+
     // ---- the client must not re-derive DM state --------------------
     const columns = read("components", "npcColumns.ts");
     for (const field of ["hidden", "secret", "dmNotes"]) {

@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query, QueryCtx } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
-import { requireUser } from "./auth";
+import { isAdminEligible, requireUser } from "./auth";
 
 /**
  * Personal app settings.
@@ -25,7 +25,11 @@ export const themeValidator = v.union(
   v.literal("parchment")
 );
 
-const DEFAULTS = { theme: "candlelight" as const, viewAsPlayer: false };
+const DEFAULTS = {
+  theme: "candlelight" as const,
+  viewAsPlayer: false,
+  adminOverride: false,
+};
 
 /** Shared reader so queries can honour viewAsPlayer without duplication. */
 export async function getSettings(ctx: QueryCtx, userId: Id<"users">) {
@@ -34,7 +38,11 @@ export async function getSettings(ctx: QueryCtx, userId: Id<"users">) {
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .unique();
   return doc
-    ? { theme: doc.theme, viewAsPlayer: doc.viewAsPlayer }
+    ? {
+        theme: doc.theme,
+        viewAsPlayer: doc.viewAsPlayer,
+        adminOverride: doc.adminOverride ?? false,
+      }
     : DEFAULTS;
 }
 
@@ -42,7 +50,10 @@ export const mySettings = query({
   args: {},
   handler: async (ctx) => {
     const userId = await requireUser(ctx);
-    return await getSettings(ctx, userId);
+    const settings = await getSettings(ctx, userId);
+    // Eligibility is read from the deployment env var, never stored, so
+    // the client can be told about it but can never grant it.
+    return { ...settings, adminEligible: await isAdminEligible(ctx, userId) };
   },
 });
 
@@ -50,9 +61,16 @@ export const saveMySettings = mutation({
   args: {
     theme: v.optional(themeValidator),
     viewAsPlayer: v.optional(v.boolean()),
+    adminOverride: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const userId = await requireUser(ctx);
+
+    // Turning the override ON requires eligibility. Turning it off is
+    // always allowed — nobody should ever be stuck holding it.
+    if (args.adminOverride === true && !(await isAdminEligible(ctx, userId))) {
+      throw new Error("Not an admin");
+    }
 
     const existing = await ctx.db
       .query("userSettings")
@@ -63,6 +81,7 @@ export const saveMySettings = mutation({
       await ctx.db.patch(existing._id, {
         theme: args.theme ?? existing.theme,
         viewAsPlayer: args.viewAsPlayer ?? existing.viewAsPlayer,
+        adminOverride: args.adminOverride ?? existing.adminOverride ?? false,
       });
       return;
     }
@@ -71,6 +90,7 @@ export const saveMySettings = mutation({
       userId,
       theme: args.theme ?? DEFAULTS.theme,
       viewAsPlayer: args.viewAsPlayer ?? DEFAULTS.viewAsPlayer,
+      adminOverride: args.adminOverride ?? DEFAULTS.adminOverride,
     });
   },
 });

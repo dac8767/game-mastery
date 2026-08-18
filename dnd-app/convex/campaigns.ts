@@ -1,6 +1,11 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireDm, requireMember, requireUser } from "./auth";
+import {
+  hasActiveAdmin,
+  requireDm,
+  requireMember,
+  requireUser,
+} from "./auth";
 
 /**
  * Campaigns, membership, and characters.
@@ -28,11 +33,26 @@ export const createCampaign = mutation({
   },
 });
 
-/** Campaigns the caller can see (as DM or member). */
+/**
+ * Campaigns the caller can see: their own as DM, the ones they play in,
+ * and — only while the admin override is active — every campaign, so a
+ * broken one can be opened and repaired.
+ */
 export const myCampaigns = query({
   args: {},
   handler: async (ctx) => {
     const userId = await requireUser(ctx);
+
+    if (await hasActiveAdmin(ctx, userId)) {
+      const every = await ctx.db.query("campaigns").take(200);
+      return every.map((c) => ({
+        ...c,
+        isDm: c.dmId === userId,
+        // Borrowed authority is labelled, never disguised as ownership.
+        viaAdmin: c.dmId !== userId,
+      }));
+    }
+
     const asDm = await ctx.db
       .query("campaigns")
       .withIndex("by_dm", (q) => q.eq("dmId", userId))
@@ -52,7 +72,7 @@ export const myCampaigns = query({
         seen.add(c._id);
         return true;
       })
-      .map((c) => ({ ...c, isDm: c.dmId === userId }));
+      .map((c) => ({ ...c, isDm: c.dmId === userId, viaAdmin: false }));
   },
 });
 
