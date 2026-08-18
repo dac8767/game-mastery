@@ -54,28 +54,59 @@ a separate setup with its own guide.
 
 Skip this if you already have the repo and Node 20.9+.
 
-These commands are for Pop!_OS / Ubuntu / Debian. A desktop Linux install
-(Pop!_OS included) has a browser, so the Convex login in Step 2 opens
+Any desktop OS works and reaches the same cloud deployment. Both macOS
+and desktop Linux have a browser, so the Convex login in Step 2 opens
 automatically and needs no special handling.
 
-**Install Node.js 20.9 or newer.** Next.js 16 requires `>=20.9.0`. The
-version in the default Pop!_OS/Ubuntu apt repos is far older than that
-(often Node 12 or 18), so installing plain `nodejs` from apt will fail
-later with a confusing build error. Use NodeSource:
+**Node.js 20.9 or newer is the hard requirement** — that's Next.js 16's
+floor. Everything else below is just how you get there.
+
+### macOS
+
+macOS ships no Node at all, and any Node you installed years ago is
+likely too old. Install Homebrew if you don't have it:
 
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt-get install -y nodejs
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+On Apple Silicon, Homebrew installs to `/opt/homebrew` and the installer
+prints a line to add it to your PATH — run it, or `brew` won't be found
+in new shells:
+
+```bash
+eval "$(/opt/homebrew/bin/brew shellenv)"
+```
+
+Then:
+
+```bash
+brew install node git
 node --version      # must print v20.9.0 or higher
 ```
 
-(`nvm` works equally well if you'd rather not install Node system-wide —
-follow the install line in the nvm README, then `nvm install 22`.)
+`git` may already be present via Xcode Command Line Tools; if `git
+--version` prompts you to install them, either accept the prompt or run
+`xcode-select --install`.
 
-**Install git and clone the repo:**
+### Pop!_OS / Ubuntu / Debian
+
+The `nodejs` package in the default apt repos is far older than 20.9
+(often Node 12 or 18), so installing it will fail later with a confusing
+build error. Use NodeSource:
 
 ```bash
-sudo apt-get install -y git
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs git
+node --version      # must print v20.9.0 or higher
+```
+
+(`nvm` works on either OS if you'd rather not install Node system-wide —
+follow the install line in the nvm README, then `nvm install 22`.)
+
+### Clone the repo (both platforms)
+
+```bash
 git clone https://github.com/dac8767/game-mastery.git
 cd game-mastery
 git checkout claude/game-mastery-db-setup-jaeuln
