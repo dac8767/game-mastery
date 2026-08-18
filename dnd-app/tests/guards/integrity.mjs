@@ -197,6 +197,40 @@ export const integrity = {
       }
     }
 
+    // ---- the shared feedback table's contract ----------------------
+    // Three apps write to one Supabase table. Getting `app` wrong files
+    // bugs under the wrong product and nobody notices for weeks, and a
+    // stray `status` would let the form mark its own triage state.
+    const feedback = read("components", "feedbackClient.ts");
+
+    if (!/FEEDBACK_APP = "Game Mastery"/.test(feedback)) {
+      problems.push(
+        'feedbackClient must submit app = "Game Mastery" exactly — the ' +
+          "table's CHECK constraint allows only the three known apps"
+      );
+    }
+    const insertBody = feedback.slice(
+      feedback.indexOf("async function insertRow"),
+      feedback.indexOf("// ---- the local retry queue")
+    );
+    if (/\bstatus\b\s*:/.test(insertBody)) {
+      problems.push(
+        "feedbackClient sends `status` — that is Derek's triage state and " +
+          "must never be written by an app"
+      );
+    }
+    for (const c of ["Bug Report", "Suggestion", "Other"]) {
+      if (!feedback.includes(`"${c}"`)) {
+        problems.push(`feedback category "${c}" is missing from CATEGORIES`);
+      }
+    }
+    if (/\bBug\b(?!\s+Report)/.test(feedback.match(/CATEGORIES = \[[^\]]*\]/)?.[0] ?? "")) {
+      problems.push(
+        'CATEGORIES contains a bare "Bug" — the shared table already ' +
+          'drifted into holding both "Bug" and "Bug Report"'
+      );
+    }
+
     return problems;
   },
 };

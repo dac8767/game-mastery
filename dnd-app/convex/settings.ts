@@ -74,3 +74,28 @@ export const saveMySettings = mutation({
     });
   },
 });
+
+/**
+ * The signed-in person's name and email.
+ *
+ * The feedback form prefills from this instead of asking for a profile
+ * the way a signed-out app has to — everyone here is already
+ * authenticated, so asking again would be a form asking a question it
+ * can already answer.
+ */
+export const me = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireUser(ctx);
+    const user = await ctx.db.get(userId);
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+
+    return {
+      email: user?.email ?? null,
+      name: profile?.displayName ?? user?.name ?? null,
+    };
+  },
+});

@@ -4,9 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import { ThemeSync } from "@/components/ThemeSync";
+import { FeedbackForm } from "@/components/FeedbackForm";
 import { Id } from "@/convex/_generated/dataModel";
 
 /**
@@ -104,6 +105,7 @@ export function AppShell({
 
   const campaign = campaigns?.find((c) => c._id === campaignId) ?? null;
   const base = `/campaign/${campaignId}`;
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   return (
     <div className="shell">
@@ -153,6 +155,14 @@ export function AppShell({
           <button
             type="button"
             className="nav-item subtle as-button"
+            onClick={() => setFeedbackOpen(true)}
+          >
+            <span className="nav-icon">✉</span>
+            Send Feedback
+          </button>
+          <button
+            type="button"
+            className="nav-item subtle as-button"
             onClick={() => signOut()}
           >
             <span className="nav-icon">⏻</span>
@@ -169,6 +179,10 @@ export function AppShell({
         </div>
         {children}
       </main>
+
+      {feedbackOpen && (
+        <FeedbackForm onClose={() => setFeedbackOpen(false)} />
+      )}
     </div>
   );
 }
