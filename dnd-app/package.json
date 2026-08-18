@@ -11,7 +11,8 @@
     "convex": "convex dev",
     "codegen": "convex codegen",
     "typecheck": "tsc --noEmit",
-    "guards": "node tests/run_all.mjs"
+    "guards": "node tests/run_all.mjs",
+    "feedback": "node scripts/feedback.mjs"
   },
   "dependencies": {
     "@auth/core": "^0.41.2",
