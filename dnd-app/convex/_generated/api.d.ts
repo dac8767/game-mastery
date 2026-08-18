@@ -10,6 +10,7 @@
 
 import type * as auth from "../auth.js";
 import type * as campaigns from "../campaigns.js";
+import type * as chat from "../chat.js";
 import type * as combat from "../combat.js";
 import type * as http from "../http.js";
 import type * as maps from "../maps.js";
@@ -27,6 +28,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   campaigns: typeof campaigns;
+  chat: typeof chat;
   combat: typeof combat;
   http: typeof http;
   maps: typeof maps;

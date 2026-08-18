@@ -217,6 +217,40 @@ export default defineSchema({
   }).index("by_user_campaign_view", ["userId", "campaignId", "view"]),
 
   /**
+   * Chat channels for a campaign.
+   *
+   * Visibility is a property of the channel, checked server-side on
+   * every read and every send:
+   *   everyone — any member of the campaign
+   *   dmOnly   — only the DM (and an admin with the override active)
+   *   private  — the DM plus the listed members, for whispering to one
+   *              player without the table seeing it
+   *
+   * A player must not be able to learn that a dmOnly channel exists, so
+   * those are filtered out of the channel list rather than shown locked.
+   */
+  chatChannels: defineTable({
+    campaignId: v.id("campaigns"),
+    name: v.string(),
+    visibility: v.union(
+      v.literal("everyone"),
+      v.literal("dmOnly"),
+      v.literal("private")
+    ),
+    /** For `private` channels; the DM always has access regardless. */
+    memberIds: v.optional(v.array(v.id("users"))),
+    order: v.number(),
+  }).index("by_campaign", ["campaignId"]),
+
+  chatMessages: defineTable({
+    channelId: v.id("chatChannels"),
+    campaignId: v.id("campaigns"),
+    userId: v.id("users"),
+    body: v.string(),
+    editedAt: v.optional(v.number()),
+  }).index("by_channel", ["channelId"]),
+
+  /**
    * The Notebook — a tree of pages and coloured folders, each page a
    * canvas of free-floating boxes.
    *

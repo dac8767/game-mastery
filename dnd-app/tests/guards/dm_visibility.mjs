@@ -125,6 +125,41 @@ export const dmVisibility = {
       );
     }
 
+    // ---- chat channel visibility -----------------------------------
+    const chat = read("convex", "chat.ts");
+    requirePattern(
+      problems,
+      chat,
+      /case "dmOnly":\s*\n\s*return false;/,
+      "chat.canSee must refuse dmOnly channels to non-DM callers"
+    );
+    requirePattern(
+      problems,
+      chat,
+      /\.filter\(\(c\) => canSee\(c, userId, isDm\)\)/,
+      "chat.listChannels must filter the list through canSee — a player " +
+        "must not learn that a dmOnly channel exists"
+    );
+    requirePattern(
+      problems,
+      chat,
+      /if \(!canSee\(channel, userId, isDm\)\) return null;/,
+      "chat.listMessages must refuse a channel the caller cannot see"
+    );
+    requirePattern(
+      problems,
+      chat,
+      /if \(!canSee\(channel, userId, isDm\)\) throw new Error/,
+      "chat.sendMessage must refuse posting into a channel the caller " +
+        "cannot see"
+    );
+    requirePattern(
+      problems,
+      chat,
+      /export const createChannel[\s\S]*?await requireDm\(ctx, args\.campaignId\)/,
+      "chat.createChannel must be DM-gated"
+    );
+
     // ---- admin must not be grantable from inside the app -----------
     const authSrc = read("convex", "auth.ts");
     if (!/process\.env\.ADMIN_EMAILS/.test(authSrc)) {

@@ -37,6 +37,7 @@ const CAMPAIGN_ITEMS: NavItem[] = [
 ];
 
 const TOOL_ITEMS: NavItem[] = [
+  { label: "Chat", icon: "◌", slug: "chat" },
   { label: "Dice Roller", icon: "⚄" },
   { label: "Combat Tracker", icon: "⚔" },
   { label: "Notebook", icon: "✎", slug: "notebook" },
