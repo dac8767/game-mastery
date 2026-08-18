@@ -9,6 +9,7 @@ import { Id } from "@/convex/_generated/dataModel";
 import {
   NbNode,
   NodeRow,
+  boxIsEmpty,
   buildTree,
   emptyTable,
   folderColor,
@@ -21,6 +22,13 @@ import {
   tableSort,
   visibleNodes,
 } from "@/components/notebookTree";
+import { NotebookFormatBar } from "@/components/NotebookFormatBar";
+import {
+  focusScrapbookBox,
+  forgetScrapbookBox,
+  registerScrapbookSaver,
+  trackScrapbookSelection,
+} from "@/components/notebookFormat";
 
 /**
  * The Notebook: a tree of pages and coloured folders on the left, and a
@@ -39,6 +47,12 @@ import {
  *     measured coordinates, since an absolutely-positioned child cannot
  *     escape an ancestor's overflow whatever its z-index
  *   - stacking is the `order` field alone, never a second z-index
+ *
+ * A box is chromeless until you touch it: no border and no head bar
+ * until hover or focus. That is what makes the canvas read as a page
+ * rather than a form. An EMPTY box is the exception and always shows its
+ * border, because it has no contents to make it visible and would
+ * otherwise be an invisible trap.
  */
 
 type PageData = FunctionReturnType<typeof api.notebook.getPage>;
@@ -85,6 +99,7 @@ export function NotebookTool({
 
   const [menu, setMenu] = useState<MenuState>(null);
   const [error, setError] = useState<string | null>(null);
+  const [focusedBoxId, setFocusedBoxId] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const nodeRows: NodeRow[] = useMemo(() => rows ?? [], [rows]);
@@ -111,6 +126,28 @@ export function NotebookTool({
       setError(e instanceof Error ? e.message : "That didn't work.");
     }
   }, []);
+
+  // The format toolbar acts on whichever box the caret is in, and the
+  // caret is gone by the time a button's click would fire — so the
+  // selection is tracked continuously instead.
+  useEffect(() => {
+    document.addEventListener("selectionchange", trackScrapbookSelection);
+    return () =>
+      document.removeEventListener("selectionchange", trackScrapbookSelection);
+  }, []);
+
+  // notebookFormat is a plain DOM helper and knows nothing about Convex;
+  // this is the one place that hands it a way to persist. Without it a
+  // format is applied on screen and lost on reload.
+  useEffect(
+    () =>
+      registerScrapbookSaver((boxId, html) =>
+        void run(() =>
+          updateBox({ boxId: boxId as Id<"notebookBoxes">, html })
+        )
+      ),
+    [run, updateBox]
+  );
 
   async function uploadImage(file: File) {
     if (!selectedId) return;
@@ -281,9 +318,20 @@ export function NotebookTool({
           <span className="nb-page-title">{page?.title ?? ""}</span>
         </div>
 
+        <NotebookFormatBar />
+
         {error && <p className="form-error nb-error">{error}</p>}
 
-        <div className="nb-canvas">
+        <div
+          className="nb-canvas"
+          // Only a click on the canvas ITSELF clears the focus ring; a
+          // click that landed on a box bubbles up here too, and treating
+          // that as "nothing selected" would unfocus the box you just
+          // clicked into.
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setFocusedBoxId(null);
+          }}
+        >
           {!selectedId && (
             <p className="centered-note">
               Make a page to start writing.
@@ -293,6 +341,8 @@ export function NotebookTool({
             <BoxView
               key={box._id}
               box={box}
+              focused={focusedBoxId === box._id}
+              onFocus={() => setFocusedBoxId(box._id)}
               onChange={(patch) =>
                 void run(() => updateBox({ boxId: box._id, ...patch }))
               }
@@ -467,10 +517,14 @@ function TreeRow({
 /** Drag, resize, and the box's own content. */
 function BoxView({
   box,
+  focused,
+  onFocus,
   onChange,
   onMenu,
 }: {
   box: Box;
+  focused: boolean;
+  onFocus: () => void;
   onChange: (patch: Record<string, unknown>) => void;
   onMenu: (x: number, y: number) => void;
 }) {
@@ -522,21 +576,46 @@ function BoxView({
     window.addEventListener("pointerup", onUp);
   };
 
+  const empty = boxIsEmpty(box);
+
   return (
     <div
-      className="nb-box"
+      className={["nb-box", focused ? "focused" : "", empty ? "empty" : ""]
+        .filter(Boolean)
+        .join(" ")}
       style={{ left: pos.x, top: pos.y, width: pos.w, height: pos.h }}
+      onMouseDown={onFocus}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
         onMenu(e.clientX, e.clientY);
       }}
     >
+      {/*
+        The head bar FLOATS above the box rather than sitting inside it.
+        Inside, it would push the content down every time it appeared on
+        hover — a jump on every mouse-over.
+      */}
       <div
-        className="nb-box-grip"
+        className="nb-box-head nb-box-head-float"
         onPointerDown={(e) => startGesture(e, "move")}
         title="Drag to move"
-      />
+      >
+        <span className="nb-box-dots">⋮⋮</span>
+        <button
+          type="button"
+          title="More"
+          // The head bar owns pointerdown for dragging, so this button
+          // has to opt out of it or every press starts a drag.
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onMenu(e.clientX, e.clientY);
+          }}
+        >
+          ⋯
+        </button>
+      </div>
       <div className="nb-box-body">
         {box.type === "text" && <TextBox box={box} onChange={onChange} />}
         {box.type === "image" && <ImageBox box={box} />}
@@ -570,12 +649,25 @@ function TextBox({
     if (el.innerHTML !== next) el.innerHTML = next;
   }, [box.html]);
 
+  // Nothing may format a box that has gone away.
+  const boxId = box._id as string;
+  useEffect(() => () => forgetScrapbookBox(boxId), [boxId]);
+
   return (
     <div
       ref={ref}
       className="nb-text"
+      // BOX_ATTR — the attribute the format toolbar's tracker keys on.
+      // It goes on the editable element itself, because the apply helper
+      // reads innerHTML off whatever it finds and persists that as the
+      // box's content.
+      data-nb-box={boxId}
       contentEditable
       suppressContentEditableWarning
+      // Belt and braces alongside the selectionchange listener: the very
+      // first toolbar press has to work, and clicking into an empty box
+      // does not necessarily fire a selection change.
+      onFocus={() => focusScrapbookBox(ref.current, boxId)}
       // Commit on blur. Clicking straight from one box to another must
       // save the first — blur ordering is where contentEditable loses
       // edits.

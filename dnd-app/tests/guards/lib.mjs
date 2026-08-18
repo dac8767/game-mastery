@@ -109,6 +109,21 @@ export function constArrayStrings(source, name, label) {
   return out;
 }
 
+/**
+ * Source with its comments removed.
+ *
+ * Guards that forbid a call have to read code only: a comment saying
+ * "never call document.execCommand directly" is the guard working, and
+ * failing on it would punish the file for explaining itself.
+ */
+export function stripComments(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    // Leave `https://` alone — only a `//` not preceded by a colon opens
+    // a line comment in any code this reads.
+    .replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
+
 /** Assert `pattern` appears in `source`, else record a problem. */
 export function requirePattern(problems, source, pattern, description) {
   if (!pattern.test(source)) {

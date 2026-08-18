@@ -16,7 +16,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { APP_ROOT } from "./lib.mjs";
+import { APP_ROOT, read } from "./lib.mjs";
 
 function compile(relPath) {
   const out = mkdtempSync(join(tmpdir(), "gm-unit-"));
@@ -205,6 +205,80 @@ export const unit = {
     check(
       "rotatedImagePatch normalizes below zero",
       nb.rotatedImagePatch({ w: 10, h: 10, rotate: 0 }, -90).rotate === 270
+    );
+
+    // ---- emptiness -------------------------------------------------
+    // Drives the always-visible border on an empty box. contentEditable
+    // never leaves a field truly empty, so the naive `html === ""` test
+    // reports "has content" for exactly the box that needs its border.
+    check("htmlIsBlank: undefined", nb.htmlIsBlank(undefined));
+    check("htmlIsBlank: empty string", nb.htmlIsBlank(""));
+    check("htmlIsBlank: a stray <br>", nb.htmlIsBlank("<br>"));
+    check("htmlIsBlank: an empty div", nb.htmlIsBlank("<div><br></div>"));
+    check("htmlIsBlank: &nbsp;", nb.htmlIsBlank("&nbsp;"));
+    check(
+      "htmlIsBlank: styled-but-empty markup",
+      nb.htmlIsBlank('<span style="font-size:18pt"></span>')
+    );
+    check("htmlIsBlank: real text is not blank", !nb.htmlIsBlank("<b>hi</b>"));
+
+    check(
+      "boxIsEmpty: a text box with only a <br>",
+      nb.boxIsEmpty({ type: "text", html: "<div><br></div>" })
+    );
+    check(
+      "boxIsEmpty: a text box with words",
+      !nb.boxIsEmpty({ type: "text", html: "<p>Sir Wren</p>" })
+    );
+    check(
+      "boxIsEmpty: an image with no source",
+      nb.boxIsEmpty({ type: "image", src: null })
+    );
+    check(
+      "boxIsEmpty: an image counts as filled even with blank html",
+      !nb.boxIsEmpty({ type: "image", src: "https://x/y.png", html: "" })
+    );
+    check(
+      "boxIsEmpty: a fresh table",
+      nb.boxIsEmpty({ type: "table", rows: [["", ""], ["", ""]] })
+    );
+    check(
+      "boxIsEmpty: a table with one filled cell",
+      !nb.boxIsEmpty({ type: "table", rows: [["", "x"], ["", ""]] })
+    );
+
+    // ---- the format toolbar's command names ------------------------
+    // Every button names its command by string. Rename a key in EXEC and
+    // the button keeps rendering and silently formats nothing, which
+    // reads as a broken browser rather than a broken lookup.
+    const fmtOut = compile("components/notebookFormat.ts");
+    const fmt = await import(
+      pathToFileURL(join(fmtOut, "notebookFormat.js")).href
+    );
+
+    // JSX props, not object literals: `cmd="bold"`, not `cmd: "bold"`.
+    const barSrc = read("components", "NotebookFormatBar.tsx");
+    const used = [...barSrc.matchAll(/\bcmd="([^"]+)"/g)].map((m) => m[1]);
+    if (used.length === 0) {
+      throw new Error("found no format buttons in NotebookFormatBar.tsx");
+    }
+    for (const key of used) {
+      check(
+        `NotebookFormatBar uses cmd "${key}", which EXEC does not define`,
+        typeof fmt.execName(key) === "string"
+      );
+    }
+    check(
+      "execName rejects an unknown command",
+      fmt.execName("definitelyNotACommand") === null
+    );
+    check(
+      "the font-size ladder is sorted and free of duplicates",
+      fmt.FONT_SIZES.every((s, i, a) => i === 0 || s > a[i - 1])
+    );
+    check(
+      "BOX_ATTR is the attribute NotebookTool actually sets",
+      read("components", "NotebookTool.tsx").includes(`${fmt.BOX_ATTR}=`)
     );
 
     return problems;

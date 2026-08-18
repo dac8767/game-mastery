@@ -1971,6 +1971,86 @@ body.col-resizing {
   margin: 0 0 0.5rem;
 }
 
+/* ---------- Notebook: the format toolbar ---------- */
+
+.nb-fmtbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 0.25rem 0.4rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-raised);
+}
+
+.nb-fmt-btn {
+  min-width: 1.7rem;
+  height: 1.7rem;
+  padding: 0 0.35rem;
+  font-size: 0.8rem;
+  line-height: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text);
+}
+
+.nb-fmt-btn:hover {
+  background: var(--bg-inset);
+  border-color: var(--border);
+}
+
+.nb-fmt-select {
+  height: 1.7rem;
+  font-size: 0.78rem;
+  padding: 0 0.25rem;
+  background: var(--bg-inset);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+
+.nb-fmt-size {
+  width: 4.5rem;
+}
+
+.nb-fmt-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 0.35rem;
+  background: var(--border);
+}
+
+.nb-fmt-pop-host {
+  position: relative;
+  display: inline-flex;
+}
+
+.nb-fmt-color {
+  position: absolute;
+  top: 1.9rem;
+  left: 0;
+  z-index: 10;
+}
+
+.nb-fmt-pop {
+  position: absolute;
+  top: 1.9rem;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+/* ---------- Notebook: the canvas ---------- */
+
 .nb-canvas {
   position: relative;
   flex: 1;
@@ -1981,37 +2061,112 @@ body.col-resizing {
   border-radius: 12px;
 }
 
+/*
+  A box is a region of the page you happen to be typing in, not a widget
+  sitting on top of it — so it paints no background of its own and no
+  border until you touch it. Reaching for a raised/card token here is the
+  mistake that makes the canvas read as a form.
+
+  overflow is visible because the head bar floats ABOVE the box; the body
+  clips its own content instead.
+*/
 .nb-box {
   position: absolute;
   display: flex;
   flex-direction: column;
-  background: var(--bg-inset);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
+  background: transparent;
+  border: 1px solid transparent;
+  /* Square at the top so the head bar tucks under; rounded only at the
+     bottom. That asymmetry is what tells a text box from a table. */
+  border-radius: 0 0 8px 8px;
+  overflow: visible;
 }
 
+/* An empty box has no contents to make it visible, so it announces
+   itself always rather than only on hover. */
+.nb-box.empty {
+  border-color: color-mix(in srgb, var(--text) 55%, transparent);
+}
+
+/* Hover and focus come after `empty` deliberately: while you are typing
+   into a new box, the accent ring is the more useful of the two. */
 .nb-box:hover {
-  border-color: var(--accent);
+  border-color: var(--border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
 }
 
-.nb-box-grip {
-  height: 0.9rem;
-  flex: none;
+.nb-box.focused {
+  border-color: var(--accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
+
+/*
+  The head bar floats above the item. Inside the box it would push the
+  content down every time it appeared on hover — a jump on every
+  mouse-over.
+*/
+.nb-box-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.25rem;
+  font-size: 0.6rem;
+  color: var(--text-dim);
   cursor: grab;
-  background: var(--bg-raised);
-  border-bottom: 1px solid var(--border);
+  user-select: none;
   touch-action: none;
 }
 
-.nb-box-grip:active {
+.nb-box-head:active {
   cursor: grabbing;
+}
+
+.nb-box-head-float {
+  position: absolute;
+  top: -1.15rem;
+  left: -1px;
+  right: -1px;
+  height: 1.15rem;
+  z-index: 3;
+  /* Solid, not translucent: it has to read over the canvas rather than
+     blend into it. */
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 5px 5px 0 0;
+  /* Chromeless until you touch the box. */
+  display: none;
+}
+
+.nb-box:hover > .nb-box-head-float,
+.nb-box.focused > .nb-box-head-float,
+.nb-box.empty > .nb-box-head-float {
+  display: flex;
+}
+
+.nb-box-dots {
+  letter-spacing: -2px;
+}
+
+.nb-box-head button {
+  background: none;
+  border: none;
+  padding: 0 0.15rem;
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.nb-box-head button:hover {
+  color: var(--text);
 }
 
 .nb-box-body {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  border-radius: 0 0 8px 8px;
 }
 
 .nb-box-resize {
@@ -2032,14 +2187,15 @@ body.col-resizing {
 
 .nb-text {
   min-height: 100%;
+  max-width: 100%;
   padding: 0.5rem 0.6rem;
   font-size: 0.88rem;
   line-height: 1.5;
+  /* contentEditable's own focus ring is wrong here — the box border is
+     what shows focus. */
   outline: none;
-}
-
-.nb-text:focus {
-  background: var(--bg-raised);
+  /* A pasted URL must wrap rather than widen the box. */
+  overflow-wrap: anywhere;
 }
 
 .nb-image {

@@ -23,6 +23,7 @@ import {
   topLevelKeys,
   stringProps,
   constArrayStrings,
+  stripComments,
 } from "./lib.mjs";
 
 /** Convex adds these to every document. */
@@ -252,6 +253,69 @@ export const integrity = {
             "the schema allows"
         );
       }
+    }
+
+    // ---- the notebook's format toolbar -----------------------------
+    // Two failures here are invisible to TypeScript and both present as
+    // "the toolbar does nothing", which reads as a broken browser rather
+    // than a broken handler:
+    //
+    //   - onClick instead of onMouseDown+preventDefault. The click blurs
+    //     the contentEditable and collapses its selection BEFORE the
+    //     handler runs, so the command applies to nothing.
+    //   - calling document.execCommand directly. That changes what is on
+    //     screen and nothing else; the helper is what writes the box's
+    //     new HTML back through the mutation, so a direct call looks
+    //     applied and is gone on reload.
+    // Code only: this file documents both traps in prose, and failing on
+    // the explanation would punish it for warning the next reader.
+    const fmtBar = stripComments(read("components", "NotebookFormatBar.tsx"));
+
+    if (/onClick=/.test(fmtBar)) {
+      problems.push(
+        "NotebookFormatBar uses onClick — a click collapses the box's " +
+          "selection before the handler runs; every control must be " +
+          "onMouseDown with preventDefault()"
+      );
+    }
+    const mouseDowns = [...fmtBar.matchAll(/onMouseDown=\{\(e\) => \{/g)];
+    if (mouseDowns.length === 0) {
+      problems.push("NotebookFormatBar has no onMouseDown handlers at all");
+    }
+    const preventDefaults = [...fmtBar.matchAll(/e\.preventDefault\(\)/g)];
+    if (preventDefaults.length < mouseDowns.length) {
+      problems.push(
+        `NotebookFormatBar has ${mouseDowns.length} onMouseDown handlers but ` +
+          `only ${preventDefaults.length} preventDefault() calls — one of ` +
+          "them will silently format nothing"
+      );
+    }
+    if (/document\.execCommand/.test(fmtBar)) {
+      problems.push(
+        "NotebookFormatBar calls document.execCommand directly — route it " +
+          "through applyScrapbookTextFormat, which also persists the result"
+      );
+    }
+    if (!/applyScrapbookTextFormat/.test(fmtBar)) {
+      problems.push("NotebookFormatBar never calls applyScrapbookTextFormat");
+    }
+
+    // A <select> must NOT preventDefault on mousedown or it cannot open;
+    // it is safe because the remembered range, not the live selection, is
+    // what the apply helper restores. So the toolbar has to mount the
+    // tracker that remembers it.
+    const nbTool = stripComments(read("components", "NotebookTool.tsx"));
+    if (!/addEventListener\("selectionchange", trackScrapbookSelection\)/.test(nbTool)) {
+      problems.push(
+        "NotebookTool does not mount the selectionchange tracker — the " +
+          "format toolbar would act on whatever the last click left behind"
+      );
+    }
+    if (!/registerScrapbookSaver/.test(nbTool)) {
+      problems.push(
+        "NotebookTool never registers a saver, so formatting would be lost " +
+          "on reload"
+      );
     }
 
     // ---- the shared feedback table's contract ----------------------

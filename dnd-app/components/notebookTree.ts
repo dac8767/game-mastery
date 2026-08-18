@@ -255,6 +255,51 @@ export function tableIsEmpty(t: TableData): boolean {
   return t.rows.every((r) => r.every((c) => c.trim() === ""));
 }
 
+// ---------------------------------------------------------------------
+// Emptiness — what decides whether a box has to announce itself
+// ---------------------------------------------------------------------
+
+/**
+ * Does this HTML render as nothing?
+ *
+ * contentEditable never leaves a field truly empty: type a character and
+ * delete it and you are left with `<br>`, and a pasted blank line is
+ * `&nbsp;`. Testing `html === ""` therefore reports "has content" for a
+ * box that plainly looks blank, which is exactly the box that most needs
+ * its border.
+ */
+export function htmlIsBlank(html?: string | null): boolean {
+  if (!html) return true;
+  const text = html
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&#160;/g, " ")
+    .replace(/\s+/g, "");
+  return text.length === 0;
+}
+
+/**
+ * A box with nothing in it is drawn with a visible border always, not
+ * only on hover.
+ *
+ * That looks like an inconsistency and isn't: a filled box carries its
+ * own visibility — you can see the text — while an empty chromeless box
+ * is an invisible trap you can click into and never find again.
+ */
+export function boxIsEmpty(box: {
+  type: string;
+  html?: string | null;
+  src?: string | null;
+  rows?: string[][] | null;
+}): boolean {
+  if (box.type === "image") return !box.src;
+  if (box.type === "table") {
+    const rows = box.rows ?? [[""]];
+    return rows.every((r) => r.every((c) => c.trim() === ""));
+  }
+  return htmlIsBlank(box.html);
+}
+
 /**
  * Rotating an image swaps its bounding box at each quarter turn, so the
  * box has to be resized with it or the picture crops itself.
