@@ -155,9 +155,17 @@ set up, `npx convex dev` fails with an esbuild binary error rather than
 anything that points at Convex. `sharp` is Next.js's image processor.
 
 ```bash
-npm approve-scripts --allow-scripts-pending   # review and approve both
-npm install                                   # re-run so they execute
+npm approve-scripts esbuild
+npm approve-scripts sharp
+npm install                # re-run so the approved scripts execute
 ```
+
+Approve one package per invocation. `npm approve-scripts
+--allow-scripts-pending` only *lists* what's pending — it reviews rather
+than approves, and leaves the warning in place.
+
+Confirm it took: the `allow-scripts` warning should be gone from the tail
+of `npm install`.
 
 ## Step 2 — Create the Convex project and push the schema
 
