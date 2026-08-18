@@ -45,6 +45,14 @@ const EMPTY = "—";
 /** Placeholder shown in a blank grid cell. */
 const BLANK = "–";
 const MIN_COL_WIDTH = 48;
+/**
+ * The one column that can't be hidden.
+ *
+ * "Hide all" with nothing exempt leaves a table of zero columns, which
+ * looks like the roster was wiped rather than like a display setting.
+ * Airtable protects its primary field the same way.
+ */
+const PRIMARY_COLUMN = "name";
 
 function cell(npc: Npc, key: string): unknown {
   return (npc as unknown as Record<string, unknown>)[key];
@@ -137,6 +145,9 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   );
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [columnSearch, setColumnSearch] = useState("");
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [dropKey, setDropKey] = useState<string | null>(null);
 
   const all = useMemo(() => result?.npcs ?? [], [result]);
 
@@ -342,15 +353,37 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
     );
   }
 
-  function moveColumn(key: string, delta: number) {
+  /**
+   * Drop `fromKey` where `toKey` currently sits.
+   *
+   * Lift-and-insert, not a swap: dragging a field from the bottom of the
+   * list to the top should slide everything else down by one, which is
+   * what the gesture looks like. A swap would fling whatever was at the
+   * top down to the bottom.
+   */
+  function reorderColumn(fromKey: string, toKey: string) {
+    if (fromKey === toKey) return;
     prefs.setColumns((cur) => {
-      const i = cur.findIndex((c) => c.key === key);
-      const j = i + delta;
-      if (i === -1 || j < 0 || j >= cur.length) return cur;
+      const from = cur.findIndex((c) => c.key === fromKey);
+      const to = cur.findIndex((c) => c.key === toKey);
+      if (from === -1 || to === -1) return cur;
       const next = [...cur];
-      [next[i], next[j]] = [next[j], next[i]];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
       return next;
     });
+  }
+
+  /** Show or hide every column at once, except the primary field. */
+  function setAllColumns(visible: boolean) {
+    prefs.setColumns((cur) =>
+      cur.map((c) => {
+        const def = COLUMN_BY_KEY.get(c.key);
+        if (!def || (def.dmOnly && !isDm)) return c;
+        if (c.key === PRIMARY_COLUMN) return { ...c, visible: true };
+        return { ...c, visible };
+      })
+    );
   }
 
   function toggleGroup(value: string) {
@@ -584,43 +617,112 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
           <div className="facet-label">
             Columns — yours alone; nobody else&apos;s view changes
           </div>
+
+          <input
+            className="column-find"
+            type="search"
+            placeholder="Find a field"
+            value={columnSearch}
+            onChange={(e) => setColumnSearch(e.target.value)}
+          />
+
           <ul className="column-list">
-            {prefs.columns.map((state, i) => {
+            {prefs.columns.map((state) => {
               const def = COLUMN_BY_KEY.get(state.key);
               if (!def || (def.dmOnly && !isDm)) return null;
+              if (
+                columnSearch.trim() &&
+                !def.label
+                  .toLowerCase()
+                  .includes(columnSearch.trim().toLowerCase())
+              ) {
+                return null;
+              }
+
+              const isPrimary = state.key === PRIMARY_COLUMN;
               return (
-                <li key={state.key}>
-                  <label className="column-toggle">
-                    <input
-                      type="checkbox"
-                      checked={state.visible}
-                      onChange={() => toggleColumn(state.key)}
-                    />
-                    <span>{def.label}</span>
-                    {def.dmOnly && <span className="dm-tag">DM</span>}
-                  </label>
-                  <span className="column-move">
-                    <button
-                      type="button"
-                      onClick={() => moveColumn(state.key, -1)}
-                      disabled={i === 0}
-                      title="Move left"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => moveColumn(state.key, 1)}
-                      disabled={i === prefs.columns.length - 1}
-                      title="Move right"
-                    >
-                      ↓
-                    </button>
+                <li
+                  key={state.key}
+                  className={[
+                    "column-item",
+                    dragKey === state.key ? "dragging" : "",
+                    dropKey === state.key ? "drop-target" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  draggable
+                  onDragStart={(e) => {
+                    // WebKit refuses the drag outright without this.
+                    e.dataTransfer.setData("text/plain", state.key);
+                    e.dataTransfer.effectAllowed = "move";
+                    setDragKey(state.key);
+                  }}
+                  onDragEnd={() => {
+                    setDragKey(null);
+                    setDropKey(null);
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    if (dropKey !== state.key) setDropKey(state.key);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const from =
+                      e.dataTransfer.getData("text/plain") || dragKey;
+                    setDragKey(null);
+                    setDropKey(null);
+                    if (from) reorderColumn(from, state.key);
+                  }}
+                >
+                  <button
+                    type="button"
+                    className={`column-switch${state.visible ? " on" : ""}`}
+                    role="switch"
+                    aria-checked={state.visible}
+                    aria-label={`Show ${def.label}`}
+                    disabled={isPrimary}
+                    title={
+                      isPrimary
+                        ? "The primary field always shows"
+                        : state.visible
+                          ? "Hide this field"
+                          : "Show this field"
+                    }
+                    onClick={() => toggleColumn(state.key)}
+                  >
+                    <span className="knob" />
+                  </button>
+
+                  <span className="column-name">{def.label}</span>
+                  {def.dmOnly && <span className="dm-tag">DM</span>}
+
+                  {/* Grip is a hint, not the handle — the whole row is
+                      draggable, which is a much larger target. */}
+                  <span className="column-grip" aria-hidden="true">
+                    ⠿
                   </span>
                 </li>
               );
             })}
           </ul>
+
+          <div className="column-panel-actions">
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => setAllColumns(false)}
+            >
+              Hide all
+            </button>
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => setAllColumns(true)}
+            >
+              Show all
+            </button>
+          </div>
         </div>
       )}
 

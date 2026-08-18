@@ -1234,60 +1234,136 @@ body.col-resizing {
 /* ---------- Column picker ---------- */
 
 .column-panel {
-  padding: 0.9rem;
+  padding: 0.75rem;
   margin-bottom: 0.75rem;
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: 12px;
+  max-width: 26rem;
+}
+
+.column-find {
+  width: 100%;
+  margin: 0.5rem 0 0.6rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.column-find:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .column-list {
   list-style: none;
   margin: 0;
   padding: 0;
+  max-height: 22rem;
+  overflow-y: auto;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-  gap: 0.2rem 1rem;
+  gap: 1px;
 }
 
-.column-list li {
+.column-item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.15rem 0;
+  gap: 0.6rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 7px;
+  font-size: 0.86rem;
+  cursor: grab;
+  user-select: none;
+  /* A transparent top border reserves the space the drop indicator
+     needs, so rows don't shift by a pixel as it appears. */
+  border-top: 2px solid transparent;
 }
 
-.column-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  flex: 1;
-  font-size: 0.85rem;
-  cursor: pointer;
+.column-item:hover {
+  background: var(--bg-inset);
 }
 
-.column-move {
-  display: flex;
-  gap: 0.15rem;
+.column-item.dragging {
+  opacity: 0.4;
 }
 
-.column-move button {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text-dim);
-  width: 1.4rem;
-  line-height: 1.2;
+.column-item.drop-target {
+  border-top-color: var(--accent);
 }
 
-.column-move button:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
+.column-item:active {
+  cursor: grabbing;
 }
 
-.column-move button:disabled {
-  opacity: 0.3;
+/* Toggle switch */
+
+.column-switch {
+  position: relative;
+  flex: none;
+  width: 1.9rem;
+  height: 1.05rem;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--border);
+  transition: background 120ms ease;
+}
+
+.column-switch .knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 999px;
+  background: var(--bg-raised);
+  transition: transform 120ms ease;
+}
+
+.column-switch.on {
+  background: var(--accent);
+}
+
+.column-switch.on .knob {
+  transform: translateX(0.85rem);
+}
+
+.column-switch:disabled {
+  opacity: 0.55;
   cursor: default;
+}
+
+.column-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.column-grip {
+  flex: none;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  letter-spacing: -0.1em;
+  opacity: 0.5;
+}
+
+.column-item:hover .column-grip {
+  opacity: 1;
+}
+
+.column-panel-actions {
+  display: flex;
+  gap: 1.25rem;
+  justify-content: center;
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.82rem;
 }
 
 .dm-tag {
@@ -1298,7 +1374,7 @@ body.col-resizing {
   border: 1px solid var(--bloodied);
   border-radius: 999px;
   padding: 0 0.35rem;
-  margin-left: 0.4rem;
+  flex: none;
 }
 
 /* ---------- Tile view ---------- */
