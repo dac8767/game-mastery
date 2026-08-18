@@ -42,9 +42,19 @@ of scope here.
   `combat.getEncounterView` for combat.
 - `convex/_generated/` is committed so fresh clones typecheck; it is
   overwritten by `npx convex dev` — never hand-edit it.
-- Verify with: `npm run typecheck && npx tsc --noEmit -p convex && npm run build`
-  (in `dnd-app/`). `npx convex dev` needs network access to convex.dev,
-  which sandboxed sessions may not have.
+- **Nothing is done until `npm run guards` is green** (in `dnd-app/`).
+  Six guards: typecheck-app, typecheck-convex, generated-api, integrity,
+  dm-visibility, build. `npm run guards -- --fast` skips the slow build
+  guard while iterating. They also run on every push via
+  `.github/workflows/guards.yml`.
+- The guards exist because the expensive failures are silent ones — a
+  string key that no longer resolves, a visibility rule that quietly
+  stopped applying. TypeScript cannot see across those boundaries; the
+  guards can. A guard that cannot find what it inspects **fails** rather
+  than passing quietly.
+- `npx convex dev` needs network access to convex.dev, which sandboxed
+  sessions may not have — so `generated-api` catches a stale committed
+  `convex/_generated/api.d.ts` instead.
 
 ## Convex free-tier cautions
 

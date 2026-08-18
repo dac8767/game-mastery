@@ -10,7 +10,8 @@
     "start": "next start",
     "convex": "convex dev",
     "codegen": "convex codegen",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "guards": "node tests/run_all.mjs"
   },
   "dependencies": {
     "@auth/core": "^0.41.2",

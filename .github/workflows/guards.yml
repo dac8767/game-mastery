@@ -1,0 +1,32 @@
+name: guards
+
+# The guard suite is the audit trail a chat transcript could not be:
+# every push gets the same six checks, from a clean clone, and the
+# result is recorded against the commit.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  guards:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dnd-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Next.js 16 requires >= 20.9.
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dnd-app/package-lock.json
+
+      - run: npm ci
+
+      # Runs all six, build included. The build guard supplies its own
+      # placeholder NEXT_PUBLIC_CONVEX_URL — no deployment is contacted.
+      - run: npm run guards
