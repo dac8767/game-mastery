@@ -1,27 +1,38 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
-import { useColumnWidths } from "@/components/useColumnWidths";
+import { useViewPrefs } from "@/components/useViewPrefs";
+import { NpcDetail, fromInput } from "@/components/NpcDetail";
+import {
+  COLUMNS,
+  COLUMN_BY_KEY,
+  ColumnDef,
+  ColumnState,
+  EXTRA_SORTS,
+  FACET_KEYS,
+  MATURITY_ORDER,
+  QUICK_FILTER_KEYS,
+} from "@/components/npcColumns";
 
 /**
  * The NPC roster — an Airtable-style grid over npcs.listForCampaign.
  *
- * Everything interactive (search, facet filters, grouping, sorting,
- * column widths) runs in the browser against the single subscription's
- * rows. That is the point: a server round trip per keystroke would spend
- * the free tier's pooled function-call budget on work a few hundred rows
- * can do instantly in memory. See the note in convex/npcs.ts for the
+ * Search, filter, group, sort, and layout all run in the browser against
+ * the single subscription's rows. A server round trip per keystroke
+ * would spend the free tier's pooled function-call budget on work a few
+ * hundred rows do instantly in memory. See convex/npcs.ts for the
  * threshold at which this should become a paginated, server-filtered
  * query.
  *
- * The DM/player split is NOT enforced here — it already happened on the
- * server. Hidden NPCs never arrive for players, and `secret`/`dmNotes`
- * arrive as null, so the DM-only column simply renders empty. Never
- * reintroduce those fields client-side.
+ * Layout is per-person (convex/views.ts) — columns, widths, order,
+ * sort, group, and filters are yours alone and follow you between
+ * machines. The one thing personal preference cannot reach is the DM
+ * boundary: hidden NPCs never arrive for a player, `secret` and
+ * `dmNotes` arrive as null, and DM-only columns are not offered.
  */
 
 type NpcListResult = FunctionReturnType<typeof api.npcs.listForCampaign>;
@@ -29,88 +40,14 @@ type Npc = NpcListResult["npcs"][number];
 
 /** Bucket label for rows with no value in a faceted field. */
 const EMPTY = "—";
-
 /** Placeholder shown in a blank grid cell. */
 const BLANK = "–";
-
-/** Fields offered as filters and as "group by" options. */
-const FACETS = [
-  { key: "status", label: "Status" },
-  { key: "species", label: "Species" },
-  { key: "groups", label: "Groups" },
-  { key: "place", label: "Place" },
-  { key: "job", label: "Job" },
-  { key: "maturity", label: "Maturity" },
-  { key: "gender", label: "Gender" },
-  { key: "lineage", label: "Lineage" },
-  { key: "region", label: "Region" },
-  { key: "kingdom", label: "Kingdom" },
-  { key: "alignment", label: "Alignment" },
-  { key: "sexuality", label: "Sexuality" },
-] as const;
-
-/** The three facets promoted to always-visible dropdowns. */
-const QUICK_FILTERS = ["status", "species", "gender"] as const;
-
-type ColumnKind = "text" | "chips" | "picture";
-
-/** Columns in the grid. Headers sort; borders resize. */
-const COLUMNS: {
-  key: string;
-  label: string;
-  kind: ColumnKind;
-  sortable?: boolean;
-}[] = [
-  { key: "portraitPath", label: "Picture", kind: "picture", sortable: false },
-  { key: "name", label: "Name", kind: "text" },
-  { key: "job", label: "Job", kind: "chips" },
-  { key: "age", label: "Age", kind: "text" },
-  { key: "gender", label: "Gender", kind: "chips" },
-  { key: "species", label: "Species", kind: "chips" },
-  { key: "lineage", label: "Lineage", kind: "text" },
-  { key: "sexuality", label: "Sexuality", kind: "text" },
-  { key: "familyMembers", label: "Family Members", kind: "chips" },
-  { key: "groups", label: "Groups", kind: "chips" },
-  { key: "place", label: "Place", kind: "chips" },
-  { key: "status", label: "Status", kind: "chips" },
-];
-
-/** Key for the DM-only column, which isn't part of COLUMNS. */
-const DM_COL = "__dm";
-
-const DEFAULT_WIDTHS: Record<string, number> = {
-  portraitPath: 76,
-  name: 190,
-  job: 150,
-  age: 72,
-  gender: 116,
-  species: 130,
-  lineage: 110,
-  sexuality: 120,
-  familyMembers: 220,
-  groups: 190,
-  place: 160,
-  status: 150,
-  [DM_COL]: 112,
-};
-
-/** Extra sort keys that aren't columns. */
-const EXTRA_SORTS = [
-  { key: "family", label: "Family name" },
-  { key: "maturity", label: "Maturity" },
-  { key: "maxAge", label: "Max age" },
-  { key: "familyMemberCount", label: "Family size" },
-  { key: "_creationTime", label: "Date added" },
-] as const;
-
-/** Life stages sort in narrative order, not alphabetically. */
-const MATURITY_ORDER = ["Child", "Young Adult", "Adult", "Senior"];
+const MIN_COL_WIDTH = 48;
 
 function cell(npc: Npc, key: string): unknown {
   return (npc as unknown as Record<string, unknown>)[key];
 }
 
-/** The values a row contributes to a facet; [EMPTY] when it has none. */
 function facetValues(npc: Npc, key: string): string[] {
   const raw = cell(npc, key);
   if (Array.isArray(raw)) {
@@ -121,20 +58,18 @@ function facetValues(npc: Npc, key: string): string[] {
   return [EMPTY];
 }
 
-/** Values to render as chips in a grid cell — empty array when blank. */
 function chipValues(npc: Npc, key: string): string[] {
   return facetValues(npc, key).filter((v) => v !== EMPTY);
 }
 
-/** Display string for a plain-text grid cell. */
 function display(npc: Npc, key: string): string {
   const raw = cell(npc, key);
   if (Array.isArray(raw)) return (raw as string[]).join(", ");
   if (raw === null || raw === undefined || raw === "") return "";
+  if (typeof raw === "boolean") return raw ? "Yes" : "No";
   return String(raw);
 }
 
-/** Gender gets its own chip tint, as in the design. */
 function chipClass(columnKey: string, value: string): string {
   if (columnKey !== "gender") return "chip";
   const v = value.toLowerCase();
@@ -144,42 +79,13 @@ function chipClass(columnKey: string, value: string): string {
 }
 
 function searchText(npc: Npc): string {
-  return [
-    npc.name,
-    npc.nickname,
-    npc.prefix,
-    npc.first,
-    npc.middle,
-    npc.family,
-    npc.suffix,
-    npc.job,
-    npc.species,
-    npc.lineage,
-    npc.gender,
-    npc.maturity,
-    npc.region,
-    npc.kingdom,
-    npc.alignment,
-    npc.sexuality,
-    npc.voice,
-    npc.description,
-    npc.politics,
-    npc.abilities,
-    npc.wantsNeeds,
-    npc.quirkMental,
-    npc.quirkPhysical,
-    npc.playerNotes,
-    // Null for players — searchable only for the DM, by construction.
-    npc.dmNotes,
-    npc.secret,
-    ...npc.status,
-    ...npc.groups,
-    ...npc.place,
-    ...npc.familyMembers,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
+  const parts: string[] = [];
+  for (const col of COLUMNS) {
+    const raw = cell(npc, col.key);
+    if (Array.isArray(raw)) parts.push(...(raw as string[]));
+    else if (typeof raw === "string") parts.push(raw);
+  }
+  return parts.filter(Boolean).join(" ").toLowerCase();
 }
 
 function compare(a: Npc, b: Npc, key: string): number {
@@ -212,24 +118,26 @@ function compare(a: Npc, b: Npc, key: string): number {
 
 export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const result = useQuery(api.npcs.listForCampaign, { campaignId });
+  const isDm = result?.isDm ?? false;
+
+  const prefs = useViewPrefs(campaignId, "npcs", isDm);
+  const updateNpc = useMutation(api.npcs.updateNpc);
+  const createNpc = useMutation(api.npcs.createNpc);
+  const setPlayerNotes = useMutation(api.npcs.setPlayerNotes);
 
   const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [showFilters, setShowFilters] = useState(false);
-  const [groupBy, setGroupBy] = useState<string>("");
-  const [sortKey, setSortKey] = useState<string>("name");
-  const [sortAsc, setSortAsc] = useState(true);
+  const [showColumns, setShowColumns] = useState(false);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Id<"npcs"> | null>(null);
-
-  const { widths, startResize, resetColumn, resetAll } = useColumnWidths(
-    "npc-table-widths",
-    DEFAULT_WIDTHS
+  const [editing, setEditing] = useState<{ id: string; key: string } | null>(
+    null
   );
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const all = useMemo(() => result?.npcs ?? [], [result]);
 
-  // Precompute one lowercase haystack per row so typing doesn't rebuild
-  // every string on every keystroke.
   const haystacks = useMemo(() => {
     const m = new Map<string, string>();
     for (const n of all) m.set(n._id, searchText(n));
@@ -247,30 +155,29 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   }, [all, haystacks, search]);
 
   const filtered = useMemo(() => {
-    const active = Object.entries(filters).filter(([, v]) => v.length > 0);
+    const active = Object.entries(prefs.filters).filter(
+      ([, v]) => v.length > 0
+    );
     if (active.length === 0) return searched;
     // Within one facet the selections are OR'd; across facets they're
-    // AND'd — the behavior people expect from Airtable and every
-    // faceted search.
+    // AND'd — the behavior people expect from a faceted table.
     return searched.filter((n) =>
       active.every(([key, chosen]) => {
         const vals = facetValues(n, key);
         return chosen.some((c) => vals.includes(c));
       })
     );
-  }, [searched, filters]);
+  }, [searched, prefs.filters]);
 
   const sorted = useMemo(() => {
     const rows = [...filtered];
     rows.sort((a, b) => {
-      const c = compare(a, b, sortKey);
-      return sortAsc ? c : -c;
+      const c = compare(a, b, prefs.sortKey);
+      return prefs.sortAsc ? c : -c;
     });
     return rows;
-  }, [filtered, sortKey, sortAsc]);
+  }, [filtered, prefs.sortKey, prefs.sortAsc]);
 
-  /** Facet options built from everything the search matched, with counts
-   *  reflecting the current filter state. */
   const facetOptions = useMemo(() => {
     const out: {
       key: string;
@@ -278,37 +185,37 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
       options: { value: string; count: number }[];
     }[] = [];
 
-    for (const facet of FACETS) {
+    for (const key of FACET_KEYS) {
+      const def = COLUMN_BY_KEY.get(key);
+      if (!def || (def.dmOnly && !isDm)) continue;
+
       const counts = new Map<string, number>();
       for (const n of searched) {
-        for (const v of facetValues(n, facet.key)) {
-          counts.set(v, 0);
-        }
+        for (const v of facetValues(n, key)) counts.set(v, 0);
       }
       for (const n of filtered) {
-        for (const v of facetValues(n, facet.key)) {
+        for (const v of facetValues(n, key)) {
           counts.set(v, (counts.get(v) ?? 0) + 1);
         }
       }
       counts.delete(EMPTY);
-      // A facet whose column is entirely blank (the base has several
-      // wired-up-but-unused columns) is noise — leave it out.
+      // A facet whose column is entirely blank is noise — leave it out.
       if (counts.size === 0) continue;
 
       const options = Array.from(counts.entries())
         .map(([value, count]) => ({ value, count }))
         .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
-      out.push({ key: facet.key, label: facet.label, options });
+      out.push({ key, label: def.label, options });
     }
     return out;
-  }, [searched, filtered]);
+  }, [searched, filtered, isDm]);
 
   const groups = useMemo(() => {
-    if (!groupBy) return null;
+    if (!prefs.groupBy) return null;
     const map = new Map<string, Npc[]>();
     for (const n of sorted) {
-      // A row in two groups shows up under both, like Airtable.
-      for (const v of facetValues(n, groupBy)) {
+      // A row in two groups shows up under both.
+      for (const v of facetValues(n, prefs.groupBy)) {
         if (!map.has(v)) map.set(v, []);
         map.get(v)!.push(n);
       }
@@ -318,20 +225,40 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
       if (b[0] === EMPTY) return -1;
       return b[1].length - a[1].length || a[0].localeCompare(b[0]);
     });
-  }, [sorted, groupBy]);
+  }, [sorted, prefs.groupBy]);
 
   const selectedNpc = useMemo(
     () => all.find((n) => n._id === selected) ?? null,
     [all, selected]
   );
 
-  const activeFilterCount = Object.values(filters).reduce(
+  /** Ordered, visible, permitted columns paired with their definitions. */
+  const shown = useMemo(() => {
+    const out: { state: ColumnState; def: ColumnDef }[] = [];
+    for (const state of prefs.columns) {
+      const def = COLUMN_BY_KEY.get(state.key);
+      if (!def || !state.visible) continue;
+      if (def.dmOnly && !isDm) continue;
+      out.push({ state, def });
+    }
+    return out;
+  }, [prefs.columns, isDm]);
+
+  // An explicit total width is what lets a column shrink below its
+  // content: with `table-layout: fixed` the browser honours the <col>
+  // widths and the cells clip, instead of the table growing to fit.
+  const totalWidth = shown.reduce((sum, c) => sum + c.state.width, 0);
+
+  const activeFilterCount = Object.values(prefs.filters).reduce(
     (sum, v) => sum + v.length,
     0
   );
 
+  const canEdit = (def: ColumnDef) =>
+    isDm ? Boolean(def.editable) : Boolean(def.playerEditable);
+
   function toggleFilter(key: string, value: string) {
-    setFilters((prev) => {
+    prefs.setFilters((prev) => {
       const cur = prev[key] ?? [];
       const next = cur.includes(value)
         ? cur.filter((v) => v !== value)
@@ -342,9 +269,8 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
     });
   }
 
-  /** Quick dropdowns pick exactly one value (or clear the facet). */
   function setSingleFilter(key: string, value: string) {
-    setFilters((prev) => {
+    prefs.setFilters((prev) => {
       const out = { ...prev };
       if (!value) delete out[key];
       else out[key] = [value];
@@ -352,51 +278,119 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
     });
   }
 
-  function sortOn(key: string, sortable?: boolean) {
-    if (sortable === false) return;
-    if (key === sortKey) setSortAsc((v) => !v);
+  function sortOn(def: ColumnDef) {
+    if (def.sortable === false) return;
+    if (def.key === prefs.sortKey) prefs.setSortAsc((v) => !v);
     else {
-      setSortKey(key);
-      setSortAsc(true);
+      prefs.setSortKey(def.key);
+      prefs.setSortAsc(true);
     }
   }
 
-  if (result === undefined) {
-    return <p className="centered-note">Loading the roster…</p>;
+  function startResize(key: string, event: React.PointerEvent<HTMLElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth =
+      prefs.columns.find((c) => c.key === key)?.width ?? MIN_COL_WIDTH;
+
+    const onMove = (e: PointerEvent) => {
+      const next = Math.max(MIN_COL_WIDTH, startWidth + (e.clientX - startX));
+      prefs.setColumns((cur) =>
+        cur.map((c) => (c.key === key ? { ...c, width: next } : c))
+      );
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.classList.remove("col-resizing");
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    document.body.classList.add("col-resizing");
   }
 
-  const colCount = COLUMNS.length + (result.isDm ? 1 : 0);
-  const quick = facetOptions.filter((f) =>
-    (QUICK_FILTERS as readonly string[]).includes(f.key)
-  );
+  function toggleColumn(key: string) {
+    prefs.setColumns((cur) =>
+      cur.map((c) => (c.key === key ? { ...c, visible: !c.visible } : c))
+    );
+  }
+
+  function moveColumn(key: string, delta: number) {
+    prefs.setColumns((cur) => {
+      const i = cur.findIndex((c) => c.key === key);
+      const j = i + delta;
+      if (i === -1 || j < 0 || j >= cur.length) return cur;
+      const next = [...cur];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }
+
+  function toggleGroup(value: string) {
+    setCollapsed((cur) => {
+      const next = new Set(cur);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+  }
+
+  async function commitEdit(npc: Npc, def: ColumnDef, text: string) {
+    setEditing(null);
+    const value = fromInput(def, text);
+    try {
+      setError(null);
+      if (def.key === "playerNotes" && !isDm) {
+        await setPlayerNotes({
+          npcId: npc._id,
+          playerNotes: value as string | null,
+        });
+        return;
+      }
+      await updateNpc({ npcId: npc._id, [def.key]: value } as unknown as {
+        npcId: typeof npc._id;
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save that change.");
+    }
+  }
+
+  if (result === undefined || !prefs.ready) {
+    return <p className="centered-note">Loading the roster…</p>;
+  }
 
   return (
     <div className="npc-screen">
       <div className="npc-toolbar">
         <div className="quick-filters">
-          {quick.map((f) => (
-            <select
-              key={f.key}
-              className={`quick-select${filters[f.key]?.length ? " on" : ""}`}
-              value={filters[f.key]?.[0] ?? ""}
-              onChange={(e) => setSingleFilter(f.key, e.target.value)}
-            >
-              <option value="">{f.label}</option>
-              {f.options.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.value} ({o.count})
-                </option>
-              ))}
-            </select>
-          ))}
+          {facetOptions
+            .filter((f) => QUICK_FILTER_KEYS.includes(f.key))
+            .map((f) => (
+              <select
+                key={f.key}
+                className={`quick-select${
+                  prefs.filters[f.key]?.length ? " on" : ""
+                }`}
+                value={prefs.filters[f.key]?.[0] ?? ""}
+                onChange={(e) => setSingleFilter(f.key, e.target.value)}
+              >
+                <option value="">{f.label}</option>
+                {f.options.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.value} ({o.count})
+                  </option>
+                ))}
+              </select>
+            ))}
         </div>
 
         <div className="toolbar-right">
           <label className="npc-select">
             <span>Group</span>
             <select
-              value={groupBy}
-              onChange={(e) => setGroupBy(e.target.value)}
+              value={prefs.groupBy}
+              onChange={(e) => prefs.setGroupBy(e.target.value)}
             >
               <option value="">None</option>
               {facetOptions.map((f) => (
@@ -407,9 +401,48 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
             </select>
           </label>
 
+          <label className="npc-select">
+            <span>View</span>
+            <select
+              value={prefs.viewMode}
+              onChange={(e) =>
+                prefs.setViewMode(e.target.value as "grid" | "tiles")
+              }
+            >
+              <option value="grid">Grid</option>
+              <option value="tiles">Tiles</option>
+            </select>
+          </label>
+
+          {prefs.viewMode === "tiles" && (
+            <label className="npc-select">
+              <span>Per row</span>
+              <select
+                value={prefs.tilesPerRow}
+                onChange={(e) => prefs.setTilesPerRow(Number(e.target.value))}
+              >
+                {[2, 3, 4, 5, 6, 7, 8].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
           <button
             type="button"
-            className={`npc-btn${showFilters || activeFilterCount ? " on" : ""}`}
+            className={`npc-btn${showColumns ? " on" : ""}`}
+            onClick={() => setShowColumns((v) => !v)}
+          >
+            Columns
+          </button>
+
+          <button
+            type="button"
+            className={`npc-btn${
+              showFilters || activeFilterCount ? " on" : ""
+            }`}
             onClick={() => setShowFilters((v) => !v)}
           >
             Filter{activeFilterCount > 0 ? ` ${activeFilterCount}` : ""}
@@ -418,10 +451,12 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
           <label className="npc-select">
             <span>Sort</span>
             <select
-              value={sortKey}
-              onChange={(e) => setSortKey(e.target.value)}
+              value={prefs.sortKey}
+              onChange={(e) => prefs.setSortKey(e.target.value)}
             >
-              {COLUMNS.filter((c) => c.sortable !== false).map((c) => (
+              {COLUMNS.filter(
+                (c) => c.sortable !== false && (isDm || !c.dmOnly)
+              ).map((c) => (
                 <option key={c.key} value={c.key}>
                   {c.label}
                 </option>
@@ -437,10 +472,10 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
           <button
             type="button"
             className="npc-btn"
-            onClick={() => setSortAsc((v) => !v)}
-            title={sortAsc ? "Ascending" : "Descending"}
+            onClick={() => prefs.setSortAsc((v) => !v)}
+            title={prefs.sortAsc ? "Ascending" : "Descending"}
           >
-            {sortAsc ? "↑" : "↓"}
+            {prefs.sortAsc ? "↑" : "↓"}
           </button>
 
           <input
@@ -450,6 +485,28 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+
+          {isDm && (
+            <button
+              type="button"
+              className="npc-btn primary"
+              onClick={async () => {
+                try {
+                  setError(null);
+                  const id = await createNpc({ campaignId });
+                  // Open it straight away — a blank row is only useful
+                  // once you're typing into it.
+                  setSelected(id);
+                } catch (e) {
+                  setError(
+                    e instanceof Error ? e.message : "Could not create an NPC."
+                  );
+                }
+              }}
+            >
+              + New NPC
+            </button>
+          )}
         </div>
       </div>
 
@@ -459,23 +516,34 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
             ? `${all.length} NPCs`
             : `${sorted.length} of ${all.length}`}
         </span>
-        {(search || activeFilterCount > 0 || groupBy) && (
+        {result.previewingAsPlayer && (
+          <span className="preview-flag">
+            Viewing as a player — hidden NPCs and DM fields withheld
+          </span>
+        )}
+        {(search || activeFilterCount > 0 || prefs.groupBy) && (
           <button
             type="button"
             className="text-button"
             onClick={() => {
               setSearch("");
-              setFilters({});
-              setGroupBy("");
+              prefs.setFilters({});
+              prefs.setGroupBy("");
             }}
           >
             Clear filters
           </button>
         )}
-        <button type="button" className="text-button" onClick={resetAll}>
-          Reset widths
+        <button
+          type="button"
+          className="text-button reset-layout"
+          onClick={prefs.resetLayout}
+        >
+          Reset layout
         </button>
       </div>
+
+      {error && <p className="form-error">{error}</p>}
 
       {result.truncated && (
         <p className="npc-notice">
@@ -485,6 +553,51 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
         </p>
       )}
 
+      {showColumns && (
+        <div className="column-panel">
+          <div className="facet-label">
+            Columns — yours alone; nobody else&apos;s view changes
+          </div>
+          <ul className="column-list">
+            {prefs.columns.map((state, i) => {
+              const def = COLUMN_BY_KEY.get(state.key);
+              if (!def || (def.dmOnly && !isDm)) return null;
+              return (
+                <li key={state.key}>
+                  <label className="column-toggle">
+                    <input
+                      type="checkbox"
+                      checked={state.visible}
+                      onChange={() => toggleColumn(state.key)}
+                    />
+                    <span>{def.label}</span>
+                    {def.dmOnly && <span className="dm-tag">DM</span>}
+                  </label>
+                  <span className="column-move">
+                    <button
+                      type="button"
+                      onClick={() => moveColumn(state.key, -1)}
+                      disabled={i === 0}
+                      title="Move left"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveColumn(state.key, 1)}
+                      disabled={i === prefs.columns.length - 1}
+                      title="Move right"
+                    >
+                      ↓
+                    </button>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
       {showFilters && (
         <div className="npc-filters">
           {facetOptions.map((facet) => (
@@ -492,7 +605,9 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
               <div className="facet-label">{facet.label}</div>
               <div className="facet-options">
                 {facet.options.map((opt) => {
-                  const on = (filters[facet.key] ?? []).includes(opt.value);
+                  const on = (prefs.filters[facet.key] ?? []).includes(
+                    opt.value
+                  );
                   return (
                     <button
                       type="button"
@@ -511,77 +626,92 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
         </div>
       )}
 
-      <div className="npc-table-wrap">
-        <table className="npc-table">
+      {prefs.viewMode === "tiles" ? (
+        <TileGrid
+          groups={groups}
+          rows={sorted}
+          shown={shown}
+          perRow={prefs.tilesPerRow}
+          collapsed={collapsed}
+          onToggleGroup={toggleGroup}
+          onOpen={setSelected}
+          emptyNote={
+            all.length === 0
+              ? "No NPCs imported yet."
+              : "Nothing matches those filters."
+          }
+        />
+      ) : (
+        <div className="npc-table-wrap">
+          <table className="npc-table" style={{ width: `${totalWidth}px` }}>
           <colgroup>
-            {COLUMNS.map((c) => (
-              <col key={c.key} style={{ width: `${widths[c.key]}px` }} />
+            {shown.map(({ state }) => (
+              <col key={state.key} style={{ width: `${state.width}px` }} />
             ))}
-            {result.isDm && <col style={{ width: `${widths[DM_COL]}px` }} />}
           </colgroup>
 
           <thead>
             <tr>
-              {COLUMNS.map((c) => (
+              {shown.map(({ state, def }) => (
                 <th
-                  key={c.key}
-                  onClick={() => sortOn(c.key, c.sortable)}
-                  className={sortKey === c.key ? "sorted" : undefined}
+                  key={state.key}
+                  onClick={() => sortOn(def)}
+                  className={prefs.sortKey === def.key ? "sorted" : undefined}
                 >
                   <span className="th-label">
-                    {c.label}
-                    {sortKey === c.key && (
-                      <span className="arrow">{sortAsc ? "↑" : "↓"}</span>
+                    {def.label}
+                    {prefs.sortKey === def.key && (
+                      <span className="arrow">
+                        {prefs.sortAsc ? "↑" : "↓"}
+                      </span>
                     )}
                   </span>
                   <span
                     className="col-resize"
-                    title="Drag to resize · double-click to reset"
-                    onPointerDown={(e) => startResize(c.key, e)}
+                    title="Drag to resize"
+                    onPointerDown={(e) => startResize(state.key, e)}
                     onClick={(e) => e.stopPropagation()}
-                    onDoubleClick={(e) => {
-                      e.stopPropagation();
-                      resetColumn(c.key);
-                    }}
                   />
                 </th>
               ))}
-              {result.isDm && (
-                <th className="dm-col">
-                  <span className="th-label">DM</span>
-                  <span
-                    className="col-resize"
-                    title="Drag to resize · double-click to reset"
-                    onPointerDown={(e) => startResize(DM_COL, e)}
-                    onClick={(e) => e.stopPropagation()}
-                    onDoubleClick={(e) => {
-                      e.stopPropagation();
-                      resetColumn(DM_COL);
-                    }}
-                  />
-                </th>
-              )}
             </tr>
           </thead>
 
           {groups ? (
             groups.map(([groupValue, rows]) => (
               <tbody key={groupValue}>
-                <tr className="group-row">
-                  <td colSpan={colCount}>
+                <tr
+                  className="group-row"
+                  onClick={() => toggleGroup(groupValue)}
+                >
+                  <td colSpan={shown.length}>
+                    <span className="caret">
+                      {collapsed.has(groupValue) ? "▸" : "▾"}
+                    </span>
                     {groupValue}
                     <span className="n">{rows.length}</span>
                   </td>
                 </tr>
-                {rows.map((n) => (
-                  <Row
-                    key={`${groupValue}:${n._id}`}
-                    npc={n}
-                    isDm={result.isDm}
-                    active={n._id === selected}
-                    onOpen={() => setSelected(n._id)}
-                  />
-                ))}
+                {!collapsed.has(groupValue) &&
+                  rows.map((n) => (
+                    <Row
+                      key={`${groupValue}:${n._id}`}
+                      npc={n}
+                      shown={shown}
+                      selected={n._id === selected}
+                      editing={editing}
+                      draft={draft}
+                      setDraft={setDraft}
+                      canEdit={canEdit}
+                      onOpen={() => setSelected(n._id)}
+                      onStartEdit={(def, value) => {
+                        setEditing({ id: n._id, key: def.key });
+                        setDraft(value);
+                      }}
+                      onCommit={(def, text) => void commitEdit(n, def, text)}
+                      onCancel={() => setEditing(null)}
+                    />
+                  ))}
               </tbody>
             ))
           ) : (
@@ -590,28 +720,39 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
                 <Row
                   key={n._id}
                   npc={n}
-                  isDm={result.isDm}
-                  active={n._id === selected}
+                  shown={shown}
+                  selected={n._id === selected}
+                  editing={editing}
+                  draft={draft}
+                  setDraft={setDraft}
+                  canEdit={canEdit}
                   onOpen={() => setSelected(n._id)}
+                  onStartEdit={(def, value) => {
+                    setEditing({ id: n._id, key: def.key });
+                    setDraft(value);
+                  }}
+                  onCommit={(def, text) => void commitEdit(n, def, text)}
+                  onCancel={() => setEditing(null)}
                 />
               ))}
             </tbody>
           )}
         </table>
 
-        {sorted.length === 0 && (
-          <p className="centered-note">
-            {all.length === 0
-              ? "No NPCs imported yet."
-              : "Nothing matches those filters."}
-          </p>
-        )}
-      </div>
+          {sorted.length === 0 && (
+            <p className="centered-note">
+              {all.length === 0
+                ? "No NPCs imported yet."
+                : "Nothing matches those filters."}
+            </p>
+          )}
+        </div>
+      )}
 
       {selectedNpc && (
         <NpcDetail
           npc={selectedNpc}
-          isDm={result.isDm}
+          isDm={isDm}
           onClose={() => setSelected(null)}
         />
       )}
@@ -621,28 +762,76 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
 
 function Row({
   npc,
-  isDm,
-  active,
+  shown,
+  selected,
+  editing,
+  draft,
+  setDraft,
+  canEdit,
   onOpen,
+  onStartEdit,
+  onCommit,
+  onCancel,
 }: {
   npc: Npc;
-  isDm: boolean;
-  active: boolean;
+  shown: { state: ColumnState; def: ColumnDef }[];
+  selected: boolean;
+  editing: { id: string; key: string } | null;
+  draft: string;
+  setDraft: (v: string) => void;
+  canEdit: (def: ColumnDef) => boolean;
   onOpen: () => void;
+  onStartEdit: (def: ColumnDef, value: string) => void;
+  onCommit: (def: ColumnDef, text: string) => void;
+  onCancel: () => void;
 }) {
   const mapServer = process.env.NEXT_PUBLIC_MAP_SERVER ?? "";
 
   return (
     <tr
-      onClick={onOpen}
-      className={[npc.hidden ? "hidden-npc" : "", active ? "selected" : ""]
+      className={[npc.hidden ? "hidden-npc" : "", selected ? "selected" : ""]
         .filter(Boolean)
         .join(" ")}
     >
-      {COLUMNS.map((c) => {
-        if (c.kind === "picture") {
+      {shown.map(({ state, def }) => {
+        const isEditing = editing?.id === npc._id && editing.key === def.key;
+
+        if (isEditing) {
           return (
-            <td key={c.key} className="pic-cell">
+            <td key={state.key} className="editing-cell">
+              <input
+                autoFocus
+                className="cell-input"
+                type={def.kind === "number" ? "number" : "text"}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={() => onCommit(def, draft)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") onCommit(def, draft);
+                  if (e.key === "Escape") onCancel();
+                }}
+              />
+            </td>
+          );
+        }
+
+        const editable = canEdit(def) && def.kind !== "picture";
+        const open = () => {
+          if (!editable) return;
+          const raw = cell(npc, def.key);
+          onStartEdit(
+            def,
+            Array.isArray(raw)
+              ? (raw as string[]).join(", ")
+              : raw === null || raw === undefined
+                ? ""
+                : String(raw)
+          );
+        };
+
+        if (def.kind === "picture") {
+          return (
+            <td key={state.key} className="pic-cell" onClick={onOpen}>
               {npc.portraitPath && mapServer ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
@@ -657,16 +846,21 @@ function Row({
           );
         }
 
-        if (c.kind === "chips") {
-          const vals = chipValues(npc, c.key);
+        if (def.kind === "chips") {
+          const vals = chipValues(npc, def.key);
           return (
-            <td key={c.key}>
+            <td
+              key={state.key}
+              className={editable ? "editable" : undefined}
+              onDoubleClick={open}
+              onClick={editable ? undefined : onOpen}
+            >
               {vals.length === 0 ? (
                 <span className="blank">{BLANK}</span>
               ) : (
                 <span className="cell-chips">
                   {vals.map((v) => (
-                    <span className={chipClass(c.key, v)} key={v}>
+                    <span className={chipClass(def.key, v)} key={v}>
                       {v}
                     </span>
                   ))}
@@ -676,117 +870,156 @@ function Row({
           );
         }
 
-        const text = display(npc, c.key);
+        const text = display(npc, def.key);
         return (
-          <td key={c.key} className={c.key === "name" ? "name-cell" : undefined}>
+          <td
+            key={state.key}
+            className={[
+              def.key === "name" ? "name-cell" : "",
+              editable ? "editable" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            title={text || undefined}
+            onDoubleClick={open}
+            onClick={def.key === "name" ? onOpen : undefined}
+          >
             {text === "" ? <span className="blank">{BLANK}</span> : text}
           </td>
         );
       })}
-
-      {isDm && (
-        <td className="dm-col">
-          {npc.hidden && <span className="chip warn">Hidden</span>}
-          {npc.secret && <span className="chip warn">Secret</span>}
-          {!npc.hidden && !npc.secret && <span className="blank">{BLANK}</span>}
-        </td>
-      )}
     </tr>
   );
 }
 
-function Field({ label, value }: { label: string; value: string | null }) {
-  if (!value) return null;
+/**
+ * Tile view — the portrait leads, the fields follow.
+ *
+ * Reuses the same visible-column set as the grid, so the fields on a
+ * tile are whatever that person chose to show. Grouping and collapsing
+ * behave identically; only the presentation differs.
+ */
+function TileGrid({
+  groups,
+  rows,
+  shown,
+  perRow,
+  collapsed,
+  onToggleGroup,
+  onOpen,
+  emptyNote,
+}: {
+  groups: [string, Npc[]][] | null;
+  rows: Npc[];
+  shown: { state: ColumnState; def: ColumnDef }[];
+  perRow: number;
+  collapsed: Set<string>;
+  onToggleGroup: (value: string) => void;
+  onOpen: (id: Id<"npcs">) => void;
+  emptyNote: string;
+}) {
+  const style = { gridTemplateColumns: `repeat(${perRow}, minmax(0, 1fr))` };
+
+  if (rows.length === 0) {
+    return <p className="centered-note">{emptyNote}</p>;
+  }
+
+  if (!groups) {
+    return (
+      <div className="tile-grid" style={style}>
+        {rows.map((n) => (
+          <Tile key={n._id} npc={n} shown={shown} onOpen={onOpen} />
+        ))}
+      </div>
+    );
+  }
+
   return (
-    <div className="detail-field">
-      <div className="detail-label">{label}</div>
-      <div className="detail-value">{value}</div>
+    <div className="tile-groups">
+      {groups.map(([value, groupRows]) => (
+        <section key={value}>
+          <button
+            type="button"
+            className="tile-group-head"
+            onClick={() => onToggleGroup(value)}
+          >
+            <span className="caret">{collapsed.has(value) ? "▸" : "▾"}</span>
+            {value}
+            <span className="n">{groupRows.length}</span>
+          </button>
+          {!collapsed.has(value) && (
+            <div className="tile-grid" style={style}>
+              {groupRows.map((n) => (
+                <Tile
+                  key={`${value}:${n._id}`}
+                  npc={n}
+                  shown={shown}
+                  onOpen={onOpen}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      ))}
     </div>
   );
 }
 
-function NpcDetail({
+function Tile({
   npc,
-  isDm,
-  onClose,
+  shown,
+  onOpen,
 }: {
   npc: Npc;
-  isDm: boolean;
-  onClose: () => void;
+  shown: { state: ColumnState; def: ColumnDef }[];
+  onOpen: (id: Id<"npcs">) => void;
 }) {
   const mapServer = process.env.NEXT_PUBLIC_MAP_SERVER ?? "";
-  const ageLine = [
-    npc.age !== null ? `${npc.age}` : null,
-    npc.maxAge !== null ? `of ${npc.maxAge}` : null,
-    npc.maturity,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const fields = shown.filter(
+    ({ def }) => def.kind !== "picture" && def.key !== "name"
+  );
 
   return (
-    <>
-      <div className="drawer-scrim" onClick={onClose} />
-      <aside className="npc-drawer">
-        <header className="drawer-header">
-          <div>
-            <h2>{npc.name}</h2>
-            {npc.nickname && <p className="muted">“{npc.nickname}”</p>}
-          </div>
-          <button type="button" className="text-button" onClick={onClose}>
-            Close
-          </button>
-        </header>
-
-        {npc.portraitPath && mapServer && (
+    <article
+      className={`tile${npc.hidden ? " hidden-npc" : ""}`}
+      onClick={() => onOpen(npc._id)}
+    >
+      <div className="tile-portrait">
+        {npc.portraitPath && mapServer ? (
           /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            className="drawer-portrait"
-            src={`${mapServer}/${npc.portraitPath}`}
-            alt={npc.name}
-          />
+          <img src={`${mapServer}/${npc.portraitPath}`} alt="" />
+        ) : (
+          <span className="tile-portrait-empty">{npc.name.charAt(0)}</span>
         )}
+      </div>
 
-        <div className="drawer-chips">
-          {[...npc.status, ...npc.groups, ...npc.place].map((v, i) => (
-            <span className="chip" key={`${v}-${i}`}>
-              {v}
-            </span>
-          ))}
-        </div>
+      <h3 className="tile-name">{npc.name}</h3>
 
-        <Field label="Species" value={npc.species} />
-        <Field label="Lineage" value={npc.lineage} />
-        <Field label="Gender" value={npc.gender} />
-        <Field label="Age" value={ageLine || null} />
-        <Field label="Job" value={npc.job} />
-        <Field label="Region" value={npc.region} />
-        <Field label="Kingdom" value={npc.kingdom} />
-        <Field label="Alignment" value={npc.alignment} />
-        <Field label="Sexuality" value={npc.sexuality} />
-        <Field
-          label="Family"
-          value={npc.familyMembers.length ? npc.familyMembers.join(", ") : null}
-        />
-        <Field label="Description" value={npc.description} />
-        <Field label="Quirk — mental" value={npc.quirkMental} />
-        <Field label="Quirk — physical" value={npc.quirkPhysical} />
-        <Field label="Politics" value={npc.politics} />
-        <Field label="Abilities" value={npc.abilities} />
-        <Field label="Wants & needs" value={npc.wantsNeeds} />
-        <Field label="Voice" value={npc.voice} />
-        <Field label="Player notes" value={npc.playerNotes} />
-
-        {isDm && (npc.secret || npc.dmNotes || npc.hidden) && (
-          <div className="dm-block">
-            <div className="dm-block-label">DM only</div>
-            {npc.hidden && (
-              <p className="muted">Hidden — players never receive this NPC.</p>
-            )}
-            <Field label="Secret" value={npc.secret} />
-            <Field label="DM notes" value={npc.dmNotes} />
-          </div>
-        )}
-      </aside>
-    </>
+      <dl className="tile-fields">
+        {fields.map(({ def }) => {
+          const chips = def.kind === "chips" ? chipValues(npc, def.key) : null;
+          const text = display(npc, def.key);
+          if (chips ? chips.length === 0 : text === "") return null;
+          return (
+            <div className="tile-field" key={def.key}>
+              <dt>{def.label}</dt>
+              <dd>
+                {chips ? (
+                  <span className="cell-chips">
+                    {chips.map((v) => (
+                      <span className={chipClass(def.key, v)} key={v}>
+                        {v}
+                      </span>
+                    ))}
+                  </span>
+                ) : (
+                  text
+                )}
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+    </article>
   );
 }

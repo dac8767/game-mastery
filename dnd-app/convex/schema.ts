@@ -140,6 +140,62 @@ export default defineSchema({
     secret: v.optional(v.string()),
   }).index("by_campaign", ["campaignId"]),
 
+  /**
+   * Per-person app settings. One document per user, all of it personal.
+   *
+   * Note what is NOT here: whether you are a DM. That is structural —
+   * you are the DM of a campaign iff campaign.dmId is your userId — and
+   * it must stay that way. A self-settable role flag would let any
+   * player grant themselves every secret and DM note in the campaign.
+   *
+   * `viewAsPlayer` is the safe inverse: a DM asking the server to treat
+   * them as a player so they can see exactly what the table gives away.
+   * It only ever removes access, so it is fine to let the caller set it.
+   */
+  userSettings: defineTable({
+    userId: v.id("users"),
+    theme: v.union(
+      v.literal("candlelight"),
+      v.literal("slate"),
+      v.literal("parchment")
+    ),
+    viewAsPlayer: v.boolean(),
+  }).index("by_user", ["userId"]),
+
+  /**
+   * Per-person table layout. One document per (user, campaign, view).
+   *
+   * Everyone shapes a table to their own taste — which columns show, in
+   * what order, how wide, and the active sort/group/filter — and none of
+   * it is visible to anyone else. Queries only ever read the caller's
+   * own row, so there is no sharing to opt out of.
+   *
+   * Stored server-side rather than in localStorage so a layout follows
+   * you between the laptop and the desktop. Writes are debounced on the
+   * client; dragging a column border is not one mutation per pixel.
+   */
+  viewPrefs: defineTable({
+    userId: v.id("users"),
+    campaignId: v.id("campaigns"),
+    view: v.string(), // "npcs" — the table this layout belongs to
+    columns: v.array(
+      v.object({
+        key: v.string(),
+        width: v.number(),
+        visible: v.boolean(),
+      })
+    ),
+    sortKey: v.optional(v.string()),
+    sortAsc: v.optional(v.boolean()),
+    groupBy: v.optional(v.string()),
+    filters: v.optional(
+      v.array(v.object({ field: v.string(), values: v.array(v.string()) }))
+    ),
+    // Grid (dense rows) or tiles (portrait-led cards).
+    viewMode: v.optional(v.union(v.literal("grid"), v.literal("tiles"))),
+    tilesPerRow: v.optional(v.number()),
+  }).index("by_user_campaign_view", ["userId", "campaignId", "view"]),
+
   // Map library metadata. Images live at
   // https://maps.yourdomain.com/{webPath|originalPath}
   maps: defineTable({

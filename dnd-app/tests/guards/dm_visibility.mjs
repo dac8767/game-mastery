@@ -22,7 +22,7 @@ export const dmVisibility = {
     requirePattern(
       problems,
       npcs,
-      /requireMember\(ctx,\s*args\.campaignId\)/,
+      /requireMember\(\s*ctx,\s*args\.campaignId\s*\)/,
       "npcs.listForCampaign must gate on requireMember(campaignId) — " +
         "requireUser alone would expose another campaign's roster"
     );
@@ -78,11 +78,78 @@ export const dmVisibility = {
       );
     }
 
-    // ---- the client must not re-derive DM state --------------------
-    const table = read("components", "NpcTable.tsx");
-    if (!/\{isDm\s*&&\s*\(\s*\n?\s*<td className="dm-col">/.test(table)) {
+    // ---- the write path -------------------------------------------
+    requirePattern(
+      problems,
+      npcs,
+      /export const updateNpc[\s\S]*?await requireDm\(ctx, npc\.campaignId\)/,
+      "npcs.updateNpc must gate on requireDm — it can write dmNotes, " +
+        "secret, and the hidden flag"
+    );
+    requirePattern(
+      problems,
+      npcs,
+      /export const createNpc[\s\S]*?await requireDm\(ctx, args\.campaignId\)/,
+      "npcs.createNpc must gate on requireDm"
+    );
+    // The player-writable mutation must reach exactly one field.
+    const notesBody = npcs.slice(npcs.indexOf("export const setPlayerNotes"));
+    for (const field of ["dmNotes", "secret", "hidden:"]) {
+      if (new RegExp(`ctx\\.db\\.patch[\\s\\S]{0,200}${field}`).test(notesBody)) {
+        problems.push(
+          `npcs.setPlayerNotes can write \`${field}\` — it must only reach playerNotes`
+        );
+      }
+    }
+
+    // ---- per-person view state is never shared ---------------------
+    const views = read("convex", "views.ts");
+    if (/args\.userId|userId:\s*v\.id\("users"\)/.test(views)) {
       problems.push(
-        "NpcTable renders the DM column without an isDm guard"
+        "convex/views.ts takes a userId argument — view prefs must be " +
+          "resolved from the auth context, not from a client-supplied id"
+      );
+    }
+    const settings = read("convex", "settings.ts");
+    if (/args\.userId|userId:\s*v\.id\("users"\)/.test(settings)) {
+      problems.push(
+        "convex/settings.ts takes a userId argument — settings must be " +
+          "resolved from the auth context"
+      );
+    }
+    // A settable role would defeat the entire visibility model.
+    if (/isDm:\s*v\.|role:\s*v\./.test(settings)) {
+      problems.push(
+        "convex/settings.ts accepts a role/isDm argument — DM status is " +
+          "structural (campaign.dmId) and must never be self-settable"
+      );
+    }
+
+    // ---- the client must not re-derive DM state --------------------
+    const columns = read("components", "npcColumns.ts");
+    for (const field of ["hidden", "secret", "dmNotes"]) {
+      const decl = columns.match(
+        new RegExp(`key: "${field}"[^}]*`, "m")
+      );
+      if (!decl) {
+        problems.push(`npcColumns.ts no longer defines the ${field} column`);
+      } else if (!/dmOnly: true/.test(decl[0])) {
+        problems.push(
+          `the ${field} column is not marked dmOnly — it would be offered ` +
+            "to players in the column picker"
+        );
+      }
+    }
+    if (!/if \(def\.dmOnly && !isDm\) continue;/.test(
+      read("components", "NpcTable.tsx")
+    )) {
+      problems.push(
+        "NpcTable does not filter dmOnly columns out of the rendered set"
+      );
+    }
+    if (!/isDm \|\| !c\.dmOnly/.test(columns)) {
+      problems.push(
+        "npcColumns.reconcileColumns does not strip dmOnly columns for players"
       );
     }
 

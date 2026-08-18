@@ -838,8 +838,6 @@ button {
 }
 
 .npc-table {
-  width: max-content;
-  min-width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
   font-size: 0.84rem;
@@ -919,6 +917,7 @@ body.col-resizing {
   vertical-align: middle;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .npc-table tbody tr:hover td {
@@ -965,8 +964,13 @@ body.col-resizing {
 
 .cell-chips {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.25rem;
+  overflow: hidden;
+}
+
+.cell-chips .chip {
+  white-space: nowrap;
 }
 
 .chip.gender-male {
@@ -1139,4 +1143,394 @@ body.col-resizing {
   .soon {
     display: none;
   }
+}
+
+/* ---------- Themes ----------
+   Each palette is the same variable set; ThemeSync stamps data-theme on
+   <html> from the signed-in person's userSettings row, so one player
+   switching themes changes nothing for anyone else. */
+
+[data-theme="slate"] {
+  --bg: #12161f;
+  --bg-raised: #1a1f2b;
+  --bg-inset: #0d1017;
+  --border: #2a3140;
+  --text: #e2e8f0;
+  --text-dim: #94a3b8;
+  --accent: #7aa2f7;
+  --accent-soft: rgba(122, 162, 247, 0.16);
+  --healthy: #4ade80;
+  --injured: #fbbf24;
+  --bloodied: #f87171;
+  --down: #64748b;
+  --temp-hp: #38bdf8;
+}
+
+[data-theme="parchment"] {
+  --bg: #f4efe4;
+  --bg-raised: #fbf8f1;
+  --bg-inset: #eae2d1;
+  --border: #d6cbb4;
+  --text: #2a241a;
+  --text-dim: #6b6252;
+  --accent: #8a6d1f;
+  --accent-soft: rgba(138, 109, 31, 0.16);
+  --healthy: #2f7d44;
+  --injured: #a97a12;
+  --bloodied: #b2432a;
+  --down: #8c8577;
+  --temp-hp: #2b6f9c;
+}
+
+/* ---------- Table extras ---------- */
+
+.npc-btn.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg-inset);
+  font-weight: 600;
+}
+
+.preview-flag {
+  color: var(--injured);
+  border: 1px solid var(--injured);
+  border-radius: 999px;
+  padding: 0.1rem 0.6rem;
+  font-size: 0.75rem;
+}
+
+.npc-substrip .reset-layout {
+  margin-left: auto;
+}
+
+.group-row .caret,
+.tile-group-head .caret {
+  display: inline-block;
+  width: 1rem;
+  color: var(--text-dim);
+}
+
+.npc-table td.editable:hover {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.editing-cell {
+  padding: 0 !important;
+}
+
+.cell-input {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: none;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: var(--bg-inset);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.84rem;
+}
+
+/* ---------- Column picker ---------- */
+
+.column-panel {
+  padding: 0.9rem;
+  margin-bottom: 0.75rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.column-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.2rem 1rem;
+}
+
+.column-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.15rem 0;
+}
+
+.column-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 1;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.column-move {
+  display: flex;
+  gap: 0.15rem;
+}
+
+.column-move button {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  width: 1.4rem;
+  line-height: 1.2;
+}
+
+.column-move button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.column-move button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.dm-tag {
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bloodied);
+  border: 1px solid var(--bloodied);
+  border-radius: 999px;
+  padding: 0 0.35rem;
+  margin-left: 0.4rem;
+}
+
+/* ---------- Tile view ---------- */
+
+.tile-groups {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.tile-group-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.4rem 0.2rem;
+  margin-bottom: 0.5rem;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+}
+
+.tile-group-head .n,
+.group-row .n {
+  color: var(--text-dim);
+  font-weight: 400;
+  margin-left: 0.5rem;
+}
+
+.tile-grid {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.tile {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 120ms ease;
+}
+
+.tile:hover {
+  border-color: var(--accent);
+}
+
+.tile.hidden-npc {
+  opacity: 0.7;
+  border-style: dashed;
+}
+
+.tile-portrait {
+  aspect-ratio: 1 / 1;
+  background: var(--bg-inset);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.tile-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tile-portrait-empty {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--border);
+}
+
+.tile-name {
+  margin: 0;
+  padding: 0.6rem 0.75rem 0.4rem;
+  font-size: 0.95rem;
+}
+
+.tile-fields {
+  margin: 0;
+  padding: 0 0.75rem 0.75rem;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+}
+
+.tile-field dt {
+  color: var(--text-dim);
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tile-field dd {
+  margin: 0.1rem 0 0;
+}
+
+.tile-field .cell-chips {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+
+/* ---------- Drawer editing ---------- */
+
+.drawer-hint {
+  font-size: 0.85rem;
+  margin: 0 0 1rem;
+}
+
+.detail-input {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  resize: vertical;
+}
+
+.detail-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.detail-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.detail-field.dm-field .detail-label {
+  color: var(--bloodied);
+}
+
+/* ---------- Settings ---------- */
+
+.settings {
+  max-width: 44rem;
+  display: grid;
+  gap: 1.5rem;
+}
+
+.settings-block {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.1rem 1.25rem;
+}
+
+.settings-block h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  color: var(--accent);
+  font-variant: small-caps;
+  letter-spacing: 0.06em;
+}
+
+.settings-value {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.settings-note {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.settings-toggle {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.theme-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.9rem;
+}
+
+.theme-option {
+  display: grid;
+  gap: 0.35rem;
+  text-align: left;
+  padding: 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--text);
+}
+
+.theme-option:hover {
+  border-color: var(--accent);
+}
+
+.theme-option.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.theme-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.theme-swatch {
+  height: 1.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.theme-swatch.theme-candlelight {
+  background: linear-gradient(90deg, #141210 0 40%, #c9a227 40% 100%);
+}
+
+.theme-swatch.theme-slate {
+  background: linear-gradient(90deg, #12161f 0 40%, #7aa2f7 40% 100%);
+}
+
+.theme-swatch.theme-parchment {
+  background: linear-gradient(90deg, #f4efe4 0 40%, #8a6d1f 40% 100%);
 }

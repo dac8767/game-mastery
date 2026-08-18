@@ -6,6 +6,7 @@ import { useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { ReactNode } from "react";
 import { api } from "@/convex/_generated/api";
+import { ThemeSync } from "@/components/ThemeSync";
 import { Id } from "@/convex/_generated/dataModel";
 
 /**
@@ -106,6 +107,7 @@ export function AppShell({
 
   return (
     <div className="shell">
+      <ThemeSync />
       <nav className="sidebar">
         <Link href="/" className="brand">
           <span className="brand-mark">GM</span>
@@ -135,6 +137,15 @@ export function AppShell({
         </div>
 
         <div className="sidebar-footer">
+          <Link
+            href={`${base}/settings`}
+            className={`nav-item${
+              pathname === `${base}/settings` ? " active" : ""
+            }`}
+          >
+            <span className="nav-icon">⚙</span>
+            Settings
+          </Link>
           <Link href="/" className="nav-item subtle">
             <span className="nav-icon">⇤</span>
             All campaigns

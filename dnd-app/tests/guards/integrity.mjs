@@ -16,13 +16,17 @@
  *   - the query hands back fields the schema may no longer have
  */
 
-import { read, exists, blockAfter, topLevelKeys, stringProps } from "./lib.mjs";
+import {
+  read,
+  exists,
+  blockAfter,
+  topLevelKeys,
+  stringProps,
+  constArrayStrings,
+} from "./lib.mjs";
 
 /** Convex adds these to every document. */
 const SYSTEM_FIELDS = ["_id", "_creationTime"];
-
-/** Grid column keys that aren't NPC fields. */
-const SYNTHETIC_COLUMNS = ["__dm"];
 
 export const integrity = {
   name: "integrity",
@@ -54,43 +58,67 @@ export const integrity = {
     }
 
     // ---- what the grid addresses by string key ---------------------
-    const tableSrc = read("components", "NpcTable.tsx");
-    const addressed = new Set([
-      ...stringProps(tableSrc, "key", "NpcTable COLUMNS/FACETS/EXTRA_SORTS"),
-      ...topLevelKeys(
-        blockAfter(
-          tableSrc,
-          /const DEFAULT_WIDTHS[^=]*=/,
-          "DEFAULT_WIDTHS in NpcTable.tsx"
-        ),
-        "DEFAULT_WIDTHS"
-      ),
-    ]);
+    // Column definitions live in npcColumns.ts and address NPC fields by
+    // string; nothing type-checks that a key still exists.
+    const colsSrc = read("components", "npcColumns.ts");
+    const columnsBlock = colsSrc.slice(
+      colsSrc.indexOf("export const COLUMNS"),
+      colsSrc.indexOf("export const COLUMN_BY_KEY")
+    );
+    const columnKeys = stringProps(columnsBlock, "key", "npcColumns COLUMNS");
 
-    const available = new Set([...returned, ...SYNTHETIC_COLUMNS]);
-    for (const key of addressed) {
-      if (key.startsWith("[")) continue; // computed key, e.g. [DM_COL]
+    const available = new Set(returned);
+    for (const key of columnKeys) {
       if (!available.has(key)) {
         problems.push(
-          `NpcTable addresses \`${key}\`, which npcs.listForCampaign never returns`
+          `npcColumns defines a \`${key}\` column, which npcs.listForCampaign never returns`
         );
       }
     }
 
-    // Widths must exist for every rendered column, or it collapses.
-    const widthKeys = new Set(
-      topLevelKeys(
-        blockAfter(tableSrc, /const DEFAULT_WIDTHS[^=]*=/, "DEFAULT_WIDTHS"),
-        "DEFAULT_WIDTHS"
-      )
-    );
-    const columnBlock = tableSrc.slice(
-      tableSrc.indexOf("const COLUMNS"),
-      tableSrc.indexOf("const DM_COL")
-    );
-    for (const [, key] of columnBlock.matchAll(/key:\s*"([^"]+)"/g)) {
-      if (!widthKeys.has(key)) {
-        problems.push(`column \`${key}\` has no entry in DEFAULT_WIDTHS`);
+    // Every column needs a default width and visibility, or the layout
+    // reconciler produces a column that cannot be sized or shown.
+    for (const entry of columnsBlock.split(/\},\s*\n/)) {
+      const m = entry.match(/key:\s*"([^"]+)"/);
+      if (!m) continue;
+      if (!/defaultWidth:/.test(entry)) {
+        problems.push(`column \`${m[1]}\` has no defaultWidth`);
+      }
+      if (!/defaultVisible:/.test(entry)) {
+        problems.push(`column \`${m[1]}\` has no defaultVisible`);
+      }
+    }
+
+    // Facets and quick filters must name real columns.
+    const columnKeySet = new Set(columnKeys);
+    for (const key of constArrayStrings(colsSrc, "FACET_KEYS", "npcColumns")) {
+      if (!columnKeySet.has(key)) {
+        problems.push(`FACET_KEYS names \`${key}\`, which is not a column`);
+      }
+    }
+    for (const key of constArrayStrings(
+      colsSrc,
+      "QUICK_FILTER_KEYS",
+      "npcColumns"
+    )) {
+      if (!columnKeySet.has(key)) {
+        problems.push(
+          `QUICK_FILTER_KEYS names \`${key}\`, which is not a column`
+        );
+      }
+    }
+
+    // Extra sorts address fields directly rather than columns.
+    const extraBlock = colsSrc.slice(colsSrc.indexOf("export const EXTRA_SORTS"));
+    for (const key of stringProps(
+      extraBlock.slice(0, extraBlock.indexOf("];")),
+      "key",
+      "EXTRA_SORTS"
+    )) {
+      if (!available.has(key) && !SYSTEM_FIELDS.includes(key)) {
+        problems.push(
+          `EXTRA_SORTS sorts on \`${key}\`, which npcs.listForCampaign never returns`
+        );
       }
     }
 
