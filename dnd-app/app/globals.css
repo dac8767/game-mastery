@@ -495,13 +495,26 @@ button {
   font-size: 0.95rem;
 }
 
+.nav-group-title {
+  padding: 0 0.6rem 0.4rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
 .nav-campaign {
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  padding: 0 0.5rem 0.5rem;
-  font-size: 0.9rem;
+  padding: 0.25rem 0.6rem 0.5rem;
+  font-size: 0.95rem;
   font-weight: 600;
+  border-radius: 8px;
+}
+
+.nav-campaign:hover .nav-campaign-name {
+  color: var(--accent);
 }
 
 .nav-campaign-icon {
