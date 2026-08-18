@@ -244,10 +244,26 @@ against.
 Verify:
 
 ```bash
-npx convex env list
+npx convex env list --names-only
 ```
 
 You should see `JWKS`, `JWT_PRIVATE_KEY`, and `SITE_URL`.
+
+**Use `--names-only`.** Plain `npx convex env list` prints every value in
+full, including the RSA private key that signs your auth tokens — which
+then lives in your terminal scrollback, and in the transcript of any
+screen share or AI session you paste it into. Anyone with that key can
+mint valid sessions for your deployment and impersonate any user,
+including the DM.
+
+If it does get exposed, rotate immediately — it's free before players
+have accounts, and signs everyone out after:
+
+```bash
+npx convex env remove JWT_PRIVATE_KEY
+npx convex env remove JWKS
+npx @convex-dev/auth --web-server-url http://localhost:3000   # regenerates both
+```
 
 ## Step 4 — Add the map server URL
 
