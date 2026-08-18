@@ -176,7 +176,16 @@ npx convex dev
 This is the command that actually creates your database. It will:
 
 1. Open a browser to log in (GitHub or Google) if this machine isn't
-   already authenticated.
+   already authenticated. **There's no separate signup step** — if you
+   don't have a Convex account yet, you create one in that browser flow
+   and the CLI picks the token up automatically. No credit card for the
+   free tier.
+   > Check *which* identity the browser offers before approving. That
+   > account owns the project, free-tier resources are pooled per
+   > account, and the Home app is meant to live under the same one — so
+   > on a machine that's signed into a work GitHub account, make sure the
+   > OAuth flow isn't silently using it. Moving a project between
+   > accounts later is a hassle.
 2. Ask whether to create a new project or use an existing one. Choose
    **create a new project** and name it something like `dnd-app`.
    > **Do not reuse the Home app's project.** Two separate Convex
