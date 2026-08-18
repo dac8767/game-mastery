@@ -89,6 +89,23 @@ node --version      # must print v20.9.0 or higher
 --version` prompts you to install them, either accept the prompt or run
 `xcode-select --install`.
 
+**If the Homebrew installer ends with `Failed during: brew update`,
+Homebrew still installed correctly.** That final step refreshes every
+configured tap, and it aborts if any *third-party* tap can't be fetched —
+commonly a corporate tap on a work machine whose credentials have
+expired (e.g. an Azure DevOps–hosted tap returning "Authentication
+failed"). As long as the output says `Updated 2 taps (homebrew/core and
+homebrew/cask)`, the tap that Node comes from is current. Verify with
+`brew --version` and carry on with `brew install node`.
+
+To stop the error recurring, drop the unreachable tap with `brew untap
+<tap-name>` — but only if you don't rely on the tooling it provides.
+
+**Homebrew-free alternative:** nothing else in this project needs
+Homebrew. If it's more trouble than it's worth on a managed machine,
+install Node from the official macOS `.pkg` at <https://nodejs.org>
+(take LTS) and use the Xcode Command Line Tools `git`.
+
 ### Pop!_OS / Ubuntu / Debian
 
 The `nodejs` package in the default apt repos is far older than 20.9
