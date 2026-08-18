@@ -29,6 +29,8 @@ const DEFAULTS = {
   theme: "candlelight" as const,
   viewAsPlayer: false,
   adminOverride: false,
+  toolbarTokens: [] as string[],
+  toolbarSet: false,
 };
 
 /** Shared reader so queries can honour viewAsPlayer without duplication. */
@@ -42,6 +44,12 @@ export async function getSettings(ctx: QueryCtx, userId: Id<"users">) {
         theme: doc.theme,
         viewAsPlayer: doc.viewAsPlayer,
         adminOverride: doc.adminOverride ?? false,
+        toolbarTokens: doc.toolbarTokens ?? [],
+        // Reported as stored. The client seeds the default layout from
+        // this flag alone — an empty toolbar is something a person can
+        // legitimately have made, so "the array is empty" must never
+        // stand in for "never arranged one".
+        toolbarSet: doc.toolbarSet ?? false,
       }
     : DEFAULTS;
 }
@@ -62,6 +70,7 @@ export const saveMySettings = mutation({
     theme: v.optional(themeValidator),
     viewAsPlayer: v.optional(v.boolean()),
     adminOverride: v.optional(v.boolean()),
+    toolbarTokens: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const userId = await requireUser(ctx);
@@ -82,6 +91,11 @@ export const saveMySettings = mutation({
         theme: args.theme ?? existing.theme,
         viewAsPlayer: args.viewAsPlayer ?? existing.viewAsPlayer,
         adminOverride: args.adminOverride ?? existing.adminOverride ?? false,
+        // Writing a layout at all is what sets the flag, including an
+        // empty one — that is the whole point of keeping it separate.
+        toolbarTokens: args.toolbarTokens ?? existing.toolbarTokens,
+        toolbarSet:
+          args.toolbarTokens !== undefined || (existing.toolbarSet ?? false),
       });
       return;
     }
@@ -91,6 +105,8 @@ export const saveMySettings = mutation({
       theme: args.theme ?? DEFAULTS.theme,
       viewAsPlayer: args.viewAsPlayer ?? DEFAULTS.viewAsPlayer,
       adminOverride: args.adminOverride ?? DEFAULTS.adminOverride,
+      toolbarTokens: args.toolbarTokens,
+      toolbarSet: args.toolbarTokens !== undefined,
     });
   },
 });

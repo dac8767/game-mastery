@@ -3,34 +3,17 @@
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import { THEMES } from "@/components/themes";
 
 /**
  * Personal settings. Everything here affects only the person changing
  * it — theme, preview mode, break-glass admin — and nothing here grants
  * a role.
+ *
+ * The theme list is shared with the ribbon's theme control rather than
+ * repeated here: a theme offered in one place and not the other is a
+ * palette some people can never reach.
  */
-
-const THEMES: {
-  value: "candlelight" | "slate" | "parchment";
-  label: string;
-  note: string;
-}[] = [
-  {
-    value: "candlelight",
-    label: "Candlelight",
-    note: "Warm and dim — built for a dark room and a bright map.",
-  },
-  {
-    value: "slate",
-    label: "Slate",
-    note: "Cool grey-blue, higher contrast for long reading.",
-  },
-  {
-    value: "parchment",
-    label: "Parchment",
-    note: "Light theme for bright rooms and printing.",
-  },
-];
 
 export function SettingsPanel({
   campaignId,

@@ -8,47 +8,28 @@ import { ReactNode, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import { ThemeSync } from "@/components/ThemeSync";
 import { FeedbackForm } from "@/components/FeedbackForm";
+import { RibbonBar } from "@/components/RibbonBar";
 import { Id } from "@/convex/_generated/dataModel";
+import {
+  ASSET_ITEMS,
+  CAMPAIGN_ITEMS,
+  NavItem,
+  TOOL_ITEMS,
+  navHref,
+} from "@/components/navItems";
 
 /**
- * The application frame: navigation on the left, the selected thing on
- * the right.
+ * The application frame: navigation on the left, the ribbon and the
+ * selected thing on the right.
  *
- * A section with no `slug` isn't built yet and renders as a disabled
- * item rather than a link, so the shape of the app is visible without
- * dead routes that 404. To bring one online, add its page under
- * app/campaign/[campaignId]/<slug>/ and give it a `slug` here.
+ * The nav list itself lives in components/navItems.ts, because the
+ * ribbon's tool buttons address the same destinations by id and two
+ * lists would drift. A section with no `slug` isn't built yet and
+ * renders as a disabled item rather than a link, so the shape of the app
+ * is visible without dead routes that 404. To bring one online, add its
+ * page under app/campaign/[campaignId]/<slug>/ and give it a `slug`
+ * there.
  */
-
-type NavItem = {
-  label: string;
-  icon: string;
-  /** Path segment under /campaign/[id]. Omitted = not built yet. */
-  slug?: string;
-};
-
-/** Content scoped to the campaign. Titled with the campaign's name. */
-const CAMPAIGN_ITEMS: NavItem[] = [
-  { label: "Sessions", icon: "✦" },
-  { label: "NPCs", icon: "☾", slug: "npcs" },
-  { label: "Shops", icon: "⌂" },
-  { label: "Locations", icon: "⌖" },
-  { label: "Calendar", icon: "◷" },
-];
-
-const TOOL_ITEMS: NavItem[] = [
-  { label: "Chat", icon: "◌", slug: "chat" },
-  { label: "Dice Roller", icon: "⚄" },
-  { label: "Combat Tracker", icon: "⚔" },
-  { label: "Notebook", icon: "✎", slug: "notebook" },
-  { label: "Scheduler", icon: "⏱" },
-];
-
-const ASSET_ITEMS: NavItem[] = [
-  { label: "Dynamic Maps", icon: "▦" },
-  { label: "Static Maps", icon: "▤" },
-  { label: "Miniatures", icon: "♟" },
-];
 
 function NavList({
   items,
@@ -64,7 +45,7 @@ function NavList({
       {items.map((item) => {
         if (item.slug === undefined) {
           return (
-            <li key={item.label}>
+            <li key={item.id}>
               <span className="nav-item disabled">
                 <span className="nav-icon">{item.icon}</span>
                 {item.label}
@@ -73,9 +54,9 @@ function NavList({
             </li>
           );
         }
-        const href = item.slug ? `${base}/${item.slug}` : base;
+        const href = navHref(item, base);
         return (
-          <li key={item.label}>
+          <li key={item.id}>
             <Link
               href={href}
               className={`nav-item${pathname === href ? " active" : ""}`}
@@ -174,6 +155,10 @@ export function AppShell({
       </nav>
 
       <main className="workspace">
+        <RibbonBar
+          campaignId={campaignId}
+          onFeedback={() => setFeedbackOpen(true)}
+        />
         <div className="crumbs">
           <Link href={base}>{campaign?.name ?? "Campaign"}</Link>
           <span className="sep">›</span>

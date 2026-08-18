@@ -179,6 +179,22 @@ export default defineSchema({
      * admin existed still validate.
      */
     adminOverride: v.optional(v.boolean()),
+    /**
+     * The ribbon toolbar's layout: one flat array of short tokens. Not a
+     * tree and not an object, so there is no migration scaffolding for a
+     * shape that keeps changing — see components/ribbonTokens.ts for the
+     * grammar.
+     */
+    toolbarTokens: v.optional(v.array(v.string())),
+    /**
+     * Has this person ever arranged their toolbar?
+     *
+     * Judged from what was PERSISTED, never from the normalized result.
+     * An empty toolbar is a legitimate thing to have made, so seeding the
+     * default whenever the array is empty would resurrect it on every
+     * load for anyone who cleared theirs.
+     */
+    toolbarSet: v.optional(v.boolean()),
   }).index("by_user", ["userId"]),
 
   /**

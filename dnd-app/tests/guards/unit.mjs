@@ -281,6 +281,181 @@ export const unit = {
       read("components", "NotebookTool.tsx").includes(`${fmt.BOX_ATTR}=`)
     );
 
+    // ---- the ribbon's grammar --------------------------------------
+    // This is the first thing the ribbon handoff says to get right, and
+    // the reason ribbonTokens.ts imports nothing: the parser has to be
+    // TOTAL — every input, including a hand-corrupted one, must yield a
+    // model rather than throwing — and the round-trip has to hold.
+    const ribOut = compile("components/ribbonTokens.ts");
+    const rib = await import(pathToFileURL(join(ribOut, "ribbonTokens.js")).href);
+
+    const REG = {
+      builtins: ["undo", "redo", "customize"],
+      permanent: ["customize"],
+      tools: ["npcs", "chat"],
+      commands: ["feedback"],
+    };
+
+    // Canonical form is what round-trips: ids are re-minted on
+    // serialize, so the property is that parsing a serialized model
+    // gives the same model back.
+    const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const roundTrips = (tokens) => {
+      const once = rib.parseRibbon(tokens);
+      return eq(rib.parseRibbon(rib.serializeRibbon(once)), once);
+    };
+
+    const sample = [
+      "b:undo",
+      "2!d:sec-1",
+      "st:Tools",
+      "t:npcs",
+      "r:row-1",
+      "t:chat",
+      "a:split-1",
+      "c:feedback",
+      "b:customize",
+    ];
+    check("parseRibbon round-trips a normal bar", roundTrips(sample));
+    check(
+      "serializeRibbon is idempotent through parse",
+      eq(
+        rib.serializeRibbon(rib.parseRibbon(rib.serializeRibbon(rib.parseRibbon(sample)))),
+        rib.serializeRibbon(rib.parseRibbon(sample))
+      )
+    );
+
+    // ---- malformed inputs, one class each --------------------------
+    check("parseRibbon of an empty array", rib.parseRibbon([]).sections.length === 1);
+    check(
+      "a leading row break puts everything on the bottom row",
+      rib.parseRibbon(["r:x", "b:undo"]).sections[0].bottom.length === 1
+    );
+    check(
+      "a second row break in one section merges into the first",
+      rib.parseRibbon(["b:undo", "r:a", "b:redo", "r:b", "c:feedback"])
+        .sections[0].bottom.length === 2
+    );
+    check(
+      "rl: anywhere in a section draws the line",
+      rib.parseRibbon(["b:undo", "r:a", "b:redo", "rl:b"]).sections[0].breakLine
+    );
+    const twoSplits = rib.parseRibbon(["b:undo", "a:1", "b:redo", "a:2", "c:feedback"]);
+    check(
+      "a second alignment split acts as a plain boundary",
+      twoSplits.splitAt === 1 && twoSplits.sections.length === 3
+    );
+    check(
+      "a title with no section after it still round-trips",
+      roundTrips(["b:undo", "2!d:x", "st:Empty"])
+    );
+    check(
+      "an empty title survives — defined means present",
+      rib.parseRibbon(["st:"]).sections[0].title === ""
+    );
+    check(
+      "nd: opens a section that paints no line",
+      rib.parseRibbon(["b:undo", "nd:x", "b:redo"]).sections[1].noSepBefore === true
+    );
+
+    // Deterministic fuzz. A seeded generator rather than Math.random, so
+    // a failure here is reproducible instead of a story about a build
+    // that once went red.
+    const ALPHABET = [
+      "b:undo", "b:redo", "b:customize", "b:gone", "t:npcs", "t:chat",
+      "t:missing", "c:feedback", "d:1", "2!d:2", "nd:3", "r:4", "rl:5",
+      "a:6", "st:", "st:Tools", "s:7", "s:8:40", "2!b:undo", "big!b:redo",
+      "", "junk",
+    ];
+    let seed = 20260818;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+
+    let totalOk = true;
+    let fuzzRoundTrip = true;
+    let normIdempotent = true;
+    let normKeepsPermanent = true;
+    let normOneSplit = true;
+
+    for (let i = 0; i < 400; i++) {
+      const len = Math.floor(rnd() * 12);
+      const toks = Array.from(
+        { length: len },
+        () => ALPHABET[Math.floor(rnd() * ALPHABET.length)]
+      );
+      try {
+        if (!roundTrips(toks)) fuzzRoundTrip = false;
+        const once = rib.normalizeRibbon(toks, REG);
+        const twice = rib.normalizeRibbon(once, REG);
+        if (!eq(once, twice)) normIdempotent = false;
+        if (!once.some((t) => rib.stripTall(t) === "b:customize")) {
+          normKeepsPermanent = false;
+        }
+        if (once.filter((t) => t.startsWith("a:")).length > 1) {
+          normOneSplit = false;
+        }
+      } catch {
+        totalOk = false;
+      }
+    }
+    check("parseRibbon and normalizeRibbon never throw (400 fuzzed inputs)", totalOk);
+    check("parseRibbon round-trips every fuzzed input", fuzzRoundTrip);
+    check("normalizeRibbon is idempotent", normIdempotent);
+    check("normalizeRibbon always restores the permanent item", normKeepsPermanent);
+    check("normalizeRibbon leaves at most one alignment split", normOneSplit);
+
+    // ---- normalize, one behaviour each -----------------------------
+    check(
+      "normalizeRibbon discards a builtin whose control is gone",
+      !rib.normalizeRibbon(["b:gone", "b:undo"], REG).includes("b:gone")
+    );
+    check(
+      "normalizeRibbon discards a tool whose screen is gone",
+      !rib.normalizeRibbon(["t:missing"], REG).includes("t:missing")
+    );
+    check(
+      "normalizeRibbon dedups a repeated control",
+      rib.normalizeRibbon(["b:undo", "b:undo"], REG).filter((t) => t === "b:undo")
+        .length === 1
+    );
+    check(
+      "normalizeRibbon strips the tall flag off anything but a divider",
+      rib.normalizeRibbon(["2!b:undo"], REG).includes("b:undo")
+    );
+    check(
+      "normalizeRibbon keeps the tall flag on a section divider",
+      rib.normalizeRibbon(["2!d:x"], REG).includes("2!d:x")
+    );
+    check(
+      "normalizeRibbon of undefined still yields the permanent item",
+      eq(rib.normalizeRibbon(undefined, REG), ["b:customize"])
+    );
+    check(
+      "an emptied toolbar stays empty apart from what cannot be lost",
+      eq(rib.normalizeRibbon([], REG), ["b:customize"])
+    );
+
+    // ---- spacers ---------------------------------------------------
+    check("spacerWidth reads an explicit width", rib.spacerWidth("s:1:40") === 40);
+    check("spacerWidth of a bare spacer is null", rib.spacerWidth("s:1") === null);
+    check("spacerWidth of a non-spacer is null", rib.spacerWidth("b:undo") === null);
+    check(
+      "withSpacerWidth keeps the id",
+      rib.withSpacerWidth("s:abc", 24) === "s:abc:24"
+    );
+    check(
+      "withSpacerWidth clears back to auto",
+      rib.withSpacerWidth("s:abc:24", null) === "s:abc"
+    );
+    check(
+      "withSpacerWidth refuses to touch a non-spacer",
+      rib.withSpacerWidth("b:undo", 24) === "b:undo"
+    );
+
+    check("isStructural: a divider", rib.isStructural("2!d:1"));
+    check("isStructural: a row break", rib.isStructural("r:1"));
+    check("isStructural: a title", rib.isStructural("st:Tools"));
+    check("isStructural: a control is not", !rib.isStructural("b:undo"));
+
     return problems;
   },
 };

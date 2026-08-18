@@ -171,14 +171,120 @@ export const integrity = {
       }
     }
 
-    // ---- sidebar slugs must have pages behind them -----------------
-    const shellSrc = read("components", "AppShell.tsx");
-    for (const slug of stringProps(shellSrc, "slug", "AppShell nav items")) {
+    // ---- nav slugs must have pages behind them ---------------------
+    // The sidebar renders these and the ribbon's `t:` tokens address the
+    // same list by id, so a renamed folder is a dead link in two places
+    // rather than a compile error in either.
+    const navSrc = read("components", "navItems.ts");
+    for (const slug of stringProps(navSrc, "slug", "navItems destinations")) {
       if (!exists("app", "campaign", "[campaignId]", slug, "page.tsx")) {
         problems.push(
-          `sidebar links to "${slug}" but app/campaign/[campaignId]/${slug}/page.tsx does not exist`
+          `nav links to "${slug}" but app/campaign/[campaignId]/${slug}/page.tsx does not exist`
         );
       }
+    }
+    // TABLE_ITEM's slug is "" — the campaign's own page. An empty string
+    // is invisible to the sweep above, so it is checked by name.
+    if (!exists("app", "campaign", "[campaignId]", "page.tsx")) {
+      problems.push(
+        "navItems has a destination for the campaign itself but " +
+          "app/campaign/[campaignId]/page.tsx does not exist"
+      );
+    }
+
+    // ---- the ribbon's three registries -----------------------------
+    // Every ribbon token is a string pointing at a control, and a token
+    // whose control has gone is the exact failure normalizeRibbon exists
+    // to absorb — silently, by design. That silence is right at runtime
+    // and wrong at build time, so the shipped default layout and the
+    // renderers are checked here instead.
+    const ribbonSrc = read("components", "ribbonRegistry.ts");
+    const barSrc = read("components", "RibbonBar.tsx");
+
+    const between = (src, from, to, label) => {
+      const a = src.indexOf(from);
+      if (a === -1) throw new Error(`could not find ${label}`);
+      const b = to ? src.indexOf(to, a) : -1;
+      return src.slice(a, b === -1 ? src.length : b);
+    };
+
+    const builtinKeys = stringProps(
+      between(ribbonSrc, "TOOLBAR_BUILTINS: ToolbarBuiltin[]", "];", "TOOLBAR_BUILTINS"),
+      "key",
+      "TOOLBAR_BUILTINS"
+    );
+    const commandIds = stringProps(
+      between(ribbonSrc, "TOOLBAR_COMMANDS: ToolbarCommand[]", "];", "TOOLBAR_COMMANDS"),
+      "id",
+      "TOOLBAR_COMMANDS"
+    );
+    const navIds = stringProps(navSrc, "id", "navItems");
+
+    // A builtin is drawn by a switch arm keyed on its string. Add one to
+    // the registry and forget the arm and the palette offers a button
+    // that renders nothing.
+    const renderArms = [
+      ...between(barSrc, "const renderBuiltin", "if (!tokens)", "renderBuiltin")
+        .matchAll(/case "([^"]+)":/g),
+    ].map((m) => m[1]);
+    for (const key of builtinKeys) {
+      if (!renderArms.includes(key)) {
+        problems.push(
+          `builtin \`${key}\` has no arm in RibbonBar's renderBuiltin — it ` +
+            "would render nothing"
+        );
+      }
+    }
+    for (const key of renderArms) {
+      if (!builtinKeys.includes(key)) {
+        problems.push(
+          `RibbonBar renders a \`${key}\` builtin that TOOLBAR_BUILTINS does ` +
+            "not define, so no token can ever reach it"
+        );
+      }
+    }
+
+    // Same for commands, whose arm is an `if` on the id.
+    const runBody = between(barSrc, "const run = useCallback", "const setTheme", "run()");
+    for (const id of commandIds) {
+      if (!runBody.includes(`"${id}"`)) {
+        problems.push(
+          `command \`${id}\` has no arm in RibbonBar's run() — the button ` +
+            "would do nothing"
+        );
+      }
+    }
+
+    // The default layout has to be made of tokens that resolve today.
+    const defaults = [
+      ...between(ribbonSrc, "DEFAULT_RIBBON", "];", "DEFAULT_RIBBON").matchAll(
+        /"([^"]+)"/g
+      ),
+    ].map((m) => m[1]);
+    if (defaults.length === 0) {
+      throw new Error("DEFAULT_RIBBON is empty — parser out of date?");
+    }
+    const known = { "b:": builtinKeys, "c:": commandIds, "t:": navIds };
+    for (const raw of defaults) {
+      const tok = raw.startsWith("2!") ? raw.slice(2) : raw;
+      const list = known[tok.slice(0, 2)];
+      if (list && !list.includes(tok.slice(2))) {
+        problems.push(
+          `DEFAULT_RIBBON contains "${raw}", which no registry defines — ` +
+            "normalizeRibbon would silently drop it from every new toolbar"
+        );
+      }
+    }
+
+    // WebKit refuses to START a drag without data on the transfer, so
+    // the Customize window looks perfect in a browser and is stone dead
+    // in a packaged desktop window on macOS.
+    const dnd = stripComments(read("components", "DndColumns.tsx"));
+    if (!/dataTransfer\.setData\(/.test(dnd)) {
+      problems.push(
+        "DndColumns never calls dataTransfer.setData() — dragging would " +
+          "not start at all in WebKit"
+      );
     }
 
     // ---- the importer writes fields the schema must accept ---------
@@ -230,7 +336,7 @@ export const integrity = {
     }
 
     const layout = read("app", "layout.tsx");
-    const panel = read("components", "SettingsPanel.tsx");
+    const themeList = read("components", "themes.ts");
     const css = read("app", "globals.css");
 
     for (const theme of themes) {
@@ -240,8 +346,19 @@ export const integrity = {
             "layout.tsx — it would flash the default on every load"
         );
       }
-      if (!panel.includes(`"${theme}"`)) {
-        problems.push(`theme "${theme}" is not offered in Settings`);
+      if (!themeList.includes(`"${theme}"`)) {
+        problems.push(`theme "${theme}" is not offered in components/themes.ts`);
+      }
+    }
+
+    // Two places offer the choice, and both must read the shared list —
+    // a theme in one and not the other is a palette some people can
+    // never reach.
+    for (const file of ["SettingsPanel.tsx", "RibbonBar.tsx"]) {
+      if (!/THEMES/.test(read("components", file))) {
+        problems.push(
+          `${file} offers a theme choice without reading the shared THEMES list`
+        );
       }
     }
 
