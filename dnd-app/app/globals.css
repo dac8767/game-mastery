@@ -2527,8 +2527,9 @@ body.col-resizing {
   margin-bottom: 0.9rem;
 }
 
+/* Match the real bar's height so nothing jumps when it arrives. */
 .rib-loading {
-  min-height: 3.6rem;
+  min-height: 4.35rem;
 }
 
 .rib-bar {

@@ -128,7 +128,35 @@ included scaffolds) into the repo root so Claude Code has full context._
   (with profile join), `upsertCharacter` (players edit only their own;
   players can never write DM `notes`), `listCharacters` (notes stripped
   for players).
-- **Not yet built:** both clients.
+- `convex/settings.ts` — per-person settings: theme, `viewAsPlayer`,
+  the break-glass admin override, and the ribbon toolbar's token array
+  (`toolbarTokens` + a separate `toolbarSet` flag, so an emptied toolbar
+  is not mistaken for one nobody has arranged).
+- `convex/npcs.ts`, `convex/views.ts`, `convex/notebook.ts`,
+  `convex/chat.ts` — the NPC table (with per-person column layouts) and
+  the Notebook and Chat tools.
+- **Built since:** the player web app (Next.js, `dnd-app/`). The DM
+  desktop app (Tauri) is still to come.
+
+#### Client subsystems worth knowing about
+- **The guard suite** (`npm run guards`, seven guards) — nothing is done
+  until it is green. It exists because the expensive failures are silent
+  ones: a string key that no longer resolves, a visibility rule that
+  quietly stopped applying. A guard that cannot find what it inspects
+  **fails** rather than passing quietly.
+- **The ribbon toolbar** (`components/ribbonTokens.ts` and friends) — a
+  Word-style customizable bar whose entire layout is one flat array of
+  short strings, persisted per person. `ribbonTokens.ts` imports nothing
+  so the unit guard can fuzz the grammar in isolation. Structure is
+  punctuation inside the sequence, never nesting — resist making it a
+  tree.
+- **The Notebook** (`components/NotebookTool.tsx`,
+  `notebookFormat.ts`) — a canvas of free-floating boxes with a
+  contentEditable format toolbar. Two rules there are load-bearing:
+  format buttons are `onMouseDown` + `preventDefault` (never `onClick`,
+  which collapses the selection first), and every command routes through
+  `applyScrapbookTextFormat`, which persists the result — `execCommand`
+  alone changes the screen and loses the edit on reload.
 
 ## Client build plan (D&D — the agreed next work)
 
@@ -175,7 +203,16 @@ included scaffolds) into the repo root so Claude Code has full context._
 
 ## Immediate next task for Claude Code
 
-Scaffold the **D&D player web app** (Next.js + Convex client) against the
-`dnd-app/convex/` backend in this repo, then run `npx convex dev` and fix
-any version-drift compile issues in the backend files (full-file rewrites,
-per Derek's preference).
+The player web app is built and deployed. Next up, in rough order:
+
+1. **The DM desktop app** (Tauri, reusing these React components) — see
+   step 2 of the client build plan above.
+2. **AI portrait generation** for NPCs. The upload half is done
+   (`npcs.setPortrait`, direct-to-storage). Generation needs an image
+   provider, which is the first paid service the project would take on,
+   so **ask Derek before picking one**.
+3. **The unbuilt nav sections** — Sessions, Shops, Locations, Calendar,
+   Dice Roller, Combat Tracker (client), Scheduler, and the Asset
+   Library. They render greyed in the sidebar today; to bring one
+   online, add its page under `app/campaign/[campaignId]/<slug>/` and
+   give it a `slug` in `components/navItems.ts`.

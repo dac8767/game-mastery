@@ -168,8 +168,7 @@ export function RibbonCustomize({
                           </span>
                         )}
 
-                        {spacerWidth(tok) !== null ||
-                        stripTall(tok).startsWith("s:") ? (
+                        {stripTall(tok).startsWith("s:") ? (
                           <WidthInput
                             value={spacerWidth(tok)}
                             onCommit={(px) =>
