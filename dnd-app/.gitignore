@@ -14,3 +14,6 @@ next-env.d.ts
 # misc
 *.tsbuildinfo
 .DS_Store
+
+# convex snapshots — full database dumps, including DM notes
+backups/

@@ -14,6 +14,8 @@ of scope here.
 
 - **When updating code, always output the full updated file, never just
   the changed section.**
+- **After completing an update, show the code in the reply** — don't just
+  describe what changed. Full files, per the rule above.
 - Keep costs at free-tier: Convex free tier, Vercel Hobby, Cloudflare
   free plan. Don't introduce paid services without asking.
 

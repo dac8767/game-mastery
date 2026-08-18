@@ -3,7 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "dev": "next dev",
+    "dev": "convex dev --start 'next dev'",
+    "dev:web": "next dev",
+    "dev:convex": "convex dev",
     "build": "next build",
     "start": "next start",
     "convex": "convex dev",

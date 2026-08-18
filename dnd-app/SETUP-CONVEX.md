@@ -432,17 +432,80 @@ Download the images out of Airtable before those links die, rename them
 to match, and drop them on the map server; the drawer picks them up with
 no further changes.
 
-## Step 10 — Production (when you're ready to deploy)
+## Step 10 — Deploy to a real URL
+
+**GitHub hosts the code; it does not run the app.** GitHub Pages serves
+static files only — no server rendering, no build-time environment
+variables, no rewrites — so it's the wrong target for a Next.js app.
+Vercel is the host in the architecture plan, it's free on Hobby, and it
+builds straight from the GitHub repo, so a `git push` becomes a deploy.
+
+### One-time setup
+
+1. Push the branch and merge it to `main` (or point Vercel at the branch).
+2. vercel.com → **New Project** → import `dac8767/game-mastery`.
+3. **Root Directory:** `dnd-app` — the repo root is not the app.
+4. **Build Command:** `npx convex deploy --cmd 'npm run build'`
+   This pushes the Convex schema and functions to **production**, then
+   builds Next.js with `NEXT_PUBLIC_CONVEX_URL` already pointed at the
+   prod deployment. You do not set that variable by hand.
+5. **Environment variables** in Vercel:
+   - `CONVEX_DEPLOY_KEY` — generate in the Convex dashboard under
+     Settings → Deploy Keys → Production. This is what lets the build
+     deploy on your behalf; treat it as a secret.
+   - `NEXT_PUBLIC_MAP_SERVER` — `https://maps.<yourdomain>`
+6. Deploy, then point Convex Auth at the live origin:
 
 ```bash
-npx convex deploy                                    # creates the prod deployment
-npx @convex-dev/auth --prod --web-server-url https://your-app.vercel.app
+npx @convex-dev/auth --prod --web-server-url https://<your-app>.vercel.app
 ```
 
-Then set `NEXT_PUBLIC_CONVEX_URL` (the **prod** URL) and
-`NEXT_PUBLIC_MAP_SERVER` in Vercel's environment variables. Dev and prod
-are separate deployments with separate data — seeding dev does not seed
-prod, so Steps 6–9 get repeated against prod.
+7. **Prod is a separate database.** Steps 6–9 repeat against it: create
+   your account on the live URL, seed the campaign with
+   `npx convex run ... --prod`, and re-run the NPC import with
+   `npx convex import --prod`.
+
+After that, shipping is `git push`. Vercel rebuilds, Convex takes the
+schema and function changes in the same step, and there is no terminal
+to babysit.
+
+### Local development in one terminal
+
+`npm run dev` now runs both halves together — the Convex watcher and the
+Next dev server share one terminal:
+
+```json
+"dev": "convex dev --start 'next dev'"
+```
+
+`npm run dev:web` and `npm run dev:convex` still run them separately if
+you ever want to isolate one.
+
+## Backups
+
+Convex holds the data in the cloud, so a dead laptop costs you nothing.
+What it does not protect against is a bad import or a schema change that
+drops a field — `--replace` and `--replace-all` on `convex import` are
+the realistic ways to lose a roster.
+
+Take a snapshot before any bulk data operation:
+
+```bash
+npx convex export --path "backups/$(date +%F)-dev.zip"           # dev
+npx convex export --prod --path "backups/$(date +%F)-prod.zip"   # production
+```
+
+Add `--include-file-storage` if files are ever stored in Convex (map
+images live on the PowerEdge, so today they aren't).
+
+Restore by importing the snapshot back:
+
+```bash
+npx convex import backups/2026-08-18-prod.zip --prod
+```
+
+Keep the `backups/` directory out of git — snapshots contain the full
+database, DM notes and secrets included.
 
 ---
 
