@@ -139,6 +139,26 @@ cd dnd-app
 npm install
 ```
 
+**If npm ends with an `allow-scripts` warning**, approve the two install
+scripts before continuing:
+
+```
+npm warn allow-scripts   esbuild@0.27.0 (postinstall: node install.js)
+npm warn allow-scripts   sharp@0.34.5 (install: node install/check.js || npm run build)
+```
+
+Recent npm versions block package install scripts by default. Both of
+these exist to put a native binary in place, and **esbuild is not
+optional here** — it's a direct dependency of `convex`, which uses it to
+bundle your `convex/` functions before every push. If its binary isn't
+set up, `npx convex dev` fails with an esbuild binary error rather than
+anything that points at Convex. `sharp` is Next.js's image processor.
+
+```bash
+npm approve-scripts --allow-scripts-pending   # review and approve both
+npm install                                   # re-run so they execute
+```
+
 ## Step 2 — Create the Convex project and push the schema
 
 ```bash
