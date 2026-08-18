@@ -78,6 +78,17 @@ button {
   color: var(--text-dim);
 }
 
+.header-links {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  font-size: 0.9rem;
+}
+
+.header-links a:hover {
+  color: var(--accent);
+}
+
 .text-button {
   background: none;
   border: none;
@@ -444,5 +455,342 @@ button {
     grid-template-columns: 2rem 1fr minmax(6rem, 38%);
     gap: 0.5rem;
     padding: 0.55rem 0.75rem;
+  }
+}
+
+/* ---------- NPC roster ---------- */
+
+.page-wide {
+  max-width: 1600px;
+}
+
+.npc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.npc-search {
+  flex: 1 1 18rem;
+  min-width: 12rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--text);
+  font: inherit;
+}
+
+.npc-search:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.npc-btn {
+  padding: 0.45rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text);
+}
+
+.npc-btn:hover {
+  border-color: var(--accent);
+}
+
+.npc-btn.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.npc-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.npc-select select {
+  padding: 0.4rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.npc-count {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  margin-left: auto;
+}
+
+.npc-notice {
+  border: 1px solid var(--injured);
+  color: var(--injured);
+  background: rgba(217, 177, 59, 0.1);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  margin: 0 0 0.75rem;
+}
+
+/* Facet panel */
+
+.npc-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.9rem;
+  padding: 0.9rem;
+  margin-bottom: 0.9rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.facet-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 0.4rem;
+}
+
+.facet-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  max-height: 9rem;
+  overflow-y: auto;
+}
+
+.facet-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--text-dim);
+}
+
+.facet-chip:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.facet-chip.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.facet-chip .n {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.65;
+  font-size: 0.7rem;
+}
+
+/* Grid */
+
+.npc-table-wrap {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  overflow-x: auto;
+}
+
+.npc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.npc-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  white-space: nowrap;
+  padding: 0.55rem 0.7rem;
+  background: var(--bg-inset);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  user-select: none;
+}
+
+.npc-table th:hover {
+  color: var(--text);
+}
+
+.npc-table th.sorted {
+  color: var(--accent);
+}
+
+.npc-table th .arrow {
+  margin-left: 0.3rem;
+}
+
+.npc-table td {
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.npc-table tbody tr:hover td {
+  background: var(--accent-soft);
+  cursor: pointer;
+}
+
+.npc-table .name-cell {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.npc-table tr.hidden-npc .name-cell {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.cell-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.chip.warn {
+  border-color: var(--bloodied);
+  color: var(--bloodied);
+}
+
+.dm-col {
+  white-space: nowrap;
+}
+
+.group-row td {
+  background: var(--bg-inset);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  position: sticky;
+  top: 2rem;
+}
+
+.group-row .n {
+  color: var(--text-dim);
+  font-weight: 400;
+  margin-left: 0.5rem;
+}
+
+/* Detail drawer */
+
+.drawer-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 10;
+}
+
+.npc-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(30rem, 100vw);
+  z-index: 11;
+  overflow-y: auto;
+  padding: 1.25rem;
+  background: var(--bg-raised);
+  border-left: 1px solid var(--border);
+}
+
+.drawer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.drawer-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.drawer-header p {
+  margin: 0.15rem 0 0;
+  font-size: 0.9rem;
+}
+
+.drawer-portrait {
+  display: block;
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  margin-bottom: 0.9rem;
+}
+
+.drawer-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+}
+
+.detail-field {
+  margin-bottom: 0.85rem;
+}
+
+.detail-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 0.2rem;
+}
+
+.detail-value {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.dm-block {
+  margin-top: 1.25rem;
+  padding: 0.9rem;
+  border: 1px solid var(--bloodied);
+  border-radius: 10px;
+  background: rgba(217, 95, 59, 0.07);
+}
+
+.dm-block-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--bloodied);
+  font-weight: 600;
+  margin-bottom: 0.6rem;
+}
+
+.dm-block .muted {
+  font-size: 0.85rem;
+  margin: 0 0 0.6rem;
+}
+
+@media (max-width: 640px) {
+  .npc-count {
+    margin-left: 0;
   }
 }

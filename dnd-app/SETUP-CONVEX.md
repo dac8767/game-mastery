@@ -402,6 +402,36 @@ Import validates against the schema, so a malformed row fails the batch
 rather than silently corrupting the table. Test with a 5-line file first,
 check `npx convex data maps`, then run the full import.
 
+## Step 9b — Import the NPC roster
+
+Same reasoning as the maps: bulk import writes straight to the table, so
+a 200-row (or 20,000-row) load costs no function calls.
+
+**Push the schema first.** The `npcs` table has to exist in the deployed
+schema before an import will validate against it, so make sure
+`npx convex dev` has run since the table was added.
+
+```bash
+# 1. Airtable CSV -> JSONL (campaignId comes from `npx convex data campaigns`)
+node scripts/import-npcs.mjs ~/Downloads/NPCs-Master_List.csv <campaignId> -o npcs.jsonl
+
+# 2. Load it
+npx convex import --table npcs npcs.jsonl --append
+```
+
+The converter prints a summary (how many rows carry secrets, portraits,
+descriptions) so a column that silently exported blank is visible before
+you import rather than after.
+
+Re-importing the same file with `--append` **duplicates** every row. To
+replace the roster instead, use `--replace`.
+
+Portraits: Airtable attachment URLs are signed and expire, so the
+converter keeps only a derived path — `web/portraits/npcs/<npc-name>.<ext>`.
+Download the images out of Airtable before those links die, rename them
+to match, and drop them on the map server; the drawer picks them up with
+no further changes.
+
 ## Step 10 — Production (when you're ready to deploy)
 
 ```bash

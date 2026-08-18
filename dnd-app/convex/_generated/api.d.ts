@@ -13,6 +13,7 @@ import type * as campaigns from "../campaigns.js";
 import type * as combat from "../combat.js";
 import type * as http from "../http.js";
 import type * as maps from "../maps.js";
+import type * as npcs from "../npcs.js";
 
 import type {
   ApiFromModules,
@@ -26,6 +27,7 @@ declare const fullApi: ApiFromModules<{
   combat: typeof combat;
   http: typeof http;
   maps: typeof maps;
+  npcs: typeof npcs;
 }>;
 
 /**

@@ -58,6 +58,88 @@ export default defineSchema({
     .index("by_campaign", ["campaignId"])
     .index("by_player", ["playerId"]),
 
+  /**
+   * The NPC roster — the Airtable "NPCs Master List" base, migrated.
+   *
+   * Field shapes follow what the Airtable export actually contains:
+   * - Multi-selects (`status`, `groups`, `place`, `familyMembers`) arrive
+   *   comma-separated and are stored as string arrays so the browser can
+   *   facet on them.
+   * - Airtable checkboxes ("checked" / empty) become real booleans.
+   * - Everything else is optional: the base has columns that are wired up
+   *   but not yet filled in (voice, kingdom, alignment, sexuality,
+   *   quirkPhysical, playerNotes), and they should round-trip once they
+   *   are.
+   *
+   * DM-only fields — `dmNotes`, `secret`, and the `hidden` flag itself —
+   * are stripped server-side in npcs.listForCampaign for non-DM callers,
+   * the same way combat.getEncounterView masks combatants. They must
+   * never be sent to a player client.
+   *
+   * No search index: the roster is small enough that one subscription
+   * feeds the whole screen and the browser does the searching, which
+   * costs zero function calls per keystroke. Past a few thousand NPCs,
+   * switch to a search index plus a paginated query.
+   */
+  npcs: defineTable({
+    campaignId: v.id("campaigns"),
+
+    // Identity
+    name: v.string(), // full display name, whitespace-normalized
+    prefix: v.optional(v.string()), // "King", "Queen"
+    first: v.optional(v.string()),
+    middle: v.optional(v.string()),
+    family: v.optional(v.string()),
+    suffix: v.optional(v.string()), // "III", "XIV"
+    nickname: v.optional(v.string()),
+    noLastName: v.boolean(),
+
+    // Who they are
+    status: v.array(v.string()), // "Alive", "Dead", "Unknown", "NEW"
+    gender: v.optional(v.string()),
+    species: v.optional(v.string()),
+    lineage: v.optional(v.string()), // "Mountain", "Deep", "Wood"
+    sexuality: v.optional(v.string()),
+    alignment: v.optional(v.string()),
+
+    // Age
+    startingAge: v.optional(v.number()),
+    age: v.optional(v.number()),
+    maxAge: v.optional(v.number()),
+    maturity: v.optional(v.string()), // "Child", "Adult", "Senior"
+
+    // Ties
+    groups: v.array(v.string()), // "Townsfolk", "Mining Guild", "Royals"
+    job: v.optional(v.string()),
+    familyMembers: v.array(v.string()), // names, as free text
+    familyMemberCount: v.optional(v.number()),
+
+    // Where
+    place: v.array(v.string()), // "Moonbrook", "Mines", "Cemetery"
+    region: v.optional(v.string()),
+    kingdom: v.optional(v.string()),
+
+    // Flavor
+    description: v.optional(v.string()),
+    quirkMental: v.optional(v.string()),
+    quirkPhysical: v.optional(v.string()),
+    politics: v.optional(v.string()),
+    abilities: v.optional(v.string()),
+    wantsNeeds: v.optional(v.string()),
+    voice: v.optional(v.string()),
+    playerNotes: v.optional(v.string()),
+
+    // Portrait on the map server, e.g. "web/portraits/npcs/xyz.webp".
+    // The Airtable attachment URLs are signed and expire, so only the
+    // filename survives the migration — see scripts/import-npcs.mjs.
+    portraitPath: v.optional(v.string()),
+
+    // DM-only — never sent to players (see npcs.listForCampaign)
+    hidden: v.boolean(),
+    dmNotes: v.optional(v.string()),
+    secret: v.optional(v.string()),
+  }).index("by_campaign", ["campaignId"]),
+
   // Map library metadata. Images live at
   // https://maps.yourdomain.com/{webPath|originalPath}
   maps: defineTable({
