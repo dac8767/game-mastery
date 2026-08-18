@@ -210,3 +210,21 @@ export function reconcileColumns(
 
   return out;
 }
+
+/**
+ * Which image to show for an NPC.
+ *
+ * An uploaded portrait wins; the imported map-server path is the
+ * fallback for NPCs whose picture came across from Airtable as a
+ * filename. One function so the grid, the tiles, and the record drawer
+ * can never disagree about which one is current.
+ */
+export function portraitSrc(
+  portraitUrl: string | null | undefined,
+  portraitPath: string | null | undefined,
+  mapServer: string
+): string | null {
+  if (portraitUrl) return portraitUrl;
+  if (portraitPath && mapServer) return `${mapServer}/${portraitPath}`;
+  return null;
+}

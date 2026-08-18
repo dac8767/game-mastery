@@ -52,7 +52,7 @@ export const dmVisibility = {
     );
 
     // Spreading the raw document would defeat every check above.
-    if (/\.map\(\(n\)\s*=>\s*\(\{\s*\n?\s*\.\.\.n\b/.test(npcs)) {
+    if (/\.map\((?:async )?\(n\)\s*=>\s*\(\{\s*\n?\s*\.\.\.n\b/.test(npcs)) {
       problems.push(
         "npcs.listForCampaign spreads the raw document (...n) — " +
           "DM-only fields would ride along"

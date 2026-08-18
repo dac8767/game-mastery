@@ -53,9 +53,12 @@ export const listForCampaign = query({
     //   - `dmNotes` and `secret` come back null
     // The row shape stays uniform either way so the table can render one
     // set of columns; the DM-only columns are simply empty for players.
-    const npcs = page
-      .filter((n) => isDm || !n.hidden)
-      .map((n) => ({
+    // Resolving a storage URL is async, so the shaping runs in parallel
+    // rather than sequentially per row.
+    const npcs = await Promise.all(
+      page
+        .filter((n) => isDm || !n.hidden)
+        .map(async (n) => ({
         _id: n._id,
         _creationTime: n._creationTime,
 
@@ -99,12 +102,18 @@ export const listForCampaign = query({
         playerNotes: n.playerNotes ?? null,
 
         portraitPath: n.portraitPath ?? null,
+        // Resolved server-side so the client never handles storage ids.
+        // An uploaded image wins over the legacy map-server path.
+        portraitUrl: n.portraitId
+          ? await ctx.storage.getUrl(n.portraitId)
+          : null,
 
         // DM-only from here down.
         hidden: isDm ? n.hidden : false,
         dmNotes: isDm ? (n.dmNotes ?? null) : null,
         secret: isDm ? (n.secret ?? null) : null,
-      }));
+        }))
+    );
 
     return {
       isDm,
@@ -254,6 +263,47 @@ export const createNpc = mutation({
       place: [],
       // New NPCs start hidden: the DM decides when the table meets them.
       hidden: true,
+    });
+  },
+});
+
+/**
+ * DM: upload a portrait.
+ *
+ * Two steps, which is Convex's upload shape: mint a short-lived URL,
+ * POST the file straight to storage, then hand the id back. The file
+ * never passes through a mutation, so a large portrait can't blow the
+ * argument size limit.
+ */
+export const generatePortraitUploadUrl = mutation({
+  args: { npcId: v.id("npcs") },
+  handler: async (ctx, args) => {
+    const npc = await ctx.db.get(args.npcId);
+    if (!npc) throw new Error("NPC not found");
+    await requireDm(ctx, npc.campaignId);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+/** DM: attach an uploaded image, or clear the portrait entirely. */
+export const setPortrait = mutation({
+  args: {
+    npcId: v.id("npcs"),
+    storageId: v.union(v.id("_storage"), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const npc = await ctx.db.get(args.npcId);
+    if (!npc) throw new Error("NPC not found");
+    await requireDm(ctx, npc.campaignId);
+
+    // Replacing a portrait drops the old file. Skipping this leaves an
+    // image nothing references and nothing will ever clean up.
+    if (npc.portraitId && npc.portraitId !== args.storageId) {
+      await ctx.storage.delete(npc.portraitId);
+    }
+
+    await ctx.db.patch(args.npcId, {
+      portraitId: args.storageId ?? undefined,
     });
   },
 });

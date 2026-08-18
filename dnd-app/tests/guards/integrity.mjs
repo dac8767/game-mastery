@@ -28,6 +28,18 @@ import {
 /** Convex adds these to every document. */
 const SYSTEM_FIELDS = ["_id", "_creationTime"];
 
+/**
+ * Fields the query COMPUTES rather than reads from the table.
+ *
+ * Listed explicitly rather than letting the check wave through anything
+ * unrecognised: adding a derived field should be a deliberate line here,
+ * so a typo'd real field still fails loudly.
+ *
+ *   portraitUrl — resolved from the portraitId storage id, since the
+ *                 client must never handle storage ids directly.
+ */
+const DERIVED_FIELDS = ["portraitUrl"];
+
 export const integrity = {
   name: "integrity",
   description: "no dangling references across schema, query, grid, and routes",
@@ -46,12 +58,12 @@ export const integrity = {
     // ---- what the query actually returns ---------------------------
     const npcsSrc = read("convex", "npcs.ts");
     const returned = topLevelKeys(
-      blockAfter(npcsSrc, /\.map\(\(n\)\s*=>\s*\(/, "the row shaper in npcs.ts"),
+      blockAfter(npcsSrc, /\.map\((?:async )?\(n\)\s*=>\s*\(/, "the row shaper in npcs.ts"),
       "listForCampaign row"
     );
 
     for (const f of returned) {
-      if (SYSTEM_FIELDS.includes(f)) continue;
+      if (SYSTEM_FIELDS.includes(f) || DERIVED_FIELDS.includes(f)) continue;
       if (!schemaFields.includes(f)) {
         problems.push(
           `npcs.listForCampaign returns \`${f}\`, which is not a field on the npcs table`
@@ -69,7 +81,7 @@ export const integrity = {
     );
     const columnKeys = stringProps(columnsBlock, "key", "npcColumns COLUMNS");
 
-    const available = new Set(returned);
+    const available = new Set([...returned, ...DERIVED_FIELDS]);
     for (const key of columnKeys) {
       if (!available.has(key)) {
         problems.push(

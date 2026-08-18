@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
-import { COLUMNS, ColumnDef } from "@/components/npcColumns";
+import { COLUMNS, ColumnDef, portraitSrc } from "@/components/npcColumns";
 
 /**
  * The expanded record: every field, editable in place.
@@ -107,11 +107,11 @@ export function NpcDetail({
           </button>
         </header>
 
-        {npc.portraitPath && mapServer && (
+        {portraitSrc(npc.portraitUrl, npc.portraitPath, mapServer) && (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
             className="drawer-portrait"
-            src={`${mapServer}/${npc.portraitPath}`}
+            src={portraitSrc(npc.portraitUrl, npc.portraitPath, mapServer)!}
             alt={npc.name}
           />
         )}
@@ -124,16 +124,20 @@ export function NpcDetail({
           </p>
         )}
 
-        {fields.map((col) => (
-          <DrawerField
-            key={col.key}
-            col={col}
-            value={toInput(npc, col)}
-            editable={canEdit(col)}
-            dmOnly={Boolean(col.dmOnly)}
-            onCommit={(text) => commit(col, text)}
-          />
-        ))}
+        {fields.map((col) =>
+          col.kind === "picture" ? (
+            <PortraitField key={col.key} npc={npc} editable={isDm} />
+          ) : (
+            <DrawerField
+              key={col.key}
+              col={col}
+              value={toInput(npc, col)}
+              editable={canEdit(col)}
+              dmOnly={Boolean(col.dmOnly)}
+              onCommit={(text) => commit(col, text)}
+            />
+          ),
+        )}
       </aside>
     </>
   );
@@ -212,6 +216,114 @@ function DrawerField({
             if (e.key === "Escape") setDraft(value);
           }}
         />
+      )}
+    </div>
+  );
+}
+
+/** Portraits are capped so one image can't dominate file storage. */
+const MAX_PORTRAIT_BYTES = 8 * 1024 * 1024;
+
+/**
+ * The Picture field: a real image, uploaded.
+ *
+ * The file goes straight to Convex storage via a short-lived URL rather
+ * than through a mutation, so a large portrait can't hit the argument
+ * size limit. Replacing one deletes the old file server-side.
+ *
+ * NPCs imported from Airtable may still carry a map-server path instead;
+ * that shows here until a real image replaces it.
+ */
+function PortraitField({ npc, editable }: { npc: Npc; editable: boolean }) {
+  const generateUrl = useMutation(api.npcs.generatePortraitUploadUrl);
+  const setPortrait = useMutation(api.npcs.setPortrait);
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const mapServer = process.env.NEXT_PUBLIC_MAP_SERVER ?? "";
+  const src = portraitSrc(npc.portraitUrl, npc.portraitPath, mapServer);
+
+  async function upload(file: File) {
+    if (file.size > MAX_PORTRAIT_BYTES) {
+      setError("That image is over 8MB — shrink it first.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const url = await generateUrl({ npcId: npc._id });
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": file.type || "image/png" },
+        body: file,
+      });
+      if (!res.ok) throw new Error("The upload failed.");
+      const { storageId } = (await res.json()) as { storageId: string };
+      await setPortrait({
+        npcId: npc._id,
+        storageId: storageId as Parameters<typeof setPortrait>[0]["storageId"],
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "The upload failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="portrait-field">
+      <div className="detail-label">Picture</div>
+
+      {src ? (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img className="portrait-preview" src={src} alt={npc.name} />
+      ) : (
+        <div className="portrait-empty">No picture yet</div>
+      )}
+
+      {editable && (
+        <>
+          <div className="portrait-actions">
+            <button
+              type="button"
+              className="npc-btn"
+              disabled={busy}
+              onClick={() => input.current?.click()}
+            >
+              {busy ? "Uploading…" : src ? "Replace" : "Upload"}
+            </button>
+            {npc.portraitUrl && (
+              <button
+                type="button"
+                className="text-button"
+                disabled={busy}
+                onClick={() =>
+                  void setPortrait({ npcId: npc._id, storageId: null })
+                }
+              >
+                Remove
+              </button>
+            )}
+          </div>
+          <input
+            ref={input}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) void upload(file);
+            }}
+          />
+        </>
+      )}
+
+      {error && <p className="form-error">{error}</p>}
+
+      {!npc.portraitUrl && npc.portraitPath && (
+        <p className="settings-note">Imported path: {npc.portraitPath}</p>
       )}
     </div>
   );

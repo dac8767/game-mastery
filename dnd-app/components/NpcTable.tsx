@@ -18,6 +18,7 @@ import {
   FACET_KEYS,
   MATURITY_ORDER,
   QUICK_FILTER_KEYS,
+  portraitSrc,
 } from "@/components/npcColumns";
 
 /**
@@ -941,15 +942,12 @@ function Row({
         };
 
         if (def.kind === "picture") {
+          const src = portraitSrc(npc.portraitUrl, npc.portraitPath, mapServer);
           return (
             <td key={state.key} className="pic-cell" onClick={onOpen}>
-              {npc.portraitPath && mapServer ? (
+              {src ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  className="row-portrait"
-                  src={`${mapServer}/${npc.portraitPath}`}
-                  alt=""
-                />
+                <img className="row-portrait" src={src} alt="" />
               ) : (
                 <span className="row-portrait empty" />
               )}
@@ -1096,9 +1094,12 @@ function Tile({
       onClick={() => onOpen(npc._id)}
     >
       <div className="tile-portrait">
-        {npc.portraitPath && mapServer ? (
+        {portraitSrc(npc.portraitUrl, npc.portraitPath, mapServer) ? (
           /* eslint-disable-next-line @next/next/no-img-element */
-          <img src={`${mapServer}/${npc.portraitPath}`} alt="" />
+          <img
+            src={portraitSrc(npc.portraitUrl, npc.portraitPath, mapServer)!}
+            alt=""
+          />
         ) : (
           <span className="tile-portrait-empty">{npc.name.charAt(0)}</span>
         )}

@@ -129,9 +129,20 @@ export default defineSchema({
     voice: v.optional(v.string()),
     playerNotes: v.optional(v.string()),
 
-    // Portrait on the map server, e.g. "web/portraits/npcs/xyz.webp".
-    // The Airtable attachment URLs are signed and expire, so only the
-    // filename survives the migration — see scripts/import-npcs.mjs.
+    /**
+     * Portrait, held two ways.
+     *
+     * `portraitId` is an uploaded image in Convex file storage and wins
+     * when set. `portraitPath` is the older map-server route, e.g.
+     * "web/portraits/npcs/xyz.webp" — the Airtable export's attachment
+     * URLs are signed and expire, so only a derived filename survived
+     * the migration (see scripts/import-npcs.mjs).
+     *
+     * Both are kept rather than migrating one into the other: the
+     * imported paths still name which portrait an NPC is *supposed* to
+     * have, which is worth keeping until a real image replaces it.
+     */
+    portraitId: v.optional(v.id("_storage")),
     portraitPath: v.optional(v.string()),
 
     // DM-only — never sent to players (see npcs.listForCampaign)
