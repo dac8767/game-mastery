@@ -2926,3 +2926,59 @@ body.col-resizing {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- DM Screen ---------- */
+
+.dmscreen {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  min-height: 0;
+}
+
+.dmscreen-panel {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.9rem 1.1rem;
+}
+
+.dmscreen-panel h2 {
+  margin: 0 0 0.6rem;
+  font-size: 0.95rem;
+  color: var(--accent);
+  font-variant: small-caps;
+  letter-spacing: 0.06em;
+}
+
+.dmscreen-ref {
+  margin: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.dmscreen-ref > div {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
+.dmscreen-ref dt {
+  font-weight: 600;
+  font-size: 0.86rem;
+}
+
+.dmscreen-ref dd {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 700px) {
+  .dmscreen-ref > div {
+    grid-template-columns: 1fr;
+    gap: 0.1rem;
+  }
+}

@@ -24,6 +24,7 @@ import {
   stringProps,
   constArrayStrings,
   stripComments,
+  sourceFiles,
 } from "./lib.mjs";
 
 /** Convex adds these to every document. */
@@ -274,6 +275,20 @@ export const integrity = {
             "normalizeRibbon would silently drop it from every new toolbar"
         );
       }
+    }
+
+    // The ribbon belongs to the DM Screen and nowhere else — that is
+    // what the feedback asked for, and it is an ABSENCE, which is the
+    // one shape you cannot check by reading the files you thought of.
+    const mounts = sourceFiles("components", "app")
+      .filter(([rel]) => !rel.endsWith("/RibbonBar.tsx"))
+      .filter(([, src]) => /<RibbonBar\b/.test(stripComments(src)))
+      .map(([rel]) => rel);
+    if (mounts.length !== 1 || !mounts[0].endsWith("/DmScreen.tsx")) {
+      problems.push(
+        `RibbonBar is rendered in ${mounts.length ? mounts.join(", ") : "nowhere"} — ` +
+          "it belongs on the DM Screen and nowhere else"
+      );
     }
 
     // WebKit refuses to START a drag without data on the transfer, so

@@ -24,6 +24,7 @@ import {
   stripTall,
 } from "@/components/ribbonTokens";
 import { RibbonCustomize } from "@/components/RibbonCustomize";
+import { FeedbackForm } from "@/components/FeedbackForm";
 
 /**
  * The ribbon: a Word-style toolbar organised into sections, where every
@@ -36,6 +37,11 @@ import { RibbonCustomize } from "@/components/RibbonCustomize";
  *                     label underneath) filling the section's height
  *   - a row break   → two rows of small icon buttons
  *
+ * It lives on the DM Screen and nowhere else. That was a deliberate
+ * call: a toolbar you arranged yourself is worth its height on the
+ * screen built around it, and is just a band across the top of every
+ * other one.
+ *
  * Deliberately NOT built: priority-based collapse, where items fold into
  * a ⋯ menu as the window narrows. A narrow window scrolls the ribbon
  * horizontally instead — sections vanishing as you resize reads as the
@@ -43,19 +49,14 @@ import { RibbonCustomize } from "@/components/RibbonCustomize";
  * would replace.
  */
 
-export function RibbonBar({
-  campaignId,
-  onFeedback,
-}: {
-  campaignId: Id<"campaigns">;
-  onFeedback: () => void;
-}) {
+export function RibbonBar({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const settings = useQuery(api.settings.mySettings);
   const campaigns = useQuery(api.campaigns.myCampaigns);
   const save = useMutation(api.settings.saveMySettings);
   const { signOut } = useAuthActions();
   const router = useRouter();
   const [customizing, setCustomizing] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   const campaign = campaigns?.find((c) => c._id === campaignId) ?? null;
   const base = `/campaign/${campaignId}`;
@@ -83,11 +84,11 @@ export function RibbonBar({
   // because the link between the two is a string.
   const run = useCallback(
     (commandId: string) => {
-      if (commandId === "feedback") onFeedback();
+      if (commandId === "feedback") setFeedbackOpen(true);
       if (commandId === "campaigns") router.push("/");
       if (commandId === "signOut") void signOut();
     },
-    [onFeedback, router, signOut]
+    [router, signOut]
   );
 
   const setTheme = useCallback(
@@ -307,6 +308,10 @@ export function RibbonBar({
           setTokens={setTokens}
           onClose={() => setCustomizing(false)}
         />
+      )}
+
+      {feedbackOpen && (
+        <FeedbackForm onClose={() => setFeedbackOpen(false)} />
       )}
     </div>
   );

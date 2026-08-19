@@ -8,7 +8,6 @@ import { ReactNode, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import { ThemeSync } from "@/components/ThemeSync";
 import { FeedbackForm } from "@/components/FeedbackForm";
-import { RibbonBar } from "@/components/RibbonBar";
 import { Id } from "@/convex/_generated/dataModel";
 import {
   ASSET_ITEMS,
@@ -19,8 +18,12 @@ import {
 } from "@/components/navItems";
 
 /**
- * The application frame: navigation on the left, the ribbon and the
- * selected thing on the right.
+ * The application frame: navigation on the left, the selected thing on
+ * the right.
+ *
+ * The customizable ribbon deliberately does NOT live here. It belongs to
+ * the DM Screen and nowhere else, so every other screen keeps its full
+ * height for the thing it is actually showing.
  *
  * The nav list itself lives in components/navItems.ts, because the
  * ribbon's tool buttons address the same destinations by id and two
@@ -35,14 +38,16 @@ function NavList({
   items,
   base,
   pathname,
+  isDm,
 }: {
   items: NavItem[];
   base: string;
   pathname: string;
+  isDm: boolean;
 }) {
   return (
     <ul className="nav-list">
-      {items.map((item) => {
+      {items.filter((item) => isDm || !item.dmOnly).map((item) => {
         if (item.slug === undefined) {
           return (
             <li key={item.id}>
@@ -87,6 +92,7 @@ export function AppShell({
 
   const campaign = campaigns?.find((c) => c._id === campaignId) ?? null;
   const base = `/campaign/${campaignId}`;
+  const isDm = campaign?.isDm ?? false;
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   return (
@@ -108,17 +114,32 @@ export function AppShell({
             {campaign?.isDm && <span className="badge">DM</span>}
             {campaign?.viaAdmin && <span className="badge admin">Admin</span>}
           </Link>
-          <NavList items={CAMPAIGN_ITEMS} base={base} pathname={pathname} />
+          <NavList
+            items={CAMPAIGN_ITEMS}
+            base={base}
+            pathname={pathname}
+            isDm={isDm}
+          />
         </div>
 
         <div className="nav-group">
           <div className="nav-group-title">Tools</div>
-          <NavList items={TOOL_ITEMS} base={base} pathname={pathname} />
+          <NavList
+            items={TOOL_ITEMS}
+            base={base}
+            pathname={pathname}
+            isDm={isDm}
+          />
         </div>
 
         <div className="nav-group">
           <div className="nav-group-title">Asset Library</div>
-          <NavList items={ASSET_ITEMS} base={base} pathname={pathname} />
+          <NavList
+            items={ASSET_ITEMS}
+            base={base}
+            pathname={pathname}
+            isDm={isDm}
+          />
         </div>
 
         <div className="sidebar-footer">
@@ -155,10 +176,6 @@ export function AppShell({
       </nav>
 
       <main className="workspace">
-        <RibbonBar
-          campaignId={campaignId}
-          onFeedback={() => setFeedbackOpen(true)}
-        />
         <div className="crumbs">
           <Link href={base}>{campaign?.name ?? "Campaign"}</Link>
           <span className="sep">›</span>

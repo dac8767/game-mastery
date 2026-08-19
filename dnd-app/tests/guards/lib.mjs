@@ -7,7 +7,7 @@
  * it finds nothing, and the runner treats that as a failure.
  */
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 
@@ -105,6 +105,29 @@ export function constArrayStrings(source, name, label) {
   const out = [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
   if (out.length === 0) {
     throw new Error(`array ${name} in ${label} is empty`);
+  }
+  return out;
+}
+
+/**
+ * Every .tsx/.ts file under the given directories, as [relPath, source].
+ *
+ * For the checks that are about ABSENCE — "this must be rendered in
+ * exactly one place" — which cannot be written by reading only the files
+ * you already thought of.
+ */
+export function sourceFiles(...dirs) {
+  const out = [];
+  const walk = (rel) => {
+    for (const entry of readdirSync(appPath(rel), { withFileTypes: true })) {
+      const child = `${rel}/${entry.name}`;
+      if (entry.isDirectory()) walk(child);
+      else if (/\.tsx?$/.test(entry.name)) out.push([child, read(child)]);
+    }
+  };
+  for (const dir of dirs) walk(dir);
+  if (out.length === 0) {
+    throw new Error(`no source files found under ${dirs.join(", ")}`);
   }
   return out;
 }

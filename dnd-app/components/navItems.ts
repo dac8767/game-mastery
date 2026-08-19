@@ -19,6 +19,14 @@ export type NavItem = {
   icon: string;
   /** Path segment under /campaign/[id]. "" is the campaign itself. */
   slug?: string;
+  /**
+   * Only shown to the campaign's DM.
+   *
+   * This hides a link; it does not protect anything. Nothing behind a
+   * dmOnly screen may rely on it — authority in this app is structural
+   * (campaign.dmId === userId) and is enforced server-side, per screen.
+   */
+  dmOnly?: boolean;
 };
 
 /** The campaign's own page — the live table. */
@@ -43,6 +51,13 @@ export const TOOL_ITEMS: NavItem[] = [
   { id: "dice", label: "Dice Roller", icon: "⚄" },
   { id: "combat", label: "Combat Tracker", icon: "⚔" },
   { id: "notebook", label: "Notebook", icon: "✎", slug: "notebook" },
+  {
+    id: "dm-screen",
+    label: "DM Screen",
+    icon: "▤",
+    slug: "dm-screen",
+    dmOnly: true,
+  },
   { id: "scheduler", label: "Scheduler", icon: "⏱" },
 ];
 
