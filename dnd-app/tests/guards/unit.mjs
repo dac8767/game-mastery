@@ -529,22 +529,29 @@ export const unit = {
       const day = 1 + Math.floor(rnd() * s.daysPerMonth);
       const date = { year, month, day };
 
-      if (!eq(cal.fromDayIndex(s, cal.dayIndex(s, date)), date)) {
-        indexRoundTrip = false;
-      }
-      const wd = cal.weekdayOf(s, date);
-      if (!(wd >= 0 && wd < s.daysPerWeek)) weekdayInRange = false;
+      // Caught per iteration: a bad weekday makes monthGrid ask for an
+      // array of negative length, and an exception here would abort the
+      // guard rather than report which property broke.
+      try {
+        if (!eq(cal.fromDayIndex(s, cal.dayIndex(s, date)), date)) {
+          indexRoundTrip = false;
+        }
+        const wd = cal.weekdayOf(s, date);
+        if (!(wd >= 0 && wd < s.daysPerWeek)) weekdayInRange = false;
 
-      const grid = cal.monthGrid(s, year, month);
-      const flat = grid.flat();
-      const days = flat.filter((c) => c !== null);
-      if (
-        !grid.every((w) => w.length === s.daysPerWeek) ||
-        days.length !== s.daysPerMonth ||
-        days[0] !== 1 ||
-        days[days.length - 1] !== s.daysPerMonth ||
-        flat.indexOf(1) !== cal.weekdayOf(s, { year, month, day: 1 })
-      ) {
+        const grid = cal.monthGrid(s, year, month);
+        const flat = grid.flat();
+        const days = flat.filter((c) => c !== null);
+        if (
+          !grid.every((w) => w.length === s.daysPerWeek) ||
+          days.length !== s.daysPerMonth ||
+          days[0] !== 1 ||
+          days[days.length - 1] !== s.daysPerMonth ||
+          flat.indexOf(1) !== cal.weekdayOf(s, { year, month, day: 1 })
+        ) {
+          gridSound = false;
+        }
+      } catch {
         gridSound = false;
       }
     }
