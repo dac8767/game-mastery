@@ -198,6 +198,30 @@ export default defineSchema({
   }).index("by_user", ["userId"]),
 
   /**
+   * The campaign's calendar. One document per campaign, DM-owned.
+   *
+   * Every month is the same length, because `daysPerMonth` is one
+   * number — months of differing lengths are a different data model and
+   * nothing asked for one. The name lists are resized to their counts
+   * on every save (see components/calendarModel.ts): a five-day week
+   * with seven day names is a grid whose header doesn't line up with
+   * its columns.
+   */
+  calendars: defineTable({
+    campaignId: v.id("campaigns"),
+    daysPerWeek: v.number(),
+    dayNames: v.array(v.string()),
+    daysPerMonth: v.number(),
+    monthsPerYear: v.number(),
+    monthNames: v.array(v.string()),
+    currentYear: v.number(),
+    /** 0-based, so it indexes monthNames directly. */
+    currentMonth: v.number(),
+    /** 1-based, the way a person says a date. */
+    currentDay: v.number(),
+  }).index("by_campaign", ["campaignId"]),
+
+  /**
    * Per-person table layout. One document per (user, campaign, view).
    *
    * Everyone shapes a table to their own taste — which columns show, in

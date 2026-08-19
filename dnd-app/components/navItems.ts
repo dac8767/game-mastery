@@ -43,7 +43,7 @@ export const CAMPAIGN_ITEMS: NavItem[] = [
   { id: "npcs", label: "NPCs", icon: "☾", slug: "npcs" },
   { id: "shops", label: "Shops", icon: "⌂" },
   { id: "locations", label: "Locations", icon: "⌖" },
-  { id: "calendar", label: "Calendar", icon: "◷" },
+  { id: "calendar", label: "Calendar", icon: "◷", slug: "calendar" },
 ];
 
 export const TOOL_ITEMS: NavItem[] = [

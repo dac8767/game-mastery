@@ -456,6 +456,150 @@ export const unit = {
     check("isStructural: a title", rib.isStructural("st:Tools"));
     check("isStructural: a control is not", !rib.isStructural("b:undo"));
 
+    // ---- the campaign calendar -------------------------------------
+    // A custom calendar is date arithmetic with none of the constants
+    // you know by heart, so every off-by-one here is invisible until
+    // someone notices the festival landed on the wrong weekday.
+    const calOut = compile("components/calendarModel.ts");
+    const cal = await import(
+      pathToFileURL(join(calOut, "calendarModel.js")).href
+    );
+
+    const D = cal.DEFAULT_CALENDAR;
+
+    // reconcile: the counts are the authority, names follow.
+    check(
+      "reconcile is idempotent",
+      eq(cal.reconcile(cal.reconcile(D)), cal.reconcile(D))
+    );
+    const widened = cal.reconcile({ ...D, daysPerWeek: 9 });
+    check(
+      "widening the week pads the day names",
+      widened.dayNames.length === 9 && widened.dayNames[8] === "Day 9"
+    );
+    check(
+      "widening keeps the names already typed",
+      widened.dayNames[0] === "Sunday"
+    );
+    const narrowed = cal.reconcile({ ...D, daysPerWeek: 3 });
+    check(
+      "narrowing the week truncates the day names",
+      narrowed.dayNames.length === 3 && narrowed.dayNames[2] === "Tuesday"
+    );
+    check(
+      "a blank name is replaced rather than left empty",
+      cal.reconcile({ ...D, dayNames: ["", "Monday", "  ", "W", "T", "F", "S"] })
+        .dayNames[0] === "Day 1"
+    );
+    check(
+      "shrinking the month pulls the current date back inside it",
+      cal.reconcile({ ...D, currentDay: 30, daysPerMonth: 10 }).currentDay === 10
+    );
+    check(
+      "shrinking the year pulls the current month back inside it",
+      cal.reconcile({ ...D, currentMonth: 11, monthsPerYear: 4 })
+        .currentMonth === 3
+    );
+    check(
+      "counts are clamped, not trusted",
+      cal.reconcile({ ...D, daysPerWeek: 9999 }).daysPerWeek ===
+        cal.LIMITS.daysPerWeek.max
+    );
+    check(
+      "a non-finite count falls back rather than producing NaN",
+      cal.reconcile({ ...D, daysPerMonth: Number.NaN }).daysPerMonth ===
+        cal.LIMITS.daysPerMonth.min
+    );
+
+    // dayIndex/fromDayIndex must invert, including before year 1 — a
+    // campaign's history is written in negative years.
+    let indexRoundTrip = true;
+    let weekdayInRange = true;
+    let gridSound = true;
+    seed = 918273;
+    for (let i = 0; i < 300; i++) {
+      const s = cal.reconcile({
+        ...D,
+        daysPerWeek: 1 + Math.floor(rnd() * 12),
+        daysPerMonth: 1 + Math.floor(rnd() * 40),
+        monthsPerYear: 1 + Math.floor(rnd() * 18),
+      });
+      const year = Math.floor(rnd() * 4000) - 2000;
+      const month = Math.floor(rnd() * s.monthsPerYear);
+      const day = 1 + Math.floor(rnd() * s.daysPerMonth);
+      const date = { year, month, day };
+
+      if (!eq(cal.fromDayIndex(s, cal.dayIndex(s, date)), date)) {
+        indexRoundTrip = false;
+      }
+      const wd = cal.weekdayOf(s, date);
+      if (!(wd >= 0 && wd < s.daysPerWeek)) weekdayInRange = false;
+
+      const grid = cal.monthGrid(s, year, month);
+      const flat = grid.flat();
+      const days = flat.filter((c) => c !== null);
+      if (
+        !grid.every((w) => w.length === s.daysPerWeek) ||
+        days.length !== s.daysPerMonth ||
+        days[0] !== 1 ||
+        days[days.length - 1] !== s.daysPerMonth ||
+        flat.indexOf(1) !== cal.weekdayOf(s, { year, month, day: 1 })
+      ) {
+        gridSound = false;
+      }
+    }
+    check("dayIndex and fromDayIndex invert (300 fuzzed calendars)", indexRoundTrip);
+    check("weekdayOf never falls outside the week", weekdayInRange);
+    check("monthGrid holds every day once, in full weeks, correctly offset", gridSound);
+
+    check(
+      "day 1 of year 1 is index 0",
+      cal.dayIndex(D, { year: 1, month: 0, day: 1 }) === 0
+    );
+    check(
+      "addDays crosses a month boundary",
+      eq(cal.addDays(D, { year: 1, month: 0, day: 30 }, 1), {
+        year: 1,
+        month: 1,
+        day: 1,
+      })
+    );
+    check(
+      "addDays crosses a year boundary backwards",
+      eq(cal.addDays(D, { year: 2, month: 0, day: 1 }, -1), {
+        year: 1,
+        month: 11,
+        day: 30,
+      })
+    );
+    check(
+      "addMonths rolls the year forward",
+      eq(cal.addMonths(D, { year: 1, month: 11, day: 5 }, 1), {
+        year: 2,
+        month: 0,
+        day: 5,
+      })
+    );
+    check(
+      "addMonths rolls the year back",
+      eq(cal.addMonths(D, { year: 2, month: 0, day: 5 }, -1), {
+        year: 1,
+        month: 11,
+        day: 5,
+      })
+    );
+    check(
+      "addMonths keeps the day inside a shorter month",
+      cal.addMonths({ ...D, daysPerMonth: 10 }, { year: 1, month: 0, day: 30 }, 1)
+        .day === 10
+    );
+    check(
+      "formatDate names the month and the weekday",
+      cal.formatDate(D, { year: 1491, month: 0, day: 1 }).startsWith(
+        "1 Hammer, 1491 ("
+      )
+    );
+
     return problems;
   },
 };

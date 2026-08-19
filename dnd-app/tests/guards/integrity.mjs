@@ -387,6 +387,54 @@ export const integrity = {
       }
     }
 
+    // ---- the calendar ----------------------------------------------
+    // Three places describe the same settings: the schema, the mutation
+    // that writes them, and the shared model that reconciles them. A
+    // setting added to one and not the others is silently dropped on
+    // save — the form edits it, the mutation never sends it.
+    const calSrc = read("convex", "calendar.ts");
+
+    if (!/from "\.\.\/components\/calendarModel"/.test(calSrc)) {
+      problems.push(
+        "convex/calendar.ts no longer imports the shared calendar model — " +
+          "a second copy of the reconciliation rules is how a five-day " +
+          "week ends up with seven day names"
+      );
+    }
+
+    const calFields = topLevelKeys(
+      blockAfter(schemaSrc, /calendars:\s*defineTable\(/, "calendars table"),
+      "calendars schema"
+    ).filter((f) => f !== "campaignId");
+
+    // Sliced first: blockAfter takes the next `{` after its match, and
+    // matching on the whole declaration would hand it mutation's own
+    // object rather than the args literal inside it.
+    const saveArgs = topLevelKeys(
+      blockAfter(
+        calSrc.slice(calSrc.indexOf("export const saveCalendar")),
+        /args:/,
+        "saveCalendar args"
+      ),
+      "saveCalendar args"
+    ).filter((f) => f !== "campaignId");
+
+    for (const f of calFields) {
+      if (!saveArgs.includes(f)) {
+        problems.push(
+          `the calendars table stores \`${f}\` but saveCalendar never takes it — ` +
+            "editing it would silently do nothing"
+        );
+      }
+    }
+    for (const f of saveArgs) {
+      if (!calFields.includes(f)) {
+        problems.push(
+          `saveCalendar takes \`${f}\`, which the calendars table has no column for`
+        );
+      }
+    }
+
     // ---- the notebook's format toolbar -----------------------------
     // Two failures here are invisible to TypeScript and both present as
     // "the toolbar does nothing", which reads as a broken browser rather
