@@ -42,7 +42,7 @@ export const CAMPAIGN_ITEMS: NavItem[] = [
   { id: "sessions", label: "Sessions", icon: "✦" },
   { id: "npcs", label: "NPCs", icon: "☾", slug: "npcs" },
   { id: "shops", label: "Shops", icon: "⌂" },
-  { id: "locations", label: "Locations", icon: "⌖" },
+  { id: "locations", label: "Locations", icon: "⌖", slug: "locations" },
   { id: "calendar", label: "Calendar", icon: "◷", slug: "calendar" },
 ];
 

@@ -198,6 +198,55 @@ export default defineSchema({
   }).index("by_user", ["userId"]),
 
   /**
+   * Locations — a tree of places, each of which may carry a map.
+   *
+   * A region map holds pins for its towns; double-clicking a town whose
+   * location has a map of its own descends into it, and the pattern
+   * repeats down to a battle map. So a location is BOTH a pin on its
+   * parent's map (x, y) and, if it has one, a map of its own.
+   *
+   * `x`/`y` are normalized 0..1 rather than pixels, so a pin stays where
+   * the DM put it whatever size the image is displayed at, and survives
+   * the map being replaced with a larger scan.
+   *
+   * `dmNotes` and `hidden` follow the same rule as NPCs and combatants:
+   * stripped server-side in listForCampaign, never sent to a player.
+   * Hiding a location does NOT hide its children — see
+   * components/locationTree.ts, which surfaces a child whose parent is
+   * missing at the root rather than losing it.
+   */
+  locations: defineTable({
+    campaignId: v.id("campaigns"),
+    /** The location this one sits inside. Absent = a top-level map. */
+    parentId: v.optional(v.id("locations")),
+    name: v.string(),
+    description: v.optional(v.string()),
+    /** Sort order among siblings. */
+    order: v.number(),
+
+    /** Where this sits on its PARENT's map, normalized 0..1. */
+    x: v.optional(v.number()),
+    y: v.optional(v.number()),
+
+    /**
+     * This location's own map, held two ways for the same reason NPC
+     * portraits are: an uploaded file wins, and the map-server path is
+     * the older route that still names which image it should have.
+     */
+    mapId: v.optional(v.id("_storage")),
+    mapPath: v.optional(v.string()),
+
+    /** Uploaded pictures of the place itself, not of its map. */
+    pictureIds: v.optional(v.array(v.id("_storage"))),
+
+    // DM-only — never sent to players (see locations.listForCampaign)
+    hidden: v.boolean(),
+    dmNotes: v.optional(v.string()),
+  })
+    .index("by_campaign", ["campaignId"])
+    .index("by_parent", ["parentId"]),
+
+  /**
    * The campaign's calendar. One document per campaign, DM-owned.
    *
    * Every month is the same length, because `daysPerMonth` is one

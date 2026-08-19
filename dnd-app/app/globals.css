@@ -3129,3 +3129,257 @@ button.cal-day:hover {
   justify-content: flex-end;
   gap: 0.5rem;
 }
+
+/* ---------- Locations ---------- */
+
+.loc {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.loc-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.loc-bar .npc-btn {
+  font-size: 0.8rem;
+  padding: 0.35rem 0.6rem;
+}
+
+.loc-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.loc-crumb .sep {
+  color: var(--text-dim);
+}
+
+.loc-bar-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.loc-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20rem;
+  gap: 0.75rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.loc-stage {
+  min-width: 0;
+  min-height: 24rem;
+  overflow: auto;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.5rem;
+}
+
+/* The pin layer is positioned against the IMAGE, not the scroll box, so
+   a pin at 50% sits at the middle of the map rather than the middle of
+   whatever happens to be visible. */
+.loc-map {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+}
+
+.loc-map.placing {
+  cursor: crosshair;
+}
+
+.loc-map img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+.loc-pin {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.4rem 0.15rem 0.25rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(20, 18, 16, 0.82);
+  color: var(--text);
+  font-size: 0.72rem;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.loc-pin:hover,
+.loc-pin.selected {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.loc-pin-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: var(--text-dim);
+  flex: none;
+}
+
+/* A pin you can descend into is the one worth spotting at a glance. */
+.loc-pin.has-map .loc-pin-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.loc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.loc-list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font-size: 0.88rem;
+  text-align: left;
+}
+
+.loc-list-item:hover {
+  background: var(--bg-inset);
+}
+
+.loc-list-item.selected {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.loc-list-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.loc-tag {
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.loc-tag.hidden-tag {
+  background: rgba(217, 95, 59, 0.16);
+  color: var(--bloodied);
+}
+
+.loc-panel {
+  min-width: 0;
+  overflow-y: auto;
+  padding: 0.75rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.loc-hint {
+  font-size: 0.85rem;
+}
+
+.loc-detail {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.loc-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.loc-detail-head h2 {
+  margin: 0;
+  font-size: 1rem;
+  flex: 1;
+}
+
+.loc-name {
+  flex: 1;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.loc-pictures {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5rem, 1fr));
+  gap: 0.35rem;
+}
+
+.loc-pictures img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.loc-map-thumb {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.loc-nudge {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.loc-nudge button {
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-inset);
+  color: var(--text-dim);
+  line-height: 1;
+}
+
+.loc-nudge button:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.loc-delete {
+  justify-self: start;
+  color: var(--bloodied);
+}
+
+@media (max-width: 900px) {
+  .loc-body {
+    grid-template-columns: 1fr;
+  }
+}

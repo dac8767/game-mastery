@@ -102,6 +102,66 @@ export const dmVisibility = {
       }
     }
 
+    // ---- convex/locations.ts ---------------------------------------
+    // A hidden location is a place the players have not found. Leaking
+    // one is worse than leaking a hidden NPC: the map itself gives away
+    // that there is somewhere to go.
+    const locs = read("convex", "locations.ts");
+
+    requirePattern(
+      problems,
+      locs,
+      /requireMember\(\s*ctx,\s*args\.campaignId\s*\)/,
+      "locations.listForCampaign must gate on requireMember(campaignId)"
+    );
+    requirePattern(
+      problems,
+      locs,
+      /\.filter\(\(l\) => isDm \|\| !l\.hidden\)/,
+      "locations.listForCampaign must drop hidden locations for players"
+    );
+    requirePattern(
+      problems,
+      locs,
+      /dmNotes:\s*isDm\s*\?/,
+      "locations.listForCampaign must gate dmNotes behind isDm"
+    );
+    requirePattern(
+      problems,
+      locs,
+      /hidden:\s*isDm\s*\?/,
+      "locations.listForCampaign must gate the hidden flag behind isDm"
+    );
+    if (/\.map\((?:async )?\(l\)\s*=>\s*\(\{\s*\n?\s*\.\.\.l\b/.test(locs)) {
+      problems.push(
+        "locations.listForCampaign spreads the raw document (...l) — " +
+          "dmNotes and the hidden flag would ride along"
+      );
+    }
+
+    // Every write is the DM's. A player must not be able to move a pin,
+    // rename a place, or upload a map over one.
+    for (const fn of [
+      "createLocation",
+      "updateLocation",
+      "deleteLocation",
+      "setPin",
+      "generateUploadUrl",
+      "setMap",
+      "addPicture",
+      "removePicture",
+    ]) {
+      const body = locs.slice(
+        locs.indexOf(`export const ${fn} = mutation`),
+        locs.indexOf("export const", locs.indexOf(`export const ${fn} = mutation`) + 10)
+      );
+      if (!body) {
+        problems.push(`convex/locations.ts no longer exports ${fn}`);
+      } else if (!/await requireDm\(/.test(body)) {
+        problems.push(`locations.${fn} is not gated on requireDm`);
+      }
+    }
+
     // ---- per-person view state is never shared ---------------------
     const views = read("convex", "views.ts");
     if (/args\.userId|userId:\s*v\.id\("users"\)/.test(views)) {

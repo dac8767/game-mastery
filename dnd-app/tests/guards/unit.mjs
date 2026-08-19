@@ -607,6 +607,124 @@ export const unit = {
       )
     );
 
+    // ---- the locations tree ----------------------------------------
+    // Everything here is about not losing a place: a player's list has
+    // the hidden locations filtered out of it, so their children
+    // routinely have no parent to sit under and must not vanish with it.
+    const locOut = compile("components/locationTree.ts");
+    const loc = await import(
+      pathToFileURL(join(locOut, "locationTree.js")).href
+    );
+
+    const place = (id, parentId, order = 0, extra = {}) => ({
+      _id: id,
+      parentId,
+      name: id,
+      order,
+      ...extra,
+    });
+
+    const atlas = [
+      place("region", null, 0),
+      place("city", "region", 1),
+      place("town", "region", 0),
+      place("district", "city", 0),
+    ];
+
+    check(
+      "childrenOf returns a place's children in order",
+      loc.childrenOf(atlas, "region").map((r) => r._id).join() === "town,city"
+    );
+    check(
+      "childrenOf(null) returns the roots",
+      loc.childrenOf(atlas, null).map((r) => r._id).join() === "region"
+    );
+    check(
+      "a child whose parent was filtered out surfaces at the root",
+      loc
+        .childrenOf(
+          [place("district", "city-the-player-cannot-see", 0)],
+          null
+        )
+        .map((r) => r._id)
+        .join() === "district"
+    );
+
+    check(
+      "ancestorsOf is the breadcrumb, root first",
+      loc.ancestorsOf(atlas, "district").map((r) => r._id).join() ===
+        "region,city,district"
+    );
+    check(
+      "ancestorsOf terminates on a cycle",
+      loc.ancestorsOf([place("a", "b"), place("b", "a")], "a").length === 2
+    );
+
+    check(
+      "wouldCycle: under yourself",
+      loc.wouldCycle(atlas, "region", "region")
+    );
+    check(
+      "wouldCycle: under your own descendant",
+      loc.wouldCycle(atlas, "region", "district")
+    );
+    check(
+      "wouldCycle: a legitimate move is allowed",
+      !loc.wouldCycle(atlas, "town", "city")
+    );
+    check(
+      "wouldCycle: moving to the root is always allowed",
+      !loc.wouldCycle(atlas, "district", null)
+    );
+
+    check(
+      "deleting promotes children to the deleted place's parent",
+      eq(loc.reparentOnDelete(atlas, "city"), [
+        { _id: "district", parentId: "region" },
+      ])
+    );
+    check(
+      "deleting a root promotes its children to the root",
+      eq(loc.reparentOnDelete(atlas, "region"), [
+        { _id: "town", parentId: null },
+        { _id: "city", parentId: null },
+      ])
+    );
+
+    check(
+      "flatten reads as a tree, depth-first",
+      loc
+        .flatten(atlas)
+        .map((n) => `${" ".repeat(n.depth)}${n.row._id}`)
+        .join("|") === "region| town| city|  district"
+    );
+    check(
+      "flatten terminates on a cycle",
+      loc.flatten([place("a", "b"), place("b", "a")]).length <= 2
+    );
+
+    check("hasMap: an uploaded map", loc.hasMap({ mapUrl: "https://x/y.png" }));
+    check("hasMap: an imported path", loc.hasMap({ mapPath: "web/maps/x.webp" }));
+    check("hasMap: neither", !loc.hasMap({ mapUrl: null, mapPath: null }));
+
+    check(
+      "mapSrc prefers the uploaded file over the imported path",
+      loc.mapSrc("https://up/a.png", "web/b.webp", "https://maps") ===
+        "https://up/a.png"
+    );
+    check(
+      "mapSrc falls back to the map server",
+      loc.mapSrc(null, "web/b.webp", "https://maps") === "https://maps/web/b.webp"
+    );
+    check(
+      "mapSrc without a map server does not build a relative URL",
+      loc.mapSrc(null, "web/b.webp", "") === null
+    );
+
+    check("clampPin: below zero", loc.clampPin(-0.5) === 0);
+    check("clampPin: above one", loc.clampPin(1.5) === 1);
+    check("clampPin: NaN", loc.clampPin(Number.NaN) === 0);
+
     return problems;
   },
 };
