@@ -150,6 +150,7 @@ export const dmVisibility = {
       "setMap",
       "addPicture",
       "removePicture",
+      "importLocations",
     ]) {
       const body = locs.slice(
         locs.indexOf(`export const ${fn} = mutation`),

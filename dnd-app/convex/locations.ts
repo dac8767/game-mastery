@@ -257,6 +257,106 @@ export const removePicture = mutation({
   },
 });
 
+/**
+ * Bulk-create locations from a Foundry export.
+ *
+ * The tree arrives FLAT, with each row naming its parent by an
+ * importer-chosen key rather than by id: the ids do not exist until
+ * this runs, so a nested payload would need a recursive validator and
+ * still could not reference itself. Keys are resolved here, in
+ * dependency order, so a child may appear before its parent in the
+ * array.
+ *
+ * One mutation rather than one per row, because the free tier's
+ * function calls are pooled across every project on the account. NPCs
+ * go the other way — `npx convex import` writes straight to the table
+ * and costs nothing at all — but that path cannot resolve a parent
+ * reference, which is the whole shape of this data.
+ */
+export const importLocations = mutation({
+  args: {
+    campaignId: v.id("campaigns"),
+    locations: v.array(
+      v.object({
+        /** Unique within this payload. Not stored. */
+        key: v.string(),
+        parentKey: v.optional(v.string()),
+        name: v.string(),
+        description: v.optional(v.string()),
+        mapPath: v.optional(v.string()),
+        x: v.optional(v.number()),
+        y: v.optional(v.number()),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    await requireDm(ctx, args.campaignId);
+
+    if (args.locations.length > MAX_LOCATIONS) {
+      throw new Error(
+        `That import has ${args.locations.length} locations; the limit is ${MAX_LOCATIONS}.`
+      );
+    }
+
+    const idByKey = new Map<string, Id<"locations">>();
+    let pending = args.locations.slice();
+    let created = 0;
+    let orphaned = 0;
+
+    // Repeat until a pass creates nothing. Whatever is left then has a
+    // parent that is missing or circular, and those are imported at the
+    // ROOT rather than dropped — the same rule the client's tree
+    // follows. Losing a place silently is the one outcome worth
+    // preventing; a misplaced one is visible and can be dragged.
+    while (pending.length > 0) {
+      const stuck: typeof pending = [];
+      let progressed = false;
+
+      for (const row of pending) {
+        const parentId = row.parentKey
+          ? idByKey.get(row.parentKey)
+          : undefined;
+        if (row.parentKey && parentId === undefined) {
+          stuck.push(row);
+          continue;
+        }
+
+        const siblings = await ctx.db
+          .query("locations")
+          .withIndex("by_parent", (q) => q.eq("parentId", parentId))
+          .collect();
+
+        const id = await ctx.db.insert("locations", {
+          campaignId: args.campaignId,
+          parentId,
+          name: row.name.trim().slice(0, 200) || "Unnamed",
+          description: row.description?.trim() || undefined,
+          mapPath: row.mapPath || undefined,
+          order: siblings.length,
+          x: row.x === undefined ? undefined : clamp01(row.x),
+          y: row.y === undefined ? undefined : clamp01(row.y),
+          hidden: false,
+        });
+        idByKey.set(row.key, id);
+        created++;
+        progressed = true;
+      }
+
+      if (!progressed) {
+        // Strip the unresolvable parent and let the next pass place
+        // them at the root.
+        orphaned = stuck.length;
+        pending = stuck.map((r) => ({ ...r, parentKey: undefined }));
+        if (orphaned === 0) break;
+        continue;
+      }
+      pending = stuck;
+    }
+
+    return { created, orphaned };
+  },
+});
+
 function clamp01(n: number): number {
   if (!Number.isFinite(n)) return 0;
   return Math.min(1, Math.max(0, n));

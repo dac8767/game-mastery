@@ -432,6 +432,88 @@ Download the images out of Airtable before those links die, rename them
 to match, and drop them on the map server; the drawer picks them up with
 no further changes.
 
+## Step 9c — Import from Foundry VTT
+
+If your content is already in Foundry — including anything MrPrimate's
+**ddb-importer** pulled in from D&D Beyond — this reads Foundry's export
+format directly. The pipeline is:
+
+```
+D&D Beyond --(ddb-importer)--> Foundry --(import-foundry.mjs)--> Game Mastery
+```
+
+This is **not** a port of ddb-importer, and could not be: that module's
+D&D Beyond half is an authenticated proxy service rather than a file, and
+its shipped code is a bundled `dist/main.mjs`. What it leaves behind in
+Foundry, though, is a documented JSON shape, and that is what this reads.
+
+### Getting the data out of Foundry
+
+- **One document:** right-click it → *Export Data* → a `.json` file.
+- **A folder or compendium:** right-click → *Export*. On Foundry v11+
+  compendium packs are LevelDB (binary) on disk, so export to JSON from
+  inside Foundry rather than copying the pack directory.
+- **A whole v10-or-earlier world:** the `.db` files under
+  `Data/worlds/<world>/data/` are JSON-per-line and can be read as-is.
+
+Point the script at a file or a directory of them:
+
+```bash
+# campaignId comes from `npx convex data campaigns`
+node scripts/import-foundry.mjs ~/foundry-export <campaignId> -o foundry-import
+```
+
+It prints what it found before anything is written, so an export that
+turned out to hold nothing you wanted is visible immediately.
+
+### Loading it
+
+NPCs go through the bulk path, same as the Airtable roster:
+
+```bash
+npx convex import --table npcs foundry-import/npcs.jsonl --append
+```
+
+Locations cannot: a pin has to reference the map it sits on, and those
+ids do not exist until the rows are created. So they go through one
+DM-gated mutation, which needs to run **as you**:
+
+```bash
+npx convex run locations:importLocations "$(cat foundry-import/locations.json)" \
+  --identity '{"subject":"YOUR_USER_ID|seed"}'
+```
+
+(`YOUR_USER_ID` is the same id used in Step 7 — `npx convex data users`.)
+
+### What maps to what
+
+| Foundry | Game Mastery |
+|---|---|
+| Actor, type `npc` | an NPC row |
+| Actor, type `character` | skipped — a PC belongs to its player |
+| Scene | a location, with the scene image as its map |
+| Scene note | a child location, pinned where the note was |
+| JournalEntry | the description of the location its note names |
+
+A scene's notes are already pins at coordinates on a map, which is
+exactly the shape the Locations tool wants. Foundry stores those
+coordinates as absolute pixels within the scene; they are divided by the
+scene's dimensions on the way in, because Game Mastery stores pins
+normalized 0–1 so they survive the map being re-scanned at a different
+size.
+
+**Images are not copied.** Foundry paths like
+`worlds/moonbrook/scenes/coast.webp` are written through as
+`mapPath` / `portraitPath` — put the files on the map server under those
+paths and they resolve, or ignore them and upload through the app.
+Foundry's own placeholder icons (`icons/svg/mystery-man.svg` and friends)
+are deliberately skipped, or every un-illustrated NPC would share one
+portrait that then 404s.
+
+Re-running `--append` **duplicates** NPC rows, and re-running the
+locations mutation creates a second copy of the tree. Both are additive
+by design; delete before re-importing rather than after.
+
 ## Step 10 — Deploy to a real URL
 
 **GitHub hosts the code; it does not run the app.** GitHub Pages serves

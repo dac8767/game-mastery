@@ -302,18 +302,31 @@ export const integrity = {
       );
     }
 
-    // ---- the importer writes fields the schema must accept ---------
-    const importerSrc = read("scripts", "import-npcs.mjs");
-    const written = topLevelKeys(
-      blockAfter(importerSrc, /const doc\s*=/, "the doc literal in import-npcs.mjs"),
-      "importer doc"
-    );
-    for (const f of written) {
-      if (!schemaFields.includes(f)) {
-        problems.push(
-          `import-npcs.mjs writes \`${f}\`, which the npcs schema does not accept — the import would fail validation`
-        );
+    // ---- the importers write fields the schema must accept ---------
+    // Two of them now — the Airtable CSV and the Foundry export — and
+    // both write field names that only the deployed schema validates,
+    // i.e. at import time, on real data.
+    const IMPORTERS = [
+      { file: "import-npcs.mjs", anchor: /const doc\s*=/ },
+      { file: "import-foundry.mjs", anchor: /const row\s*=/ },
+    ];
+
+    let written = [];
+    for (const { file, anchor } of IMPORTERS) {
+      const fields = topLevelKeys(
+        blockAfter(read("scripts", file), anchor, `the row literal in ${file}`),
+        `${file} row`
+      );
+      for (const f of fields) {
+        if (!schemaFields.includes(f)) {
+          problems.push(
+            `${file} writes \`${f}\`, which the npcs schema does not accept — the import would fail validation`
+          );
+        }
       }
+      // Only the bulk CSV importer is expected to write every required
+      // field; the Foundry one is checked against it below.
+      if (file === "import-npcs.mjs") written = fields;
     }
 
     // Required (non-optional) schema fields must always be written, or
