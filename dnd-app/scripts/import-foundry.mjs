@@ -58,7 +58,14 @@
  * resolve, or ignore them and upload through the app instead.
  */
 
-import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync } from "node:fs";
+import {
+  readFileSync,
+  writeFileSync,
+  readdirSync,
+  statSync,
+  mkdirSync,
+  existsSync,
+} from "node:fs";
 import { join, extname, basename } from "node:path";
 
 // ---------------------------------------------------------------------
@@ -1116,6 +1123,19 @@ if (!path || !campaignId) {
 const outDir = rest[rest.indexOf("-o") + 1] ?? "foundry-import";
 if (rest.includes("-o") && !outDir) {
   console.error("-o needs a directory");
+  process.exit(1);
+}
+
+// A wrong path is the most likely thing to go wrong here, and Node's
+// answer to it is an ENOENT stack trace that buries the one fact that
+// matters. Say it plainly instead.
+if (!existsSync(path)) {
+  console.error(
+    `Cannot find: ${path}\n\n` +
+      "Point this at the file the Foundry macro downloaded. To find it:\n" +
+      "  ls -lhS ~/Downloads/*.json | head\n\n" +
+      "and use the full path, in quotes if it contains spaces."
+  );
   process.exit(1);
 }
 
