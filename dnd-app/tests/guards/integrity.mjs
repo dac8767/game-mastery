@@ -560,7 +560,14 @@ export const integrity = {
           `map-server/docker-compose.yml mounts nothing at ${rootMatch[1]}, ` +
             `which is what Caddy serves /${firstSegment}/* from`
         );
-      } else if (!read("scripts", "fetch-foundry-images.mjs").includes(mount[1])) {
+      } else if (
+        // Comments stripped first: the header explains this mount, and
+        // matching the explanation instead of the code would let the
+        // printed command drift while the guard stayed green.
+        !stripComments(read("scripts", "fetch-foundry-images.mjs")).includes(
+          mount[1]
+        )
+      ) {
         problems.push(
           "fetch-foundry-images.mjs prints a copy command that does not " +
             `name ${mount[1]} — the directory docker-compose actually ` +
