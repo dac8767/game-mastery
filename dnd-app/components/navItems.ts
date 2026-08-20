@@ -71,9 +71,9 @@ export const TOOL_ITEMS: NavItem[] = [
  * the way npcs and locations do.
  */
 export const LOOKUP_ITEMS: NavItem[] = [
-  { id: "spells", label: "Spells", icon: "✧" },
-  { id: "items", label: "Items", icon: "⚱" },
-  { id: "monsters", label: "Monsters", icon: "☠" },
+  { id: "spells", label: "Spells", icon: "✧", slug: "spells" },
+  { id: "items", label: "Items", icon: "⚱", slug: "items" },
+  { id: "monsters", label: "Monsters", icon: "☠", slug: "monsters" },
 ];
 
 export const ASSET_ITEMS: NavItem[] = [

@@ -15,6 +15,7 @@ import type * as chat from "../chat.js";
 import type * as combat from "../combat.js";
 import type * as http from "../http.js";
 import type * as locations from "../locations.js";
+import type * as lookup from "../lookup.js";
 import type * as maps from "../maps.js";
 import type * as notebook from "../notebook.js";
 import type * as npcs from "../npcs.js";
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   combat: typeof combat;
   http: typeof http;
   locations: typeof locations;
+  lookup: typeof lookup;
   maps: typeof maps;
   notebook: typeof notebook;
   npcs: typeof npcs;

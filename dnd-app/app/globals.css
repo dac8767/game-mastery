@@ -3383,3 +3383,141 @@ button.cal-day:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- Lookup ---------- */
+
+.lookup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.lookup-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.lookup-search {
+  flex: 1;
+  max-width: 26rem;
+  font-size: 0.9rem;
+}
+
+.lookup-count {
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.lookup-body {
+  display: grid;
+  grid-template-columns: minmax(0, 20rem) minmax(0, 1fr);
+  gap: 0.75rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.lookup-list {
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  padding: 0.3rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.lookup-row {
+  display: grid;
+  gap: 0.1rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  text-align: left;
+}
+
+.lookup-row:hover {
+  background: var(--bg-inset);
+}
+
+.lookup-row.selected {
+  border-color: var(--accent);
+}
+
+.lookup-row-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.lookup-row.selected .lookup-row-name {
+  color: var(--accent);
+}
+
+.lookup-row-sub {
+  font-size: 0.74rem;
+  color: var(--text-dim);
+}
+
+.lookup-panel {
+  min-width: 0;
+  overflow-y: auto;
+  padding: 1rem 1.15rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.lookup-hint {
+  font-size: 0.85rem;
+  padding: 0.5rem;
+}
+
+.lookup-detail h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+  color: var(--accent);
+}
+
+.lookup-stats {
+  margin: 0 0 1rem;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.lookup-stats > div {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
+.lookup-stats dt {
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.lookup-stats dd {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.lookup-text p {
+  margin: 0 0 0.7rem;
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+@media (max-width: 900px) {
+  .lookup-body {
+    grid-template-columns: 1fr;
+  }
+}

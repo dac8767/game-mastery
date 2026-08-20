@@ -332,27 +332,103 @@ export const integrity = {
     // Two of them now — the Airtable CSV and the Foundry export — and
     // both write field names that only the deployed schema validates,
     // i.e. at import time, on real data.
+    const foundrySrc = read("scripts", "import-foundry.mjs");
+
+    // Each row builder writes into a different table, and every one of
+    // them writes field names that only the deployed schema validates —
+    // i.e. at import time, on real data, after the conversion has run.
     const IMPORTERS = [
-      { file: "import-npcs.mjs", anchor: /const doc\s*=/ },
-      { file: "import-foundry.mjs", anchor: /const row\s*=/ },
+      { file: "import-npcs.mjs", fn: "const doc", table: "npcs" },
+      { file: "import-foundry.mjs", fn: "function actorToNpc", table: "npcs" },
+      { file: "import-foundry.mjs", fn: "function itemToRow", table: "items" },
+      { file: "import-foundry.mjs", fn: "function spellToRow", table: "spells" },
+      {
+        file: "import-foundry.mjs",
+        fn: "function actorToMonster",
+        table: "monsters",
+      },
     ];
 
     let written = [];
-    for (const { file, anchor } of IMPORTERS) {
+    for (const { file, fn, table } of IMPORTERS) {
+      const src = file === "import-foundry.mjs" ? foundrySrc : read("scripts", file);
+      // Sliced to the builder first: blockAfter takes the next `{` after
+      // its match, so anchoring on the whole file would find whichever
+      // row literal came first.
+      const sliced = src.slice(src.indexOf(fn));
       const fields = topLevelKeys(
-        blockAfter(read("scripts", file), anchor, `the row literal in ${file}`),
-        `${file} row`
+        blockAfter(sliced, /const (?:doc|row)\s*=/, `the row literal in ${fn}`),
+        `${fn} row`
       );
+
+      const tableFields =
+        table === "npcs"
+          ? schemaFields
+          : topLevelKeys(
+              blockAfter(
+                schemaSrc,
+                new RegExp(`\\b${table}:\\s*defineTable\\(`),
+                `${table} table`
+              ),
+              `${table} schema`
+            );
+
       for (const f of fields) {
-        if (!schemaFields.includes(f)) {
+        if (f === "campaignId") continue; // supplied by the caller
+        if (!tableFields.includes(f)) {
           problems.push(
-            `${file} writes \`${f}\`, which the npcs schema does not accept — the import would fail validation`
+            `${fn} in ${file} writes \`${f}\`, which the ${table} schema does not accept — the import would fail validation`
           );
         }
       }
-      // Only the bulk CSV importer is expected to write every required
-      // field; the Foundry one is checked against it below.
-      if (file === "import-npcs.mjs") written = fields;
+      // Required fields are checked against the bulk CSV importer only;
+      // it is the one that has to produce a complete NPC row.
+      if (fn === "const doc") written = fields;
+    }
+
+    // The Lookup tables are the only content in the app that is NOT
+    // scoped to a campaign, and that is deliberate — a fireball is a
+    // fireball in both groups. A campaignId appearing on one would make
+    // it per-campaign again without anything else noticing.
+    // The declaration AND its trailing .index()/.searchIndex() chain.
+    // blockAfter stops at the object literal's closing brace, so the
+    // indexes — which are what these checks are about — sit outside it.
+    const tableRegion = (table) => {
+      const start = schemaSrc.search(
+        new RegExp(`\\b${table}:\\s*defineTable\\(`)
+      );
+      if (start === -1) throw new Error(`no ${table} table in schema.ts`);
+      const next = schemaSrc.slice(start + 1).search(/\n  \w+: defineTable\(/);
+      return next === -1
+        ? schemaSrc.slice(start)
+        : schemaSrc.slice(start, start + 1 + next);
+    };
+
+    for (const table of ["spells", "items", "monsters"]) {
+      const block = tableRegion(table);
+      if (/campaignId/.test(block)) {
+        problems.push(
+          `the ${table} table has a campaignId — the reference library is ` +
+            "shared across campaigns on purpose"
+        );
+      }
+      if (!/searchIndex\(/.test(block)) {
+        problems.push(
+          `the ${table} table has no search index — Lookup would have to ` +
+            "scan, and these are the only tables big enough for that to matter"
+        );
+      }
+    }
+
+    // Nothing writes the library from inside the app; it is loaded by
+    // `npx convex import`. A mutation appearing here is a write path
+    // that was never designed to be secured.
+    const lookupSrc = read("convex", "lookup.ts");
+    if (/\bmutation\(/.test(stripComments(lookupSrc))) {
+      problems.push(
+        "convex/lookup.ts defines a mutation — the reference library is " +
+          "read-only in the app and loaded by `npx convex import`"
+      );
     }
 
     // Required (non-optional) schema fields must always be written, or

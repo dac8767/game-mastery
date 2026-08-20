@@ -136,6 +136,8 @@ function classify(doc) {
   }
   if (doc.system || doc.data) {
     const t = declared.toLowerCase();
+    if (t === "spell") return "spell";
+    if (ITEM_TYPES.has(t)) return "item";
     if (t === "npc" || t === "character" || t === "vehicle" || t === "group") {
       return "actor";
     }
@@ -145,6 +147,24 @@ function classify(doc) {
   return null;
 }
 
+/**
+ * dnd5e Item types that are things you can hold.
+ *
+ * feat / class / subclass / background / race are Items too, and are
+ * deliberately absent: they are character-build machinery, not the
+ * reference library, and folding them in would put "Fighter" in the
+ * item list.
+ */
+const ITEM_TYPES = new Set([
+  "weapon",
+  "equipment",
+  "consumable",
+  "tool",
+  "loot",
+  "container",
+  "backpack", // the pre-v10 name for a container
+]);
+
 // ---------------------------------------------------------------------
 // Small shared helpers
 // ---------------------------------------------------------------------
@@ -152,18 +172,41 @@ function classify(doc) {
 /** Foundry biographies are HTML. The NPC table's fields are plain text. */
 function stripHtml(html) {
   if (typeof html !== "string" || !html) return undefined;
+
   const text = html
+    // Structural tags become whitespace before the rest are dropped, or
+    // paragraphs run together into one block.
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/p>/gi, "\n\n")
     .replace(/<[^>]+>/g, "")
+
+    // Entities BEFORE enrichers, and that order is the whole point.
+    // Foundry writes `&Reference[Grappled]` into HTML, where the
+    // ampersand is escaped — so it arrives as `&amp;Reference[...]`,
+    // and an enricher pass run first sees `&amp` followed by a
+    // semicolon, matches nothing, and leaves 122 of them intact in
+    // Derek's export. Decode, then strip.
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
+
+    // Foundry ENRICHERS. Real descriptions are full of them:
+    //   @UUID[Compendium.dnd5e...]{Gameplay Toolbox}  ->  Gameplay Toolbox
+    //   &Reference[Grappled]                          ->  Grappled
+    //   [[/r 1d6]]                                    ->  1d6
+    // Left alone they read as a wall of compendium ids. The labelled
+    // form has to be handled first, or the label is thrown away along
+    // with the brackets.
+    .replace(/[@&]\w+\[[^\]]*\]\{([^}]*)\}/g, "$1")
+    .replace(/[@&]\w+\[([^\]]*)\]/g, "$1")
+    .replace(/\[\[\/?[a-z]*\s*([^\]]*)\]\]/g, "$1")
+
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+
   return text.length > 0 ? text : undefined;
 }
 
@@ -258,6 +301,232 @@ function relativeImage(img) {
   if (img.startsWith("icons/")) return undefined;
   if (img.startsWith("systems/")) return undefined;
   return img;
+}
+
+// ---------------------------------------------------------------------
+// Item -> an items row  (the Lookup library)
+// ---------------------------------------------------------------------
+
+/**
+ * Foundry's item vocabulary is two fields: the document `type`
+ * ("equipment") and a subtype ("wondrous", "shield"). Neither alone is
+ * what a player would call the thing — "equipment" covers both plate
+ * armour and a ring of invisibility — so they are folded into one small
+ * bucket that is actually worth filtering by.
+ */
+const EQUIPMENT_KINDS = {
+  light: "armor",
+  medium: "armor",
+  heavy: "armor",
+  shield: "armor",
+  wondrous: "wondrous",
+  ring: "ring",
+  wand: "wand",
+  rod: "rod",
+};
+
+function itemKind(doc) {
+  const t = (doc.type ?? "").toLowerCase();
+  const sub = clean(sys(doc).type?.value).toLowerCase();
+
+  if (t === "equipment") return EQUIPMENT_KINDS[sub] ?? "gear";
+  if (t === "loot") return "gear";
+  if (t === "backpack") return "container";
+  if (["weapon", "consumable", "tool", "container"].includes(t)) return t;
+  return "other";
+}
+
+/** "veryRare" -> "Very Rare". The dnd5e values are camelCase keys. */
+function humanize(s) {
+  const t = clean(s);
+  if (!t) return undefined;
+  return t
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/^./, (c) => c.toUpperCase());
+}
+
+/** `{ value: 5, denomination: "sp" }` -> "5 sp". */
+function formatPrice(price) {
+  if (!price || typeof price !== "object") return undefined;
+  const value = Number(price.value);
+  if (!Number.isFinite(value) || value <= 0) return undefined;
+  const denom = clean(price.denomination) || "gp";
+  return `${value} ${denom}`;
+}
+
+/**
+ * Where a row came from, so a re-import can be told from what was
+ * already there. dnd5e stores this as an object, not a string.
+ */
+function formatSource(source) {
+  if (!source || typeof source !== "object") return clean(source) || undefined;
+  const custom = clean(source.custom);
+  if (custom) return custom;
+  const book = clean(source.book);
+  if (book) return book;
+  const rules = clean(source.rules);
+  return rules ? `SRD ${rules}` : undefined;
+}
+
+function itemToRow(doc) {
+  const s = sys(doc);
+  // A weight of 0 means "nobody filled this in" far more often than it
+  // means weightless — the Berserker Axe in Derek's export is 0 lb.
+  const weight = Number(s.weight?.value ?? s.weight);
+
+  const row = {
+    name: clean(doc.name) || "Unnamed",
+    kind: itemKind(doc),
+    rarity: humanize(s.rarity),
+    price: formatPrice(s.price),
+    weight: Number.isFinite(weight) && weight > 0 ? weight : undefined,
+    // `attunement` is "" / "required" / "optional"; `attuned` is a
+    // different field meaning "is it attuned right now", which is a
+    // property of one character's copy, not of the item.
+    attunement: clean(s.attunement).toLowerCase() === "required",
+    description: stripHtml(s.description?.value),
+    source: formatSource(s.source),
+  };
+  return row;
+}
+
+// ---------------------------------------------------------------------
+// Spell -> a spells row
+// ---------------------------------------------------------------------
+
+const SCHOOLS = {
+  abj: "Abjuration",
+  con: "Conjuration",
+  div: "Divination",
+  enc: "Enchantment",
+  evo: "Evocation",
+  ill: "Illusion",
+  nec: "Necromancy",
+  trs: "Transmutation",
+};
+
+/**
+ * dnd5e moved ritual/concentration/V-S-M out of a `components` object
+ * and into a flat `properties` array. Both shapes are read, because an
+ * export can contain documents written by either.
+ */
+function spellProps(s) {
+  const list = Array.isArray(s.properties) ? s.properties : [];
+  const legacy = s.components ?? {};
+  const has = (key, legacyKey) =>
+    list.includes(key) || legacy[legacyKey ?? key] === true;
+
+  return {
+    ritual: has("ritual"),
+    concentration: has("concentration"),
+    vocal: has("vocal", "vsm") || legacy.vocal === true,
+    somatic: has("somatic") || legacy.somatic === true,
+    material: has("material") || legacy.material === true,
+  };
+}
+
+function unitised(obj, fallbackUnits) {
+  if (!obj || typeof obj !== "object") return undefined;
+  const value = obj.value;
+  const units = clean(obj.units ?? fallbackUnits);
+  if (value === null || value === undefined || value === "") {
+    return humanize(units);
+  }
+  return units ? `${value} ${units}` : String(value);
+}
+
+function spellToRow(doc) {
+  const s = sys(doc);
+  const p = spellProps(s);
+
+  const components = [p.vocal && "V", p.somatic && "S", p.material && "M"]
+    .filter(Boolean)
+    .join(", ");
+
+  const activation = s.activation ?? {};
+  const castingTime =
+    activation.value && activation.type
+      ? `${activation.value} ${activation.type}`
+      : humanize(activation.type);
+
+  const row = {
+    name: clean(doc.name) || "Unnamed",
+    level: Number.isFinite(Number(s.level)) ? Number(s.level) : 0,
+    school: SCHOOLS[clean(s.school)] ?? humanize(s.school),
+    castingTime,
+    range: unitised(s.range),
+    components: components || undefined,
+    materials: clean(s.materials?.value) || undefined,
+    duration: unitised(s.duration),
+    ritual: p.ritual,
+    concentration: p.concentration,
+    description: stripHtml(s.description?.value),
+    source: formatSource(s.source),
+  };
+  return row;
+}
+
+// ---------------------------------------------------------------------
+// Actor -> a monsters row  (the same actor also yields an npcs row)
+// ---------------------------------------------------------------------
+
+function formatSpeed(movement) {
+  if (!movement || typeof movement !== "object") return undefined;
+  const units = clean(movement.units) || "ft";
+  const parts = ["walk", "fly", "swim", "climb", "burrow"]
+    .map((mode) => {
+      const n = Number(movement[mode]);
+      if (!Number.isFinite(n) || n <= 0) return null;
+      return mode === "walk" ? `${n} ${units}` : `${mode} ${n} ${units}`;
+    })
+    .filter(Boolean);
+  return parts.length > 0 ? parts.join(", ") : undefined;
+}
+
+function abilityScores(abilities) {
+  if (!abilities || typeof abilities !== "object") return undefined;
+  const out = {};
+  for (const key of ["str", "dex", "con", "int", "wis", "cha"]) {
+    const n = Number(abilities[key]?.value);
+    if (Number.isFinite(n)) out[key] = n;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function actorToMonster(doc) {
+  const s = sys(doc);
+  const details = s.details ?? {};
+  const attrs = s.attributes ?? {};
+  const typeField = details.type;
+
+  const ac = Number(attrs.ac?.value ?? attrs.ac?.flat ?? attrs.ac);
+  const hp = Number(attrs.hp?.max ?? attrs.hp?.value);
+  const cr = Number(details.cr);
+
+  // dnd5e moved creature type from a string to an object; the subtype
+  // ("goblinoid") is more useful than the type ("humanoid") when both
+  // are there.
+  const creatureType =
+    humanize(typeField?.subtype) ||
+    humanize(typeField?.value ?? typeField) ||
+    undefined;
+
+  const row = {
+    name: clean(doc.name) || "Unnamed",
+    size: SIZES[s.traits?.size] ?? humanize(s.traits?.size),
+    creatureType,
+    alignment: clean(details.alignment) || undefined,
+    cr: Number.isFinite(cr) ? cr : undefined,
+    ac: Number.isFinite(ac) ? ac : undefined,
+    hp: Number.isFinite(hp) ? hp : undefined,
+    speed: formatSpeed(attrs.movement),
+    abilities: abilityScores(s.abilities),
+    description:
+      stripHtml(details.biography?.public) ??
+      stripHtml(details.biography?.value),
+    source: formatSource(details.source ?? s.source),
+  };
+  return row;
 }
 
 // ---------------------------------------------------------------------
@@ -363,10 +632,23 @@ for (const doc of documents) {
 }
 
 const npcs = [];
+const monsters = [];
+const spells = [];
+const itemRows = [];
 const locations = [];
 
 for (const doc of documents) {
   const kind = classify(doc);
+
+  if (kind === "item") {
+    itemRows.push(itemToRow(doc));
+    continue;
+  }
+
+  if (kind === "spell") {
+    spells.push(spellToRow(doc));
+    continue;
+  }
 
   if (kind === "actor") {
     const type = (doc.type ?? "").toLowerCase();
@@ -375,7 +657,14 @@ for (const doc of documents) {
       skipped.characters++;
       continue;
     }
+    // The SAME actor is written both ways, because only Derek knows
+    // which it is: a named person in Moonbrook belongs in the NPC
+    // roster, and an SRD stat block belongs in the Lookup library.
+    // Writing both files and letting him import one costs nothing;
+    // guessing wrong mixes 300 monsters into a 197-person roster with
+    // no clean way back.
     npcs.push(actorToNpc(doc, campaignId));
+    monsters.push(actorToMonster(doc));
     continue;
   }
 
@@ -389,8 +678,17 @@ for (const doc of documents) {
 
 mkdirSync(outDir, { recursive: true });
 
+const jsonl = (rows) => rows.map((r) => JSON.stringify(r)).join("\n") + "\n";
+
 const npcPath = join(outDir, "npcs.jsonl");
-writeFileSync(npcPath, npcs.map((n) => JSON.stringify(n)).join("\n") + "\n");
+const monsterPath = join(outDir, "monsters.jsonl");
+const spellPath = join(outDir, "spells.jsonl");
+const itemPath = join(outDir, "items.jsonl");
+
+writeFileSync(npcPath, jsonl(npcs));
+writeFileSync(monsterPath, jsonl(monsters));
+writeFileSync(spellPath, jsonl(spells));
+writeFileSync(itemPath, jsonl(itemRows));
 
 const locPath = join(outDir, "locations.json");
 writeFileSync(
@@ -406,7 +704,10 @@ const unpinned = locations.filter(
 ).length;
 
 console.log(`read ${documents.length} document(s) from ${basename(path)}`);
-console.log(`  ${npcs.length} NPC(s) -> ${npcPath}`);
+console.log(`  ${spells.length} spell(s) -> ${spellPath}`);
+console.log(`  ${itemRows.length} item(s) -> ${itemPath}`);
+console.log(`  ${monsters.length} monster(s) -> ${monsterPath}`);
+console.log(`  ${npcs.length} of those also written as NPCs -> ${npcPath}`);
 console.log(
   `  ${scenes.length} scene(s) and ${locations.length - scenes.length} pin(s) -> ${locPath}`
 );
@@ -427,11 +728,34 @@ if (withoutPortrait > 0) {
   );
 }
 
-console.log(
-  `\nnext:\n` +
-    `  npx convex import --table npcs ${npcPath} --append\n` +
-    `  npx convex run locations:importLocations "$(cat ${locPath})" \\\n` +
-    `    --identity '{"subject":"YOUR_USER_ID|seed"}'\n\n` +
-    `The locations import runs a DM-gated mutation, so it needs to run ` +
-    `as you — see SETUP-CONVEX.md for where YOUR_USER_ID comes from.\n`
-);
+const lines = ["\nnext — run only the ones with rows in them:\n"];
+if (spells.length) lines.push(`  npx convex import --table spells ${spellPath} --append`);
+if (itemRows.length) lines.push(`  npx convex import --table items ${itemPath} --append`);
+if (monsters.length) {
+  lines.push(`  npx convex import --table monsters ${monsterPath} --append`);
+  lines.push(
+    `  # ...OR, if these are your own campaign NPCs rather than stat blocks:`
+  );
+  lines.push(`  npx convex import --table npcs ${npcPath} --append`);
+}
+if (locations.length) {
+  lines.push(
+    `  npx convex run locations:importLocations "$(cat ${locPath})" \\`
+  );
+  lines.push(`    --identity '{"subject":"YOUR_USER_ID|seed"}'`);
+}
+console.log(lines.join("\n") + "\n");
+
+if (monsters.length > 0) {
+  console.log(
+    "The actors were written to BOTH monsters.jsonl and npcs.jsonl. Import\n" +
+      "one: SRD stat blocks belong in the Lookup library, named people in\n" +
+      "Moonbrook belong in the NPC roster. Importing both mixes them.\n"
+  );
+}
+if (locations.length > 0) {
+  console.log(
+    "The locations import runs a DM-gated mutation, so it needs to run as\n" +
+      "you — see SETUP-CONVEX.md for where YOUR_USER_ID comes from.\n"
+  );
+}

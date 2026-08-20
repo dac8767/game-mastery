@@ -725,6 +725,57 @@ export const unit = {
     check("clampPin: above one", loc.clampPin(1.5) === 1);
     check("clampPin: NaN", loc.clampPin(Number.NaN) === 0);
 
+    // ---- Lookup formatting -----------------------------------------
+    // Challenge rating and spell level are both small integers that
+    // mean something other than themselves, and either read wrong is
+    // the sort of thing you only notice at the table.
+    const lookOut = compile("components/lookupFields.ts");
+    const look = await import(
+      pathToFileURL(join(lookOut, "lookupFields.js")).href
+    );
+
+    check("formatCr: a fractional CR reads as a fraction", look.formatCr(0.25) === "1/4");
+    check("formatCr: an eighth", look.formatCr(0.125) === "1/8");
+    check("formatCr: a half", look.formatCr(0.5) === "1/2");
+    check("formatCr: zero is not nothing", look.formatCr(0) === "0");
+    check("formatCr: a whole number", look.formatCr(17) === "17");
+    check("formatCr: absent stays absent", look.formatCr(undefined) === null);
+
+    check("formatSpellLevel: level 0 is a cantrip", look.formatSpellLevel(0) === "Cantrip");
+    check("formatSpellLevel: 1st", look.formatSpellLevel(1) === "1st level");
+    check("formatSpellLevel: 2nd", look.formatSpellLevel(2) === "2nd level");
+    check("formatSpellLevel: 3rd", look.formatSpellLevel(3) === "3rd level");
+    check("formatSpellLevel: 9th", look.formatSpellLevel(9) === "9th level");
+    check(
+      "formatSpellLevel: absent stays absent",
+      look.formatSpellLevel(null) === null
+    );
+
+    check(
+      "formatAbilities skips the scores an import did not carry",
+      look.formatAbilities({ str: 18, cha: 6 }) === "STR 18 · CHA 6"
+    );
+    check("formatAbilities: nothing at all", look.formatAbilities({}) === null);
+    check("formatAbilities: not an object", look.formatAbilities(null) === null);
+
+    // Every kind's field list must resolve without throwing on a row
+    // that is mostly empty — a sparse import is the normal case.
+    for (const kind of ["spells", "items", "monsters"]) {
+      let ok = true;
+      try {
+        look.LOOKUP_FIELDS[kind].forEach((f) => f.get({ name: "x" }));
+        look.lookupSubtitle(kind, { name: "x" });
+      } catch {
+        ok = false;
+      }
+      check(`LOOKUP_FIELDS.${kind} survives a nearly empty row`, ok);
+    }
+    check(
+      "a cantrip's subtitle names it",
+      look.lookupSubtitle("spells", { level: 0, school: "Evocation" }) ===
+        "Cantrip · Evocation"
+    );
+
     return problems;
   },
 };

@@ -198,6 +198,94 @@ export default defineSchema({
   }).index("by_user", ["userId"]),
 
   /**
+   * ── Lookup: the reference library ─────────────────────────────────
+   *
+   * Spells, items and monsters. These three tables are deliberately
+   * NOT campaign-scoped: a fireball is a fireball in both of Derek's
+   * groups, and a per-campaign copy would mean importing the SRD twice
+   * and having them drift.
+   *
+   * That makes them the only shared, cross-campaign content in the
+   * schema, so the access rule is different too — every signed-in
+   * member reads them, and NOTHING writes them from inside the app.
+   * They are populated by `npx convex import`, which writes straight to
+   * the table without a mutation, so there is no write path to secure
+   * and no function-call cost for a thousand-row load.
+   *
+   * Each carries a search index, because these are the only tables big
+   * enough that sending the whole list to a subscribed component would
+   * be the free tier's bandwidth footgun.
+   *
+   * `source` records where a row came from ("SRD 5.1", "DDB"), so a
+   * re-import can be told apart from what was already there.
+   */
+  spells: defineTable({
+    name: v.string(),
+    level: v.number(), // 0 = cantrip
+    school: v.optional(v.string()),
+    castingTime: v.optional(v.string()),
+    range: v.optional(v.string()),
+    components: v.optional(v.string()),
+    materials: v.optional(v.string()),
+    duration: v.optional(v.string()),
+    ritual: v.boolean(),
+    concentration: v.boolean(),
+    description: v.optional(v.string()),
+    source: v.optional(v.string()),
+  })
+    .index("by_name", ["name"])
+    .searchIndex("search_name", {
+      searchField: "name",
+      filterFields: ["level", "school"],
+    }),
+
+  items: defineTable({
+    name: v.string(),
+    /** weapon | armor | gear | consumable | tool | container | other */
+    kind: v.string(),
+    rarity: v.optional(v.string()),
+    price: v.optional(v.string()),
+    weight: v.optional(v.number()),
+    attunement: v.boolean(),
+    description: v.optional(v.string()),
+    source: v.optional(v.string()),
+  })
+    .index("by_name", ["name"])
+    .searchIndex("search_name", {
+      searchField: "name",
+      filterFields: ["kind", "rarity"],
+    }),
+
+  monsters: defineTable({
+    name: v.string(),
+    size: v.optional(v.string()),
+    creatureType: v.optional(v.string()),
+    alignment: v.optional(v.string()),
+    /** Stored as a number so it sorts; 0.25 is "1/4" on screen. */
+    cr: v.optional(v.number()),
+    ac: v.optional(v.number()),
+    hp: v.optional(v.number()),
+    speed: v.optional(v.string()),
+    abilities: v.optional(
+      v.object({
+        str: v.optional(v.number()),
+        dex: v.optional(v.number()),
+        con: v.optional(v.number()),
+        int: v.optional(v.number()),
+        wis: v.optional(v.number()),
+        cha: v.optional(v.number()),
+      })
+    ),
+    description: v.optional(v.string()),
+    source: v.optional(v.string()),
+  })
+    .index("by_name", ["name"])
+    .searchIndex("search_name", {
+      searchField: "name",
+      filterFields: ["creatureType", "cr"],
+    }),
+
+  /**
    * Locations — a tree of places, each of which may carry a map.
    *
    * A region map holds pins for its towns; double-clicking a town whose
