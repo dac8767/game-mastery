@@ -219,7 +219,33 @@ export const integrity = {
       "id",
       "TOOLBAR_COMMANDS"
     );
-    const navIds = stringProps(navSrc, "id", "navItems");
+    // Only ids that HAVE a slug: NAV_DESTINATIONS filters the rest out,
+    // so a `t:` token naming an unbuilt screen is dropped silently by
+    // normalizeRibbon. Checking against every id in the file would wave
+    // exactly that through.
+    const navIds = [];
+    for (const [, body] of navSrc.matchAll(/\{([^{}]*)\}/g)) {
+      const id = body.match(/\bid:\s*"([^"]+)"/);
+      if (id && /\bslug:\s*"/.test(body)) navIds.push(id[1]);
+    }
+    if (navIds.length === 0) {
+      throw new Error("found no slugged nav ids — parser out of date?");
+    }
+
+    // Every nav GROUP must be rendered, or adding one to navItems.ts and
+    // forgetting the sidebar leaves a section that exists in the data and
+    // nowhere on screen.
+    const shellSrc = read("components", "AppShell.tsx");
+    for (const [, group] of navSrc.matchAll(
+      /export const (\w+): NavItem\[\]/g
+    )) {
+      if (group === "NAV_DESTINATIONS") continue; // the ribbon's registry
+      if (!shellSrc.includes(group)) {
+        problems.push(
+          `navItems exports the ${group} group but AppShell never renders it`
+        );
+      }
+    }
 
     // A builtin is drawn by a switch arm keyed on its string. Add one to
     // the registry and forget the arm and the palette offers a button

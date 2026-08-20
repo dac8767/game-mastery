@@ -12,6 +12,7 @@ import { Id } from "@/convex/_generated/dataModel";
 import {
   ASSET_ITEMS,
   CAMPAIGN_ITEMS,
+  LOOKUP_ITEMS,
   NavItem,
   TOOL_ITEMS,
   navHref,
@@ -126,6 +127,16 @@ export function AppShell({
           <div className="nav-group-title">Tools</div>
           <NavList
             items={TOOL_ITEMS}
+            base={base}
+            pathname={pathname}
+            isDm={isDm}
+          />
+        </div>
+
+        <div className="nav-group">
+          <div className="nav-group-title">Lookup</div>
+          <NavList
+            items={LOOKUP_ITEMS}
             base={base}
             pathname={pathname}
             isDm={isDm}

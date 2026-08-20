@@ -61,6 +61,21 @@ export const TOOL_ITEMS: NavItem[] = [
   { id: "scheduler", label: "Scheduler", icon: "⏱" },
 ];
 
+/**
+ * Reference material rather than campaign content.
+ *
+ * Separate from Tools on purpose: a tool does something to your
+ * campaign, and these three only tell you what a rule says. Nothing
+ * here is campaign-scoped either — a fireball is a fireball in both of
+ * Derek's groups — so whatever backs these will not carry a campaignId
+ * the way npcs and locations do.
+ */
+export const LOOKUP_ITEMS: NavItem[] = [
+  { id: "spells", label: "Spells", icon: "✧" },
+  { id: "items", label: "Items", icon: "⚱" },
+  { id: "monsters", label: "Monsters", icon: "☠" },
+];
+
 export const ASSET_ITEMS: NavItem[] = [
   { id: "dynamic-maps", label: "Dynamic Maps", icon: "▦" },
   { id: "static-maps", label: "Static Maps", icon: "▤" },
@@ -79,6 +94,7 @@ export const NAV_DESTINATIONS: NavItem[] = [
   TABLE_ITEM,
   ...CAMPAIGN_ITEMS,
   ...TOOL_ITEMS,
+  ...LOOKUP_ITEMS,
   ...ASSET_ITEMS,
   SETTINGS_ITEM,
 ].filter((i) => i.slug !== undefined);
