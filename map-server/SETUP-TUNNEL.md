@@ -24,6 +24,21 @@ PowerEdge: cloudflared ──► Caddy ──► /srv/maps  (your library)
 - Docker + Docker Compose on the PowerEdge
 - Your map library at a known path (adjust volume paths in compose file)
 
+### Installing Docker, if it isn't there yet
+
+The official script covers Debian, Ubuntu, RHEL, Fedora and SLES, so it
+saves picking the right package repo by hand:
+
+```bash
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker "$USER"   # then log out and back in
+docker compose version            # confirms the v2 plugin came with it
+```
+
+The group change is what lets you run `docker` without `sudo`, and it
+only takes effect on a new login session — `newgrp docker` works for the
+current shell if you would rather not log out.
+
 ## 1. Create the tunnel (dashboard-managed)
 
 1. Cloudflare dashboard → Zero Trust → Networks → Tunnels → **Create a tunnel**
@@ -56,10 +71,17 @@ email check — the library is not crawlable or publicly enumerable.
 ## 3. Deploy
 
 ```bash
+sudo mkdir -p /srv/maps /srv/maps-web
 mkdir -p ~/map-server && cd ~/map-server
 # copy docker-compose.yml, Caddyfile, .env (with TUNNEL_TOKEN=...) here
 docker compose up -d
+docker compose logs -f cloudflared     # look for "Registered tunnel connection"
 ```
+
+Create the two `/srv` directories first. Docker will happily invent a
+missing bind-mount source as an empty root-owned directory, which then
+serves nothing and looks like a Caddy problem rather than a missing
+folder.
 
 Visit `https://maps.yourdomain.com/` — you should hit the Access login,
 then Caddy's file browser.
@@ -80,6 +102,34 @@ It's incremental — re-run it after adding new maps and it only converts
 what's new. Serve `/web/...` URLs to players; keep `/originals/...` for
 yourself when you need print quality.
 
+## 4b. The Foundry artwork mirror
+
+Separate from your maps, and it goes in the same tree. Lookup's spell,
+item and monster artwork is thousands of small icons pulled out of a
+running Foundry by `dnd-app/scripts/fetch-foundry-images.mjs`, which
+writes them already shaped for this server:
+
+```bash
+# on the Mac, with Foundry open and the world loaded
+node scripts/fetch-foundry-images.mjs ~/Downloads/foundry-everything.json -o foundry-images
+rsync -a --info=progress2 foundry-images/web/ poweredge:/srv/maps-web/
+```
+
+The trailing slash on the source is load-bearing: it copies the
+*contents* of `web/` into the mount, so `foundry/` lands beside your own
+map directories rather than nesting a second `web/`.
+
+`/srv/maps-web` is the host directory `docker-compose.yml` mounts as the
+container's `/srv/web`, which Caddy serves at `/web/`. Three names for
+one place, and copying to the wrong one puts every file a directory away
+from where it is served — which looks exactly like copying nothing. A
+guard in `dnd-app/tests/guards/integrity.mjs` reads the Caddyfile and
+the compose file and fails if these stop agreeing.
+
+Do **not** run `make-webres.sh` over these. They are already small WebP
+icons; re-encoding them gains nothing and the script's long-edge cap is
+meant for 200MB battle maps.
+
 ## 5. Wiring into the D&D app (Convex)
 
 Add a `maps` table storing the path, not the image:
@@ -92,6 +142,26 @@ Players are already Access-authenticated in their browser (cookie), so
 `<img>` tags load directly. Your existing Make + LLM vision tagging
 pipeline output can be migrated into this table so the map picker is
 searchable by the same locked vocabulary.
+
+Point the app at it by setting one variable in `dnd-app/.env.local`:
+
+```
+NEXT_PUBLIC_MAP_SERVER=https://maps.yourdomain.com
+```
+
+No trailing slash — `NEXT_PUBLIC_` variables are baked in at build time,
+so restart the dev server after editing it. Left unset, the app serves
+the same mirror out of its own `public/` directory instead; the stored
+paths are identical either way, so switching between them is this one
+variable and never a re-import.
+
+**That Access cookie is also the first thing to suspect if images do not
+load.** A browser that has never passed the one-time PIN gets a redirect
+to the login page instead of the file, and an `<img>` cannot follow it —
+so the picture is simply absent, with no error. `curl` will show the
+same thing, since curl has no cookie either. Load
+`https://maps.yourdomain.com/` in the browser once, sign in, and then
+check the app.
 
 ## Caching notes
 

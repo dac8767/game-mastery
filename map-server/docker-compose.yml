@@ -1,6 +1,7 @@
-version: "3.8"
-
 # Battle map server stack for the PowerEdge.
+#
+# No `version:` key — Compose v2 ignores it and warns that it is
+# obsolete, which is a confusing first thing to see on a fresh install.
 # - cloudflared: outbound tunnel to Cloudflare (no router ports opened)
 # - caddy: static file server for the map library
 #
