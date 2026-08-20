@@ -14,8 +14,10 @@ Players' browsers
 Cloudflare edge  ── caches hot map images after first pull
       │  outbound tunnel (no inbound ports)
       ▼
-PowerEdge: cloudflared ──► Caddy ──► /srv/maps  (your library)
-                                     /srv/maps-web (compressed copies)
+PowerEdge: cloudflared ──► Caddy ──► /mnt/Media/game-mastery/maps
+                                       (your library, full resolution)
+                                     /mnt/Media/game-mastery/maps-web
+                                       (compressed copies + foundry/)
 ```
 
 ## Prerequisites
@@ -71,17 +73,24 @@ email check — the library is not crawlable or publicly enumerable.
 ## 3. Deploy
 
 ```bash
-sudo mkdir -p /srv/maps /srv/maps-web
+sudo mkdir -p /mnt/Media/game-mastery/maps /mnt/Media/game-mastery/maps-web
+sudo chown -R "$USER":"$USER" /mnt/Media/game-mastery
 mkdir -p ~/map-server && cd ~/map-server
 # copy docker-compose.yml, Caddyfile, .env (with TUNNEL_TOKEN=...) here
 docker compose up -d
 docker compose logs -f cloudflared     # look for "Registered tunnel connection"
 ```
 
-Create the two `/srv` directories first. Docker will happily invent a
-missing bind-mount source as an empty root-owned directory, which then
-serves nothing and looks like a Caddy problem rather than a missing
-folder.
+Create the two directories first, and own them. Docker will happily
+invent a missing bind-mount source as an empty root-owned directory,
+which then serves nothing and looks like a Caddy problem rather than a
+missing folder — and a root-owned one refuses the rsync later.
+
+They live on the media array rather than on `/srv`, because the system
+disk is a few GB and the map library is the part of this that grows
+without limit. The container-side paths never change, so moving to
+another disk is two lines in the compose file and a `docker compose up
+-d`.
 
 Visit `https://maps.yourdomain.com/` — you should hit the Access login,
 then Caddy's file browser.
@@ -95,7 +104,7 @@ into compressed display copies:
 
 ```bash
 sudo apt install webp imagemagick
-./make-webres.sh /srv/maps /srv/maps-web
+./make-webres.sh /mnt/Media/game-mastery/maps /mnt/Media/game-mastery/maps-web
 ```
 
 It's incremental — re-run it after adding new maps and it only converts
@@ -112,19 +121,29 @@ writes them already shaped for this server:
 ```bash
 # on the Mac, with Foundry open and the world loaded
 node scripts/fetch-foundry-images.mjs ~/Downloads/foundry-everything.json -o foundry-images
-rsync -a --info=progress2 foundry-images/web/ poweredge:/srv/maps-web/
+rsync -a foundry-images/web/ poweredge:/mnt/Media/game-mastery/maps-web/
 ```
 
 The trailing slash on the source is load-bearing: it copies the
 *contents* of `web/` into the mount, so `foundry/` lands beside your own
 map directories rather than nesting a second `web/`.
 
-`/srv/maps-web` is the host directory `docker-compose.yml` mounts as the
-container's `/srv/web`, which Caddy serves at `/web/`. Three names for
-one place, and copying to the wrong one puts every file a directory away
-from where it is served — which looks exactly like copying nothing. A
-guard in `dnd-app/tests/guards/integrity.mjs` reads the Caddyfile and
+That destination is the host directory `docker-compose.yml` mounts as
+the container's `/srv/web`, which Caddy serves at `/web/`. Three names
+for one place, and copying to the wrong one puts every file a directory
+away from where it is served — which looks exactly like copying nothing.
+A guard in `dnd-app/tests/guards/integrity.mjs` reads the Caddyfile and
 the compose file and fails if these stop agreeing.
+
+SSH has to be reachable for that rsync, and Pop!_OS ships `ufw` active
+with only its existing services allowed — so the copy times out rather
+than being refused, which reads like a network fault:
+
+```bash
+sudo apt-get install -y openssh-server
+sudo systemctl enable --now ssh
+sudo ufw allow from 192.168.68.0/24 to any port 22 proto tcp
+```
 
 Do **not** run `make-webres.sh` over these. They are already small WebP
 icons; re-encoding them gains nothing and the script's long-edge cap is

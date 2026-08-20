@@ -2,7 +2,7 @@
 #
 # make-webres.sh — mirror a battle map library into web-resolution WebP.
 #
-# Usage:   ./make-webres.sh /srv/maps /srv/maps-web
+# Usage:   ./make-webres.sh /mnt/Media/game-mastery/maps /mnt/Media/game-mastery/maps-web
 #
 # - Preserves the directory structure (so tags/paths stay meaningful)
 # - Incremental: skips files whose output already exists and is newer

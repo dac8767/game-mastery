@@ -29,11 +29,11 @@
  * would match. See scripts/mirror.mjs.
  *
  * The `web/` level is the ROUTE, not a directory on the PowerEdge:
- * docker-compose mounts the host's /srv/maps-web as the container's
- * /srv/web, which Caddy serves at /web/. So it is the CONTENTS of
- * `web/` that get copied, into the host path the compose file names —
- * the closing message prints the exact command, and a guard holds it to
- * what the compose file actually mounts.
+ * docker-compose mounts a host directory on the media array as the
+ * container's /srv/web, which Caddy serves at /web/. So it is the
+ * CONTENTS of `web/` that get copied, into the host path the compose
+ * file names — the closing message prints the exact command, and a
+ * guard holds it to what the compose file actually mounts.
  *
  * Every stored path then resolves as
  * `${NEXT_PUBLIC_MAP_SERVER}/web/foundry/icons/...`, the same convention
@@ -124,14 +124,15 @@ if (!Number.isInteger(jobs) || jobs < 1 || jobs > 64) {
  * server that Caddy serves it FROM.
  *
  * These are different things that look alike: `web` is a URL prefix
- * Caddy strips, and /srv/maps-web is a path on the PowerEdge that
- * docker-compose mounts as the container's /srv/web. Copying to /srv/
- * because the paths here start with `web/` puts every file one
- * directory away from where it is served. The integrity guard reads
- * both files and fails if this stops matching them.
+ * Caddy strips, /srv/web is a path INSIDE the container, and the
+ * constant below is the host directory docker-compose mounts there.
+ * Copying to the wrong one of those three puts every file a directory
+ * away from where it is served, which looks exactly like copying
+ * nothing. The integrity guard reads the Caddyfile and the compose file
+ * and fails if this stops matching them.
  */
 const ROUTE = FOUNDRY_MIRROR.split("/")[0];
-const MAP_SERVER_ROOT = "/srv/maps-web";
+const MAP_SERVER_ROOT = "/mnt/Media/game-mastery/maps-web";
 
 const documents = JSON.parse(readFileSync(source, "utf8"));
 const list = Array.isArray(documents) ? documents : [documents];
