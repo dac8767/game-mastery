@@ -872,6 +872,132 @@ export const unit = {
         "Cantrip · Evocation"
     );
 
+    // ---- the Lookup filters ----------------------------------------
+    // These run in the browser on every keystroke, so a wrong rule
+    // silently HIDES rows rather than erroring — the failure mode is a
+    // short list nobody can explain.
+    const filtOut = compile("components/lookupFilters.ts");
+    const filt = await import(
+      pathToFileURL(join(filtOut, "lookupFilters.js")).href
+    );
+
+    // An empty value is not a filter, and must never match-fail.
+    check("empty: undefined", filt.isEmptyValue(undefined));
+    check("empty: blank string", filt.isEmptyValue("   "));
+    check("empty: empty array", filt.isEmptyValue([]));
+    check("empty: an unset toggle", filt.isEmptyValue(false));
+    check("empty: an unset range", filt.isEmptyValue({ min: "", max: "" }));
+    check("not empty: a set toggle", !filt.isEmptyValue(true));
+    check("not empty: one bound", !filt.isEmptyValue({ min: "5", max: "" }));
+    check("not empty: a picked option", !filt.isEmptyValue(["Rare"]));
+
+    check("contains is case-insensitive", filt.contains("Fireball", "fire"));
+    check("contains ignores surrounding space", filt.contains("Fireball", " BALL "));
+    check("contains on a missing field", !filt.contains(undefined, "x"));
+
+    check("inRange: inside", filt.inRange(15, { min: "10", max: "20" }));
+    check("inRange: on the lower bound", filt.inRange(10, { min: "10", max: "20" }));
+    check("inRange: on the upper bound", filt.inRange(20, { min: "10", max: "20" }));
+    check("inRange: below", !filt.inRange(9, { min: "10", max: "20" }));
+    check("inRange: open upper bound", filt.inRange(999, { min: "10", max: "" }));
+    check("inRange: fractional CR", filt.inRange(0.25, { min: "0", max: "1" }));
+    // A row the import never carried a value for must not sneak into a
+    // bounded range — "AC 15 to 20" should not return unknown ACs.
+    check("inRange: a missing value fails", !filt.inRange(undefined, { min: "1", max: "99" }));
+
+    // Applying them.
+    const spellRows = [
+      { name: "Fireball", level: 3, school: "Evocation", components: "V, S, M", ritual: false, concentration: false, attackSave: "DEX Save", damageEffect: "Fire" },
+      { name: "Detect Magic", level: 1, school: "Divination", components: "V, S", ritual: true, concentration: true, attackSave: null, damageEffect: null },
+      { name: "Fire Bolt", level: 0, school: "Evocation", components: "V, S", ritual: false, concentration: false, attackSave: "Ranged", damageEffect: "Fire" },
+    ];
+    const apply = (state) => filt.applyFilters("spells", spellRows, state).map((r) => r.name);
+
+    check("no filters returns everything", apply({}).length === 3);
+    check("an empty filter is not a filter", apply({ name: "  " }).length === 3);
+    check("name matches a substring", eq(apply({ name: "fire" }), ["Fireball", "Fire Bolt"]));
+    check("level is any-of", eq(apply({ level: ["0", "3"] }), ["Fireball", "Fire Bolt"]));
+    check("school is any-of", eq(apply({ school: ["Divination"] }), ["Detect Magic"]));
+    check("a toggle filters to only those", eq(apply({ ritual: true }), ["Detect Magic"]));
+    check(
+      "two filters are AND, not OR",
+      eq(apply({ name: "fire", level: ["0"] }), ["Fire Bolt"])
+    );
+    // "V and S and M" is a narrower question than "V or S or M", and
+    // the narrower one is what a row of pressed pills looks like.
+    check(
+      "components are ALL-of, not any-of",
+      eq(apply({ components: ["V", "S", "M"] }), ["Fireball"])
+    );
+    check(
+      "a save filter matches inside 'DEX Save'",
+      eq(apply({ save: ["DEX"] }), ["Fireball"])
+    );
+    check(
+      "attack type is exact, so a save is not a ranged attack",
+      eq(apply({ attack: "Ranged" }), ["Fire Bolt"])
+    );
+
+    check("activeCount counts only what is set", filt.activeCount("spells", { name: "x", level: [] }) === 1);
+    check(
+      "hasActiveAdvanced sees a hidden filter",
+      filt.hasActiveAdvanced("spells", { ritual: true }) === true &&
+        filt.hasActiveAdvanced("spells", { name: "x" }) === false
+    );
+
+    // Sorting.
+    const byLevel = filt.sortRows("spells", spellRows, "level").map((r) => r.name);
+    check("sort by level, then name", eq(byLevel, ["Fire Bolt", "Detect Magic", "Fireball"]));
+    const monsterRows = [
+      { name: "Ettin", cr: 8 },
+      { name: "Kobold", cr: 0.125 },
+      { name: "Mystery", cr: null },
+    ];
+    // Unknown is not the same as harmless: a monster with no CR sorts
+    // last rather than sitting at the top as if it were CR 0.
+    check(
+      "a monster with no CR sorts last, not as CR 0",
+      eq(
+        filt.sortRows("monsters", monsterRows, "cr").map((r) => r.name),
+        ["Kobold", "Ettin", "Mystery"]
+      )
+    );
+
+    // Every declared filter must be reachable and total.
+    for (const kind of ["spells", "items", "monsters"]) {
+      const defs = filt.FILTERS[kind];
+      check(`${kind} declares filters`, defs.length > 0);
+      check(
+        `${kind} filter keys are unique`,
+        new Set(defs.map((d) => d.key)).size === defs.length
+      );
+      let ok = true;
+      for (const def of defs) {
+        // A matcher is never asked about an empty value, but it must
+        // survive a row that carries none of its fields.
+        const sample =
+          def.control.type === "range"
+            ? { min: "1", max: "2" }
+            : def.control.type === "toggle"
+              ? true
+              : def.control.type === "multi"
+                ? [def.control.options[0].value]
+                : def.control.type === "chips" || def.control.type === "select"
+                  ? def.control.options[0].value
+                  : "x";
+        try {
+          def.match({}, sample);
+        } catch {
+          ok = false;
+        }
+      }
+      check(`${kind} matchers survive an empty row`, ok);
+      check(
+        `${kind} has at least one compact filter`,
+        defs.some((d) => !d.advanced)
+      );
+    }
+
     // ---- the Foundry converter -------------------------------------
     // Every case below was found in Derek's real 976-document export
     // rather than imagined, and each one produced visibly wrong text

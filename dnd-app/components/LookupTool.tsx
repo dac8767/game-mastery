@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
 import {
   LOOKUP_TITLES,
   LookupKind,
@@ -15,129 +16,176 @@ import {
   monsterTraitLines,
   spellCells,
 } from "@/components/lookupFields";
+import {
+  FilterState,
+  SORTS,
+  applyFilters,
+  sortRows,
+} from "@/components/lookupFilters";
+import { LookupFilters } from "@/components/LookupFilters";
 
 /**
  * The Lookup screens: spells, items, monsters.
  *
- * One component for all three, because they differ only in which query
- * they call and which fields they show — and a copy each would be three
- * places to fix a layout bug in.
+ * One component for all three. They differ in which index they read,
+ * which filters they offer and how a row prints — and all three of
+ * those are declarations elsewhere, so this file is the shape of the
+ * screen rather than three screens in a trench coat.
  *
- * A reference library is SEARCHED, not scrolled. Every read is bounded
- * server-side to one page, so nothing here subscribes to a thousand-row
- * list; typing narrows it through the search index instead. That is not
- * a nicety on the free tier, where a subscribed component re-receives
- * the whole list every time one row in it changes.
+ * The whole lightweight index is fetched once and filtered in memory.
+ * That is the cheap option here rather than the expensive one, because
+ * this data has no write path and a subscription to it delivers once
+ * and then sits silent — see convex/lookup.ts. It also means every
+ * filter is free: no query per keystroke, and no filter that cannot be
+ * expressed because no index backs it.
  *
- * There is no write path at all. These tables are loaded by
- * `npx convex import` and the app only ever reads them.
+ * The full row — description, stat block — is fetched by id only when
+ * something is opened.
  */
 
-const DEBOUNCE_MS = 200;
+/** How many results the list draws before asking you to narrow down. */
+const MAX_ROWS = 300;
 
 export function LookupTool({ kind }: { kind: LookupKind }) {
-  const [input, setInput] = useState("");
-  const [term, setTerm] = useState("");
+  const [filters, setFilters] = useState<FilterState>({});
+  const [sort, setSort] = useState("name");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Debounced, so a query does not fire per keystroke. Function calls
-  // are pooled across every project on the account.
-  useEffect(() => {
-    const t = setTimeout(() => setTerm(input), DEBOUNCE_MS);
-    return () => clearTimeout(t);
-  }, [input]);
-
-  const spells = useQuery(
-    api.lookup.searchSpells,
-    kind === "spells" ? { term } : "skip"
-  );
-  const items = useQuery(
-    api.lookup.searchItems,
-    kind === "items" ? { term } : "skip"
-  );
+  const spells = useQuery(api.lookup.indexSpells, kind === "spells" ? {} : "skip");
+  const items = useQuery(api.lookup.indexItems, kind === "items" ? {} : "skip");
   const monsters = useQuery(
-    api.lookup.searchMonsters,
-    kind === "monsters" ? { term } : "skip"
+    api.lookup.indexMonsters,
+    kind === "monsters" ? {} : "skip"
   );
-  const size = useQuery(api.lookup.librarySize);
 
-  const rows = (kind === "spells" ? spells : kind === "items" ? items : monsters) as
-    | Record<string, unknown>[]
+  const index = kind === "spells" ? spells : kind === "items" ? items : monsters;
+  const all = useMemo(
+    () => (index?.rows ?? []) as Record<string, unknown>[],
+    [index]
+  );
+
+  const matched = useMemo(
+    () => sortRows(kind, applyFilters(kind, all, filters), sort),
+    [kind, all, filters, sort]
+  );
+  const shown = matched.slice(0, MAX_ROWS);
+
+  // Fetched only for what is open. Three hooks rather than one, because
+  // a Convex query reference is static and the id is typed per table.
+  const spell = useQuery(
+    api.lookup.getSpell,
+    kind === "spells" && selectedId
+      ? { id: selectedId as Id<"spells"> }
+      : "skip"
+  );
+  const item = useQuery(
+    api.lookup.getItem,
+    kind === "items" && selectedId ? { id: selectedId as Id<"items"> } : "skip"
+  );
+  const monster = useQuery(
+    api.lookup.getMonster,
+    kind === "monsters" && selectedId
+      ? { id: selectedId as Id<"monsters"> }
+      : "skip"
+  );
+  const selected = (kind === "spells" ? spell : kind === "items" ? item : monster) as
+    | Record<string, unknown>
+    | null
     | undefined;
 
-  const loaded = rows !== undefined;
-  const empty = size !== undefined && size[kind] === 0;
-  const selected =
-    rows?.find((r) => String(r._id) === selectedId) ?? null;
+  const loading = index === undefined;
+  const empty = !loading && all.length === 0;
 
   return (
     <div className="lookup">
-      <div className="lookup-bar">
-        <input
-          className="detail-input lookup-search"
-          type="search"
-          placeholder={`Search ${LOOKUP_TITLES[kind].toLowerCase()}…`}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-        />
-        {size !== undefined && (
-          <span className="muted lookup-count">
-            {size[kind]}
-            {size[kind] >= size.capped ? "+" : ""} in the library
-          </span>
-        )}
-      </div>
-
-      {/* An import that never ran and a search that found nothing look
-          identical otherwise, and the fix for each is different. */}
-      {empty ? (
+      {loading ? (
+        <p className="centered-note">Loading the library…</p>
+      ) : empty ? (
+        /* An import that never ran and a filter that matched nothing
+           look identical otherwise, and the fix for each is different. */
         <p className="centered-note">
-          Nothing imported yet. {LOOKUP_TITLES[kind]} are loaded from a
-          Foundry export — see Step 9c in SETUP-CONVEX.md.
+          No {LOOKUP_TITLES[kind].toLowerCase()} imported yet. They are loaded
+          from a Foundry export — see Step 9c in SETUP-CONVEX.md.
         </p>
       ) : (
-        <div className="lookup-body">
-          <div className="lookup-list">
-            {!loaded && <p className="muted lookup-hint">Searching…</p>}
-            {loaded && rows.length === 0 && (
-              <p className="muted lookup-hint">
-                {term.trim().length >= 2
-                  ? `No ${LOOKUP_TITLES[kind].toLowerCase()} match “${term}”.`
-                  : "Type at least two letters to search."}
-              </p>
-            )}
-            {loaded &&
-              rows.map((row) => {
-                const id = String(row._id);
-                const subtitle = lookupSubtitle(kind, row);
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    className={`lookup-row${
-                      selectedId === id ? " selected" : ""
-                    }`}
-                    onClick={() => setSelectedId(id)}
-                  >
-                    <span className="lookup-row-name">{String(row.name)}</span>
-                    {subtitle && (
-                      <span className="lookup-row-sub">{subtitle}</span>
-                    )}
-                  </button>
-                );
-              })}
-          </div>
+        <>
+          <LookupFilters
+            kind={kind}
+            state={filters}
+            setState={setFilters}
+            matched={matched.length}
+            total={all.length}
+          />
 
-          <aside className="lookup-panel">
-            {selected ? (
-              <LookupDetail kind={kind} row={selected} />
-            ) : (
-              <p className="muted lookup-hint">
-                Pick one to read it.
-              </p>
-            )}
-          </aside>
-        </div>
+          <div className="lookup-body">
+            <div className="lookup-side">
+              <div className="lookup-sort">
+                <span className="lf-label">Sort</span>
+                <select
+                  className="lf-input"
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value)}
+                >
+                  {SORTS[kind].map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="lookup-list">
+                {shown.length === 0 && (
+                  <p className="muted lookup-hint">
+                    Nothing matches those filters.
+                  </p>
+                )}
+                {shown.map((row) => {
+                  const id = String(row._id);
+                  const subtitle = lookupSubtitle(kind, row);
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      className={`lookup-row${
+                        selectedId === id ? " selected" : ""
+                      }`}
+                      onClick={() => setSelectedId(id)}
+                    >
+                      <span className="lookup-row-name">
+                        {String(row.name)}
+                      </span>
+                      {subtitle && (
+                        <span className="lookup-row-sub">{subtitle}</span>
+                      )}
+                    </button>
+                  );
+                })}
+                {/* Never truncate silently: a list that stops at 300
+                    with no explanation reads as missing data. */}
+                {matched.length > shown.length && (
+                  <p className="muted lookup-hint">
+                    Showing {shown.length} of {matched.length}. Narrow the
+                    filters to see the rest.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <aside className="lookup-panel">
+              {selectedId && selected === undefined && (
+                <p className="muted lookup-hint">Loading…</p>
+              )}
+              {selected ? (
+                <LookupDetail kind={kind} row={selected} />
+              ) : (
+                !selectedId && (
+                  <p className="muted lookup-hint">Pick one to read it.</p>
+                )
+              )}
+            </aside>
+          </div>
+        </>
       )}
     </div>
   );

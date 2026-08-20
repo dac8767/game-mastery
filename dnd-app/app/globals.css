@@ -3413,10 +3413,27 @@ button.cal-day:hover {
 
 .lookup-body {
   display: grid;
-  grid-template-columns: minmax(0, 20rem) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 21rem) minmax(0, 1fr);
   gap: 0.75rem;
   flex: 1;
   min-height: 0;
+}
+
+.lookup-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-height: 0;
+}
+
+.lookup-sort {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.lookup-sort .lf-input {
+  flex: 1;
 }
 
 .lookup-list {
@@ -3678,4 +3695,180 @@ button.cal-day:hover {
   .lookup-body {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---------- Lookup: the filter bar ---------- */
+
+.lf {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem 0.4rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+/* The category row scrolls rather than wrapping to three lines on a
+   narrow window — fourteen creature types is a lot of chips. */
+.lf-chips {
+  display: flex;
+  gap: 0.3rem;
+  overflow-x: auto;
+  padding-bottom: 0.15rem;
+}
+
+.lf-chip {
+  flex: 0 0 auto;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.lf-chip:hover {
+  color: var(--text);
+}
+
+.lf-chip.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.lf-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 0.9rem;
+}
+
+.lf-advanced {
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.lf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.lf-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.lf-field.on .lf-label {
+  color: var(--accent);
+}
+
+.lf-input {
+  height: 1.75rem;
+  padding: 0 0.4rem;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--text);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-width: 9rem;
+}
+
+.lf-field.on .lf-input {
+  border-color: var(--accent);
+}
+
+.lf-num {
+  min-width: 0;
+  width: 4.5rem;
+}
+
+.lf-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.lf-dash {
+  color: var(--text-dim);
+}
+
+.lf-toggle-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 1.75rem;
+  font-size: 0.8rem;
+}
+
+.lf-multi {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+}
+
+.lf-pill {
+  padding: 0.15rem 0.45rem;
+  font-size: 0.72rem;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--text-dim);
+}
+
+.lf-pill:hover {
+  color: var(--text);
+}
+
+.lf-pill.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.lf-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: 1.75rem;
+}
+
+.lf-count {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.lf-reset {
+  font-size: 0.78rem;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.lf-toggle {
+  align-self: center;
+  margin-top: 0.1rem;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--accent);
+}
+
+.lf-toggle:hover {
+  background: var(--accent-soft);
 }

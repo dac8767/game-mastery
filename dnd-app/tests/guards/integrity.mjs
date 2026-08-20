@@ -550,6 +550,88 @@ export const integrity = {
       }
     }
 
+    // ---- Lookup: the kind union is stated twice --------------------
+    // lookupFilters.ts cannot import it: the unit guard compiles pure
+    // modules in isolation and TypeScript's path mapping is
+    // compile-time only, so an imported sibling would leave an
+    // unresolvable specifier in the emitted JS. Two copies, checked.
+    const kinds = (file) => {
+      const src = read("components", file);
+      const m = src.match(/type LookupKind =([^;]+);/);
+      if (!m) throw new Error(`no LookupKind in ${file}`);
+      return [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]).sort();
+    };
+    const fieldKinds = kinds("lookupFields.ts");
+    const filterKinds = kinds("lookupFilters.ts");
+    if (fieldKinds.join() !== filterKinds.join()) {
+      problems.push(
+        `LookupKind disagrees: lookupFields has [${fieldKinds}], ` +
+          `lookupFilters has [${filterKinds}]`
+      );
+    }
+    // Every kind must have a filter set and a sort list behind it, or
+    // its screen renders a bar with nothing in it.
+    const filtersSrc = read("components", "lookupFilters.ts");
+    for (const kind of fieldKinds) {
+      if (!new RegExp(`\\b${kind}:\\s*\\w*FILTERS`).test(filtersSrc)) {
+        problems.push(`LookupKind "${kind}" has no entry in FILTERS`);
+      }
+      if (!new RegExp(`\\b${kind}:\\s*\\[`).test(filtersSrc)) {
+        problems.push(`LookupKind "${kind}" has no entry in SORTS`);
+      }
+    }
+
+    // A filter chip that matches nothing is invisible: it renders, it
+    // is clickable, and it silently returns an empty list. The values
+    // the importer produces and the values the filters offer are two
+    // vocabularies written in two files, so they are compared here.
+    const valuesOf = (src, name) => {
+      const i = src.indexOf(`export const ${name}`);
+      if (i === -1) throw new Error(`no ${name} in lookupFilters.ts`);
+      const seg = src.slice(i, src.indexOf(";", i));
+      return new Set([
+        ...[...seg.matchAll(/value:\s*"([^"]+)"/g)].map((m) => m[1]),
+        ...[...seg.matchAll(/^\s*"([^"]+)",?$/gm)].map((m) => m[1]),
+      ]);
+    };
+
+    // Schools: the importer expands the dnd5e abbreviations, and the
+    // filter offers the expansions.
+    const importerSchools = new Set(
+      [
+        ...foundrySrc
+          .slice(foundrySrc.indexOf("const SCHOOLS"))
+          .slice(0, 400)
+          .matchAll(/:\s*"([^"]+)"/g),
+      ].map((m) => m[1])
+    );
+    for (const school of valuesOf(filtersSrc, "SCHOOLS")) {
+      if (!importerSchools.has(school)) {
+        problems.push(
+          `the School filter offers "${school}", which import-foundry.mjs ` +
+            "never produces — the chip would match nothing"
+        );
+      }
+    }
+
+    // Item kinds: the importer's bucket vocabulary is the union of the
+    // equipment map's values and the literals itemKind returns.
+    const kindFn = foundrySrc.slice(
+      foundrySrc.indexOf("const EQUIPMENT_KINDS"),
+      foundrySrc.indexOf("function humanize")
+    );
+    const importerKinds = new Set(
+      [...kindFn.matchAll(/"([a-z]+)"/g)].map((m) => m[1])
+    );
+    for (const kind of valuesOf(filtersSrc, "ITEM_KINDS")) {
+      if (!importerKinds.has(kind)) {
+        problems.push(
+          `the Category filter offers item kind "${kind}", which ` +
+            "import-foundry.mjs never produces"
+        );
+      }
+    }
+
     // ---- the notebook's format toolbar -----------------------------
     // Two failures here are invisible to TypeScript and both present as
     // "the toolbar does nothing", which reads as a broken browser rather
