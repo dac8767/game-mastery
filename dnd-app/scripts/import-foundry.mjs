@@ -233,6 +233,15 @@ function formatCheck(kind, inner) {
     : `${dc}${ability} check`;
 }
 
+/**
+ * The formatting verb a data path may carry — `@labels.x capitalize`.
+ *
+ * Named explicitly rather than matched as "any following word": a path
+ * is far more often followed by ordinary prose, and `(\s+\w+)?` eats
+ * it. "using @item.level slots" became "using the spell's level".
+ */
+const VERB = "(?:\\s+(?:capitalize|format|lowercase|uppercase))?";
+
 /** Foundry biographies are HTML. The NPC table's fields are plain text. */
 function stripHtml(html) {
   if (typeof html !== "string" || !html) return undefined;
@@ -287,9 +296,9 @@ function stripHtml(html) {
     // than dropped; a data path IS its English reading, so this is not
     // inventing rules text. Anything else dotted goes, along with a
     // trailing formatting verb ("capitalize").
-    .replace(/@attributes\.spell\.dc(\s+\w+)?/g, "your spell save DC")
-    .replace(/@item\.level(\s+\w+)?/g, "the spell's level")
-    .replace(/@details\.level(\s+\w+)?/g, "your level")
+    .replace(new RegExp(`@attributes\\.spell\\.dc${VERB}`, "g"), "your spell save DC")
+    .replace(new RegExp(`@item\\.level${VERB}`, "g"), "the spell's level")
+    .replace(new RegExp(`@details\\.level${VERB}`, "g"), "your level")
     .replace(
       /@[A-Za-z][\w.]*(\s+(?:capitalize|format|lowercase|uppercase))?/g,
       ""
@@ -656,6 +665,72 @@ function targetLabels(target) {
   return { affectsText, templateText };
 }
 
+const ABBREV = {
+  str: "STR",
+  dex: "DEX",
+  con: "CON",
+  int: "INT",
+  wis: "WIS",
+  cha: "CHA",
+};
+
+/**
+ * The two cells a spell entry has that are not plain fields: what you
+ * roll against it, and what it does.
+ *
+ * Both live in `system.activities`, which is a keyed object rather than
+ * an array — dnd5e v4 moved them out of the spell's own fields, so a
+ * spell's save ability is two levels deeper than it looks.
+ */
+function spellActivity(s) {
+  const activities = Object.values(s.activities ?? {});
+  if (activities.length === 0) return {};
+
+  // The first activity is the spell's main effect; later ones are
+  // riders (a summon's extra attack, a scaling variant).
+  const a = activities[0];
+  const type = clean(a.type);
+
+  let attackSave;
+  if (type === "save") {
+    const abilities = (a.save?.ability ?? [])
+      .map((k) => ABBREV[k] ?? humanize(k))
+      .filter(Boolean);
+    attackSave = abilities.length ? `${abilities.join("/")} Save` : "Save";
+  } else if (type === "attack") {
+    const melee = clean(a.attack?.type?.value) === "melee";
+    attackSave = melee ? "Melee" : "Ranged";
+  }
+
+  const damageTypes = new Set();
+  for (const part of a.damage?.parts ?? []) {
+    for (const t of part.types ?? []) damageTypes.add(humanize(t));
+  }
+  if (type === "heal" && a.healing) damageTypes.add("Healing");
+
+  const damageEffect =
+    damageTypes.size > 0
+      ? [...damageTypes].join(", ")
+      : type && type !== "save" && type !== "attack"
+        ? humanize(type)
+        : undefined;
+
+  return { attackSave, damageEffect };
+}
+
+/** "150 ft." plus the shape it fills, when it fills one. */
+function spellArea(s) {
+  const t = s.target?.template ?? {};
+  const shape = clean(t.type);
+  const size = clean(t.size);
+  if (!shape || !size) return undefined;
+  const units = clean(t.units) || "ft";
+  // Level-scaling areas are roll formulas, same as level-scaling
+  // durations — there is no caster here to evaluate them against.
+  if (size.includes("@")) return `Varies (${humanize(shape)})`;
+  return `${size} ${units} ${humanize(shape)}`;
+}
+
 function spellToRow(doc) {
   const s = sys(doc);
   const p = spellProps(s);
@@ -684,6 +759,9 @@ function spellToRow(doc) {
     components: components || undefined,
     materials: clean(s.materials?.value) || undefined,
     duration: unitised(s.duration),
+    area: spellArea(s),
+    attackSave: spellActivity(s).attackSave,
+    damageEffect: spellActivity(s).damageEffect,
     ritual: p.ritual,
     concentration: p.concentration,
     description: stripHtml(rawDescription),
@@ -719,6 +797,71 @@ function abilityScores(abilities) {
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+/**
+ * A monster's traits and actions are EMBEDDED ITEMS on the actor, not
+ * fields — Foundry models "Fire Breath" as a feature the ettin owns.
+ *
+ * The split between the two is whether it has an activation: a trait is
+ * always true ("Two Heads"), an action is something taken on a turn
+ * ("Multiattack"). Legendary actions declare themselves.
+ */
+function monsterFeatures(doc) {
+  const traits = [];
+  const actions = [];
+  const legendary = [];
+
+  for (const item of doc.items ?? []) {
+    const is = sys(item);
+    const name = clean(item.name);
+    if (!name) continue;
+
+    const text = stripHtml(is.description?.value);
+    const entry = { name, text: text ?? "" };
+
+    const kind = clean(is.type?.value).toLowerCase();
+    if (kind === "legendary" || kind === "lair") {
+      legendary.push(entry);
+      continue;
+    }
+    // A weapon is always an attack; a feat is an action only if it has
+    // an activation cost.
+    const activated =
+      (item.type ?? "").toLowerCase() === "weapon" ||
+      Boolean(clean(is.activation?.type)) ||
+      Object.values(is.activities ?? {}).some((a) => clean(a.activation?.type));
+
+    (activated ? actions : traits).push(entry);
+  }
+
+  return { traits, actions, legendary };
+}
+
+/** dnd5e stores skill ranks per skill; only the trained ones read out. */
+function monsterSkills(skills) {
+  if (!skills || typeof skills !== "object") return undefined;
+  const parts = [];
+  for (const [key, val] of Object.entries(skills)) {
+    const rank = Number(val?.value);
+    if (!Number.isFinite(rank) || rank <= 0) continue;
+    parts.push(SKILLS[key] ?? humanize(key));
+  }
+  return parts.length > 0 ? parts.join(", ") : undefined;
+}
+
+function monsterSenses(senses) {
+  if (!senses || typeof senses !== "object") return undefined;
+  const units = clean(senses.units) || "ft";
+  const parts = ["darkvision", "blindsight", "tremorsense", "truesight"]
+    .map((k) => {
+      const n = Number(senses[k]);
+      return Number.isFinite(n) && n > 0 ? `${humanize(k)} ${n} ${units}` : null;
+    })
+    .filter(Boolean);
+  const special = clean(senses.special);
+  if (special) parts.push(special);
+  return parts.length > 0 ? parts.join(", ") : undefined;
+}
+
 function actorToMonster(doc) {
   const s = sys(doc);
   const details = s.details ?? {};
@@ -747,6 +890,30 @@ function actorToMonster(doc) {
     hp: Number.isFinite(hp) ? hp : undefined,
     speed: formatSpeed(attrs.movement),
     abilities: abilityScores(s.abilities),
+    skills: monsterSkills(s.skills),
+    senses: monsterSenses(attrs.senses ?? s.senses),
+    languages: (() => {
+      const langs = s.traits?.languages;
+      const list = [
+        ...(langs?.value ?? []).map((l) => humanize(l)),
+        clean(langs?.custom),
+      ].filter(Boolean);
+      return list.length > 0 ? list.join(", ") : undefined;
+    })(),
+    proficiencyBonus: Number.isFinite(Number(attrs.prof))
+      ? Number(attrs.prof)
+      : undefined,
+    xp: Number.isFinite(Number(details.xp?.value))
+      ? Number(details.xp.value)
+      : undefined,
+    ...(() => {
+      const f = monsterFeatures(doc);
+      return {
+        traits: f.traits.length ? f.traits : undefined,
+        actions: f.actions.length ? f.actions : undefined,
+        legendaryActions: f.legendary.length ? f.legendary : undefined,
+      };
+    })(),
     description:
       stripHtml(details.biography?.public) ??
       stripHtml(details.biography?.value),

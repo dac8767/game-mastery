@@ -742,33 +742,129 @@ export const unit = {
     check("formatCr: absent stays absent", look.formatCr(undefined) === null);
 
     check("formatSpellLevel: level 0 is a cantrip", look.formatSpellLevel(0) === "Cantrip");
-    check("formatSpellLevel: 1st", look.formatSpellLevel(1) === "1st level");
-    check("formatSpellLevel: 2nd", look.formatSpellLevel(2) === "2nd level");
-    check("formatSpellLevel: 3rd", look.formatSpellLevel(3) === "3rd level");
-    check("formatSpellLevel: 9th", look.formatSpellLevel(9) === "9th level");
+    check("formatSpellLevel: 1st", look.formatSpellLevel(1) === "1st");
+    check("formatSpellLevel: 2nd", look.formatSpellLevel(2) === "2nd");
+    check("formatSpellLevel: 3rd", look.formatSpellLevel(3) === "3rd");
+    check("formatSpellLevel: 9th", look.formatSpellLevel(9) === "9th");
     check(
       "formatSpellLevel: absent stays absent",
       look.formatSpellLevel(null) === null
     );
 
-    check(
-      "formatAbilities skips the scores an import did not carry",
-      look.formatAbilities({ str: 18, cha: 6 }) === "STR 18 · CHA 6"
-    );
-    check("formatAbilities: nothing at all", look.formatAbilities({}) === null);
-    check("formatAbilities: not an object", look.formatAbilities(null) === null);
+    // The stat block prints score and modifier; the modifier floors
+    // toward negative infinity, so an odd score below 10 must not round
+    // the wrong way — 9 is -1, not 0.
+    check("abilityModifier: 21 is +5", look.abilityModifier(21) === "+5");
+    check("abilityModifier: 10 is +0", look.abilityModifier(10) === "+0");
+    check("abilityModifier: 11 is +0", look.abilityModifier(11) === "+0");
+    check("abilityModifier: 9 is -1", look.abilityModifier(9) === "-1");
+    check("abilityModifier: 8 is -1", look.abilityModifier(8) === "-1");
+    check("abilityModifier: 6 is -2", look.abilityModifier(6) === "-2");
+    check("abilityModifier: 1 is -5", look.abilityModifier(1) === "-5");
+    check("abilityModifier: absent", look.abilityModifier(undefined) === null);
 
-    // Every kind's field list must resolve without throwing on a row
-    // that is mostly empty — a sparse import is the normal case.
+    const cells = look.abilityCells({ str: 21, dex: 8, cha: 8 });
+    check(
+      "abilityCells keeps the printed order and skips what is missing",
+      cells.map((c) => c.label).join() === "STR,DEX,CHA"
+    );
+    check("abilityCells carries the modifier", cells[0].modifier === "+5");
+    check("abilityCells: nothing at all", look.abilityCells({}).length === 0);
+    check("abilityCells: not an object", look.abilityCells(null).length === 0);
+
+    // Items: the italic line under the name.
+    check(
+      "itemSubtitle reads as prose, with rarity lower-cased mid-sentence",
+      look.itemSubtitle({
+        kind: "wondrous",
+        rarity: "Very Rare",
+        attunement: true,
+      }) === "Wondrous Item, very rare (requires attunement)"
+    );
+    check(
+      "itemSubtitle without attunement",
+      look.itemSubtitle({ kind: "weapon", rarity: "Rare" }) === "Weapon, rare"
+    );
+    check(
+      "itemSubtitle with no rarity at all",
+      look.itemSubtitle({ kind: "gear" }) === "Adventuring Gear"
+    );
+
+    // Spells: eight cells, always eight.
+    const sc = look.spellCells({ level: 8, school: "Necromancy" });
+    check("spellCells always has eight slots", sc.length === 8);
+    check(
+      "a missing cell keeps its slot rather than collapsing the grid",
+      sc.every((c) => typeof c.value === "string" && c.value.length > 0)
+    );
+    check(
+      "spellRangeArea joins the range and the shape it fills",
+      look.spellRangeArea({ range: "150 ft", area: "20 ft Sphere" }) ===
+        "150 ft (20 ft Sphere)"
+    );
+    check(
+      "spellRangeArea with only a range",
+      look.spellRangeArea({ range: "Touch" }) === "Touch"
+    );
+    check(
+      "concentration rides on the duration",
+      look.spellDuration({ duration: "1 minute", concentration: true }) ===
+        "Concentration, 1 minute"
+    );
+
+    // Monsters.
+    check(
+      "monsterSubtitle reads as the stat block prints it",
+      look.monsterSubtitle({
+        size: "Large",
+        creatureType: "Giant",
+        alignment: "Chaotic Neutral",
+      }) === "Large Giant, Chaotic Neutral"
+    );
+    check(
+      "monsterChallenge prints the XP beside the rating",
+      look.monsterChallenge({ cr: 8, xp: 3900 }) === "8 (3,900 XP)"
+    );
+    check(
+      "monsterChallenge without XP",
+      look.monsterChallenge({ cr: 0.25 }) === "1/4"
+    );
+    // A proficiency bonus is already a bonus. Running it through the
+    // ability-modifier formula would print +3 as +1.
+    check("signed: a positive bonus", look.signed(3) === "+3");
+    check("signed: zero", look.signed(0) === "+0");
+    check("signed: a negative bonus", look.signed(-2) === "-2");
+    check(
+      "the proficiency bonus prints signed",
+      look
+        .monsterTraitLines({ proficiencyBonus: 3 })
+        .some((l) => l.label === "Proficiency Bonus" && l.value === "+3")
+    );
+    check(
+      "monsterTraitLines omits what the import never carried",
+      look.monsterTraitLines({}).length === 0
+    );
+
+    check(
+      "features survives a row that carried none",
+      look.features(undefined).length === 0 && look.features("nope").length === 0
+    );
+    check(
+      "features drops an entry with no name",
+      look.features([{ text: "x" }, { name: "Two Heads", text: "y" }])
+        .length === 1
+    );
+
+    // Every kind's subtitle must resolve on a nearly empty row — a
+    // sparse import is the normal case, not the exception.
     for (const kind of ["spells", "items", "monsters"]) {
       let ok = true;
       try {
-        look.LOOKUP_FIELDS[kind].forEach((f) => f.get({ name: "x" }));
         look.lookupSubtitle(kind, { name: "x" });
       } catch {
         ok = false;
       }
-      check(`LOOKUP_FIELDS.${kind} survives a nearly empty row`, ok);
+      check(`lookupSubtitle.${kind} survives a nearly empty row`, ok);
     }
     check(
       "a cantrip's subtitle names it",
@@ -807,6 +903,7 @@ export const unit = {
               "[[/damage 8d6 fire average=false]] damage, and can be " +
               "&amp;Reference[Blinded apply=false] by it. Make an " +
               "[[/check ability=int skill=inv dc=@attributes.spell.dc]] check " +
+              "against @attributes.spell.dc, using @item.level slots " +
               "(see @UUID[Compendium.dnd5e.x.y]{Gameplay Toolbox}).</p>",
           },
         },
@@ -915,6 +1012,15 @@ export const unit = {
     check(
       "a labelled UUID enricher keeps only its label",
       /Gameplay Toolbox/.test(fb.description)
+    );
+    // A BARE data path, outside any enricher — the 29-occurrence case.
+    check(
+      "a bare @attributes.spell.dc is translated into words",
+      /against your spell save DC/.test(fb.description)
+    );
+    check(
+      "a bare @item.level is translated into words",
+      /using the spell's level slots/.test(fb.description)
     );
 
     check("ritual is read from properties", am.ritual === true);

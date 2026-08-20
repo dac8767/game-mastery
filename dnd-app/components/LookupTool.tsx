@@ -4,10 +4,16 @@ import { useEffect, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
-  LOOKUP_FIELDS,
   LOOKUP_TITLES,
   LookupKind,
+  abilityCells,
+  features,
+  itemFacts,
+  itemSubtitle,
   lookupSubtitle,
+  monsterSubtitle,
+  monsterTraitLines,
+  spellCells,
 } from "@/components/lookupFields";
 
 /**
@@ -137,6 +143,16 @@ export function LookupTool({ kind }: { kind: LookupKind }) {
   );
 }
 
+/**
+ * Three layouts, because the three kinds are read differently.
+ *
+ * An item is a subtitle and prose. A spell is a grid of eight labelled
+ * cells you scan without reading the labels, so a missing value keeps
+ * its slot rather than collapsing the grid. A monster is a stat block —
+ * rules between bands, ability scores in a row, traits and actions as
+ * named blocks — with its description underneath rather than inside it,
+ * because the block is reference and the description is story.
+ */
 function LookupDetail({
   kind,
   row,
@@ -144,33 +160,190 @@ function LookupDetail({
   kind: LookupKind;
   row: Record<string, unknown>;
 }) {
-  const fields = LOOKUP_FIELDS[kind]
-    .map((f) => ({ label: f.label, value: f.get(row) }))
-    .filter((f) => f.value !== null);
-
   const description =
     typeof row.description === "string" ? row.description : "";
+  const source = typeof row.source === "string" ? row.source : "";
 
   return (
-    <div className="lookup-detail">
-      <h2>{String(row.name)}</h2>
+    <article className={`lk lk-${kind}`}>
+      <h2 className="lk-name">{String(row.name)}</h2>
 
-      <dl className="lookup-stats">
-        {fields.map((f) => (
-          <div key={f.label}>
-            <dt>{f.label}</dt>
-            <dd>{f.value}</dd>
+      {kind === "items" && <ItemHead row={row} />}
+      {kind === "spells" && <SpellHead row={row} />}
+      {kind === "monsters" && <MonsterBlock row={row} />}
+
+      {description && (
+        <section className="lk-body">
+          {/* On a monster this is a section of its own, under the block:
+              the stat block is reference, the description is story. */}
+          {kind === "monsters" && <h3 className="lk-h">Description</h3>}
+          <Prose text={description} />
+        </section>
+      )}
+
+      {kind === "spells" && typeof row.materials === "string" && row.materials && (
+        <p className="lk-footnote">* — ({row.materials})</p>
+      )}
+
+      {source && <p className="lk-source">{source}</p>}
+    </article>
+  );
+}
+
+/** "Wondrous Item, very rare (requires attunement)", then cost/weight. */
+function ItemHead({ row }: { row: Record<string, unknown> }) {
+  const facts = itemFacts(row);
+  return (
+    <>
+      <p className="lk-sub">{itemSubtitle(row)}</p>
+      <div className="lk-rule" />
+      {facts.length > 0 && (
+        <dl className="lk-facts">
+          {facts.map((f) => (
+            <div key={f.label}>
+              <dt>{f.label}</dt>
+              <dd>{f.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </>
+  );
+}
+
+/** The eight-cell grid above a spell's text. */
+function SpellHead({ row }: { row: Record<string, unknown> }) {
+  const cells = spellCells(row);
+  const flags = [
+    row.ritual === true ? "Ritual" : null,
+    row.concentration === true ? "Concentration" : null,
+  ].filter(Boolean);
+
+  return (
+    <>
+      <div className="lk-rule accent" />
+      <dl className="lk-grid">
+        {cells.map((c) => (
+          <div key={c.label}>
+            <dt>{c.label}</dt>
+            <dd>{c.value}</dd>
           </div>
         ))}
       </dl>
-
-      {description && (
-        <div className="lookup-text">
-          {description.split(/\n{2,}/).map((para, i) => (
-            <p key={i}>{para}</p>
+      {flags.length > 0 && (
+        <div className="lk-tags">
+          {flags.map((f) => (
+            <span key={f} className="lk-tag">
+              {f}
+            </span>
           ))}
         </div>
       )}
+      <div className="lk-rule accent" />
+    </>
+  );
+}
+
+/** The stat block: bands separated by rules, in the printed order. */
+function MonsterBlock({ row }: { row: Record<string, unknown> }) {
+  const subtitle = monsterSubtitle(row);
+  const abilities = abilityCells(row.abilities);
+  const lines = monsterTraitLines(row);
+  const traits = features(row.traits);
+  const actions = features(row.actions);
+  const legendary = features(row.legendaryActions);
+
+  const defence = [
+    typeof row.ac === "number" ? { label: "Armor Class", value: row.ac } : null,
+    typeof row.hp === "number" ? { label: "Hit Points", value: row.hp } : null,
+    typeof row.speed === "string" && row.speed
+      ? { label: "Speed", value: row.speed }
+      : null,
+  ].filter(Boolean) as { label: string; value: string | number }[];
+
+  return (
+    <div className="lk-block">
+      {subtitle && <p className="lk-sub">{subtitle}</p>}
+
+      {defence.length > 0 && (
+        <>
+          <div className="lk-rule" />
+          <ul className="lk-lines">
+            {defence.map((d) => (
+              <li key={d.label}>
+                <span className="lk-key">{d.label}</span> {d.value}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {abilities.length > 0 && (
+        <>
+          <div className="lk-rule" />
+          <div className="lk-abilities">
+            {abilities.map((a) => (
+              <div key={a.key}>
+                <div className="lk-ab-label">{a.label}</div>
+                <div className="lk-ab-score">
+                  {a.score} <span className="lk-ab-mod">({a.modifier})</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {lines.length > 0 && (
+        <>
+          <div className="lk-rule" />
+          <ul className="lk-lines">
+            {lines.map((l) => (
+              <li key={l.label}>
+                <span className="lk-key">{l.label}</span> {l.value}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      <FeatureList title="Traits" items={traits} />
+      <FeatureList title="Actions" items={actions} />
+      <FeatureList title="Legendary Actions" items={legendary} />
     </div>
+  );
+}
+
+function FeatureList({
+  title,
+  items,
+}: {
+  title: string;
+  items: { name: string; text: string }[];
+}) {
+  if (items.length === 0) return null;
+  return (
+    <section className="lk-features">
+      <h3 className="lk-h">{title}</h3>
+      {items.map((f) => (
+        <div key={f.name} className="lk-feature">
+          <span className="lk-feature-name">{f.name}.</span>{" "}
+          <Prose text={f.text} inline />
+        </div>
+      ))}
+    </section>
+  );
+}
+
+/** Blank-line-separated paragraphs, the way the converter writes them. */
+function Prose({ text, inline }: { text: string; inline?: boolean }) {
+  const paras = text.split(/\n{2,}/).filter((p) => p.trim());
+  if (inline) return <>{paras.join(" ")}</>;
+  return (
+    <>
+      {paras.map((p, i) => (
+        <p key={i}>{p}</p>
+      ))}
+    </>
   );
 }

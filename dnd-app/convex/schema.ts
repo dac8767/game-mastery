@@ -228,6 +228,12 @@ export default defineSchema({
     components: v.optional(v.string()),
     materials: v.optional(v.string()),
     duration: v.optional(v.string()),
+    /** The shape it fills, when it fills one: "20 ft Sphere". */
+    area: v.optional(v.string()),
+    /** What you roll against it: "DEX Save", "Ranged". */
+    attackSave: v.optional(v.string()),
+    /** What it does: a damage type, or "Healing". */
+    damageEffect: v.optional(v.string()),
     ritual: v.boolean(),
     concentration: v.boolean(),
     description: v.optional(v.string()),
@@ -275,6 +281,27 @@ export default defineSchema({
         wis: v.optional(v.number()),
         cha: v.optional(v.number()),
       })
+    ),
+    skills: v.optional(v.string()),
+    senses: v.optional(v.string()),
+    languages: v.optional(v.string()),
+    proficiencyBonus: v.optional(v.number()),
+    xp: v.optional(v.number()),
+    /**
+     * Traits and actions are EMBEDDED items on a Foundry actor rather
+     * than fields, so they arrive as a list of named blocks. Stored as
+     * one array each rather than their own table: a stat block is read
+     * whole or not at all, and splitting it would turn one row into
+     * thirty.
+     */
+    traits: v.optional(
+      v.array(v.object({ name: v.string(), text: v.string() }))
+    ),
+    actions: v.optional(
+      v.array(v.object({ name: v.string(), text: v.string() }))
+    ),
+    legendaryActions: v.optional(
+      v.array(v.object({ name: v.string(), text: v.string() }))
     ),
     description: v.optional(v.string()),
     source: v.optional(v.string()),

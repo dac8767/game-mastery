@@ -3479,41 +3479,199 @@ button.cal-day:hover {
   padding: 0.5rem;
 }
 
-.lookup-detail h2 {
-  margin: 0 0 0.75rem;
-  font-size: 1.1rem;
+/* ---------- Lookup: the three detail layouts ---------- */
+
+.lk-name {
+  margin: 0 0 0.35rem;
+  font-size: 1.35rem;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.lk-sub {
+  margin: 0 0 0.6rem;
+  font-style: italic;
+  font-size: 0.88rem;
+  color: var(--text-dim);
+}
+
+.lk-rule {
+  height: 1px;
+  margin: 0.55rem 0;
+  background: var(--border);
+}
+
+.lk-rule.accent {
+  height: 2px;
+  background: var(--accent);
+  opacity: 0.65;
+}
+
+.lk-h {
+  margin: 1rem 0 0.5rem;
+  font-size: 1rem;
   color: var(--accent);
+  font-variant: small-caps;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.2rem;
 }
 
-.lookup-stats {
-  margin: 0 0 1rem;
-  display: grid;
-  gap: 0.3rem;
+.lk-body p,
+.lk-feature {
+  margin: 0 0 0.7rem;
+  font-size: 0.88rem;
+  line-height: 1.55;
 }
 
-.lookup-stats > div {
-  display: grid;
-  grid-template-columns: 8rem minmax(0, 1fr);
-  gap: 0.75rem;
+.lk-footnote {
+  margin: 0.4rem 0 0;
+  font-style: italic;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.lk-source {
+  margin: 1.25rem 0 0;
+  text-align: right;
+  font-style: italic;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+/* ---- items ---- */
+
+.lk-facts {
+  margin: 0 0 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.5rem;
+}
+
+.lk-facts > div {
+  display: flex;
+  gap: 0.4rem;
   align-items: baseline;
 }
 
-.lookup-stats dt {
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
+.lk-facts dt {
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-dim);
 }
 
-.lookup-stats dd {
+.lk-facts dd {
   margin: 0;
-  font-size: 0.88rem;
+  font-size: 0.86rem;
 }
 
-.lookup-text p {
-  margin: 0 0 0.7rem;
+/* ---- spells: eight cells, always eight ---- */
+
+.lk-grid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.6rem 1rem;
+}
+
+.lk-grid > div {
+  min-width: 0;
+}
+
+.lk-grid dt {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 0.1rem;
+}
+
+.lk-grid dd {
+  margin: 0;
   font-size: 0.88rem;
-  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.lk-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.6rem;
+}
+
+.lk-tag {
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.12rem 0.45rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ---- monsters: the stat block ---- */
+
+.lk-block {
+  padding: 0.1rem 0 0;
+}
+
+.lk-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.lk-lines li {
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.lk-key {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.lk-abilities {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.35rem;
+  text-align: center;
+}
+
+.lk-ab-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+
+.lk-ab-score {
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.lk-ab-mod {
+  color: var(--text-dim);
+}
+
+.lk-features {
+  margin-top: 0.4rem;
+}
+
+.lk-feature-name {
+  font-weight: 700;
+  font-style: italic;
+}
+
+@media (max-width: 1100px) {
+  .lk-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 900px) {
