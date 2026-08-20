@@ -23,6 +23,7 @@ import {
 } from "@/components/lookupFields";
 import { FilterState, applyFilters } from "@/components/lookupFilters";
 import { LookupFilters } from "@/components/LookupFilters";
+import { useLookupLayout } from "@/components/useLookupLayout";
 
 /**
  * The Lookup screens: spells, items, monsters.
@@ -48,7 +49,13 @@ import { LookupFilters } from "@/components/LookupFilters";
 /** How many rows the table draws before asking you to narrow down. */
 const MAX_ROWS = 300;
 
-export function LookupTool({ kind }: { kind: LookupKind }) {
+export function LookupTool({
+  kind,
+  campaignId,
+}: {
+  kind: LookupKind;
+  campaignId: Id<"campaigns">;
+}) {
   const [filters, setFilters] = useState<FilterState>({});
   const [sort, setSort] = useState<{ key: string; desc: boolean }>({
     key: "name",
@@ -77,8 +84,44 @@ export function LookupTool({ kind }: { kind: LookupKind }) {
   );
   const shown = matched.slice(0, MAX_ROWS);
 
+  const layout = useLookupLayout(campaignId, kind);
+
   const columns = LOOKUP_COLUMNS[kind];
-  const template = columnTemplate(kind);
+  // ONE template, shared by the header and every row. They are separate
+  // grids, so anything that changes a track has to change both or the
+  // columns walk away from their headings.
+  const template = columnTemplate(kind, layout.widths);
+
+  /**
+   * Drag a column's right-hand border.
+   *
+   * The starting width is measured off the rendered header cell rather
+   * than read from stored widths: a column nobody has touched is a `fr`
+   * or a `rem`, and there is no pixel value to start from until the
+   * browser has laid it out.
+   */
+  const startResize = (key: string, event: React.PointerEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const cell = event.currentTarget.parentElement;
+    if (!cell) return;
+
+    const startX = event.clientX;
+    const startWidth = cell.getBoundingClientRect().width;
+
+    const onMove = (e: PointerEvent) => {
+      layout.resize(key, startWidth + (e.clientX - startX));
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.classList.remove("col-resizing");
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    document.body.classList.add("col-resizing");
+  };
 
   const toggle = (id: string) =>
     setOpen((prev) => {
@@ -138,19 +181,32 @@ export function LookupTool({ kind }: { kind: LookupKind }) {
               style={{ ["--lk-cols" as string]: template }}
             >
               {columns.map((c) => (
-                <button
-                  key={c.key}
-                  type="button"
-                  className={`lk-th${c.align === "center" ? " center" : ""}${
-                    sort.key === c.key ? " sorted" : ""
-                  }`}
-                  onClick={() => sortBy(c.key)}
-                >
-                  {c.label}
-                  <span className="lk-arrow">
-                    {sort.key === c.key ? (sort.desc ? "▾" : "▴") : "⇅"}
-                  </span>
-                </button>
+                <span key={c.key} className="lk-th-cell">
+                  <button
+                    type="button"
+                    className={`lk-th${c.align === "center" ? " center" : ""}${
+                      sort.key === c.key ? " sorted" : ""
+                    }`}
+                    onClick={() => sortBy(c.key)}
+                  >
+                    <span className="lk-th-label">{c.label}</span>
+                    <span className="lk-arrow">
+                      {sort.key === c.key ? (sort.desc ? "▾" : "▴") : "⇅"}
+                    </span>
+                  </button>
+                  {/* A separate element rather than an edge of the
+                      button: the button sorts on click, and a drag that
+                      began on it would sort when you let go. */}
+                  <span
+                    className="lk-col-resize"
+                    role="separator"
+                    aria-orientation="vertical"
+                    aria-label={`Resize ${c.label}`}
+                    title="Drag to resize · double-click to reset"
+                    onPointerDown={(e) => startResize(c.key, e)}
+                    onDoubleClick={() => layout.reset(c.key)}
+                  />
+                </span>
               ))}
               <span />
             </div>

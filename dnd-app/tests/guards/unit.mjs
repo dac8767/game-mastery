@@ -881,12 +881,74 @@ export const unit = {
       check(`${kind} columns survive an empty row`, ok);
       // The grid template must have a track per column plus the expand
       // button, or the header and the rows stop lining up.
+      const tracks = (t) => t.trim().split(/\s+(?![^(]*\))/).length;
       check(
         `${kind} template has a track per column plus the button`,
-        look.columnTemplate(kind).trim().split(/\s+(?![^(]*\))/).length >=
-          cols.length + 1
+        tracks(look.columnTemplate(kind)) >= cols.length + 1
+      );
+
+      // Resizing must never change the NUMBER of tracks. The header and
+      // the rows are separate grids that only line up because they are
+      // handed the same template; a width that added or dropped a track
+      // would slide every column out from under its heading.
+      const pinned = Object.fromEntries(cols.map((c) => [c.key, 140]));
+      check(
+        `${kind} keeps its track count when every column is resized`,
+        tracks(look.columnTemplate(kind, pinned)) ===
+          tracks(look.columnTemplate(kind))
+      );
+      check(
+        `${kind} keeps its track count when one column is resized`,
+        tracks(look.columnTemplate(kind, { [cols[0].key]: 140 })) ===
+          tracks(look.columnTemplate(kind))
+      );
+      // Pinning everything leaves nothing to absorb the leftover width,
+      // so the button's track has to stretch — otherwise the row stops
+      // short of the table's edge with the button stranded mid-row.
+      check(
+        `${kind} gives the slack to the button once nothing else flexes`,
+        look.columnTemplate(kind, pinned).endsWith("minmax(2.25rem, 1fr)")
+      );
+      check(
+        `${kind} leaves the button track alone while a column still flexes`,
+        look.columnTemplate(kind).endsWith(" 2.25rem")
       );
     }
+
+    // A resized column is a pixel track; an untouched one keeps what it
+    // was declared with, so an account that has never dragged anything
+    // sees the designed table.
+    const withWidth = look.columnTemplate("items", { rarity: 200 });
+    check("a resized column becomes a pixel track", withWidth.includes("200px"));
+    check(
+      "an untouched column keeps its declared track",
+      withWidth.includes("minmax(11rem, 2fr)")
+    );
+    check(
+      "a width below the minimum is clamped, not obeyed",
+      look
+        .columnTemplate("items", { rarity: 4 })
+        .includes(`${look.MIN_LOOKUP_COL}px`)
+    );
+    check(
+      "a fractional drag lands on a whole pixel",
+      look.columnTemplate("items", { rarity: 199.6 }).includes("200px")
+    );
+    // Nothing here may throw on junk: these widths come back from a
+    // stored document, which is the one input this code cannot type-check.
+    check(
+      "a NaN width is ignored rather than written into the template",
+      !look.columnTemplate("items", { rarity: Number.NaN }).includes("NaN")
+    );
+    check(
+      "a width for a column that no longer exists is harmless",
+      look.columnTemplate("items", { gone: 300 }) ===
+        look.columnTemplate("items")
+    );
+    check(
+      "no widths at all is the same as none",
+      look.columnTemplate("items", null) === look.columnTemplate("items")
+    );
 
     // Sorting is by COLUMN now, and a column's display form is not
     // always its order: CR "1/4" sits between "1/8" and "1/2" only as a

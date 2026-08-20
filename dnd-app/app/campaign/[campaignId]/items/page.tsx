@@ -21,7 +21,7 @@ export default function ItemsPage() {
       </Unauthenticated>
       <Authenticated>
         <AppShell campaignId={campaignId} breadcrumb="Items">
-          <LookupTool kind="items" />
+          <LookupTool kind="items" campaignId={campaignId} />
         </AppShell>
       </Authenticated>
     </>

@@ -21,7 +21,7 @@ export default function MonstersPage() {
       </Unauthenticated>
       <Authenticated>
         <AppShell campaignId={campaignId} breadcrumb="Monsters">
-          <LookupTool kind="monsters" />
+          <LookupTool kind="monsters" campaignId={campaignId} />
         </AppShell>
       </Authenticated>
     </>

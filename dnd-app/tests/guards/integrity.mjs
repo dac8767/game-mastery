@@ -472,6 +472,33 @@ export const integrity = {
       }
     }
 
+    // ---- the header and the rows must share one grid template -------
+    // They are two separate grids that line up only because both are
+    // handed the same value. Nothing in CSS or TypeScript connects them:
+    // give the header the resized template and the rows the declared
+    // one and every column sits under the wrong heading, with no error
+    // anywhere and a table that simply reads wrong.
+    const lookupToolSrc = read("components", "LookupTool.tsx");
+    const cols = [
+      ...lookupToolSrc.matchAll(
+        /\["--lk-cols" as string\]:\s*([A-Za-z_$][\w$]*)/g
+      ),
+    ].map((m) => m[1]);
+    if (cols.length < 2) {
+      throw new Error(
+        `expected --lk-cols to be set for both the header and the rows, ` +
+          `found ${cols.length} in LookupTool.tsx`
+      );
+    }
+    if (new Set(cols).size !== 1) {
+      problems.push(
+        `LookupTool sets --lk-cols from [${[...new Set(cols)].join(", ")}] — ` +
+          "the header and the rows are separate grids and must be given " +
+          "the same template or the columns drift out from under their " +
+          "headings"
+      );
+    }
+
     // ---- the artwork mirror must be a path the map server serves ----
     // This is the failure it exists for: the importer stored Foundry's
     // own "icons/..." paths, the fetcher wrote files in Foundry's own
@@ -520,7 +547,10 @@ export const integrity = {
           `scripts/${file} does not import FOUNDRY_MIRROR from mirror.mjs`
         );
       }
-      if (stripComments(src).includes(`"${mirror}`)) {
+      // The whole prefix, not a string that merely starts with it —
+      // "foundry-import" is the importer's default output directory and
+      // has nothing to do with the mirror.
+      if (new RegExp(`"${mirror}(/|")`).test(stripComments(src))) {
         problems.push(
           `scripts/${file} spells out "${mirror}" instead of using ` +
             "FOUNDRY_MIRROR — the two copies can drift"

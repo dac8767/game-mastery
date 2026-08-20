@@ -396,10 +396,43 @@ export const LOOKUP_COLUMNS: Record<LookupKind, LookupColumn[]> = {
   ],
 };
 
-/** The grid template a kind's header and rows both use. */
-export function columnTemplate(kind: LookupKind): string {
-  // The trailing track is the expand/collapse button.
-  return `${LOOKUP_COLUMNS[kind].map((c) => c.width).join(" ")} 2.25rem`;
+/**
+ * Narrower than this and a column is a sliver you cannot aim the mouse
+ * at to widen again. Dragged past it, it stops.
+ */
+export const MIN_LOOKUP_COL = 56;
+
+/**
+ * The grid template a kind's header and rows both use.
+ *
+ * `widths` are the pixel widths someone has dragged a column to. A
+ * column with no entry keeps its declared track, so the table an
+ * untouched account sees is the designed one and a resize is a
+ * per-column override rather than a whole layout.
+ */
+export function columnTemplate(
+  kind: LookupKind,
+  widths?: Record<string, number> | null
+): string {
+  const tracks = LOOKUP_COLUMNS[kind].map((c) => {
+    const w = widths?.[c.key];
+    return typeof w === "number" && Number.isFinite(w)
+      ? `${Math.max(MIN_LOOKUP_COL, Math.round(w))}px`
+      : c.width;
+  });
+
+  // The trailing track is the expand/collapse button. It absorbs the
+  // slack once nothing else can: the name column is normally `2fr` and
+  // soaks up the leftover width, but pinning it to pixels leaves every
+  // track fixed, and the row would then stop short of the table's right
+  // edge with the button stranded in the middle of it. The button is
+  // `justify-self: end`, so widening its track keeps it against the
+  // edge where it belongs.
+  const button = tracks.some((t) => t.includes("fr"))
+    ? "2.25rem"
+    : "minmax(2.25rem, 1fr)";
+
+  return `${tracks.join(" ")} ${button}`;
 }
 
 /**

@@ -21,7 +21,7 @@ export default function SpellsPage() {
       </Unauthenticated>
       <Authenticated>
         <AppShell campaignId={campaignId} breadcrumb="Spells">
-          <LookupTool kind="spells" />
+          <LookupTool kind="spells" campaignId={campaignId} />
         </AppShell>
       </Authenticated>
     </>

@@ -3903,10 +3903,20 @@ button.cal-day:hover {
   border-bottom: 1px solid var(--border);
 }
 
+/* A header cell is the sort button plus the drag handle on its right
+   border, so the handle needs something positioned to sit against. */
+.lk-th-cell {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+
 .lk-th {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
+  flex: 1;
+  min-width: 0;
   padding: 0;
   font-size: 0.66rem;
   font-weight: 700;
@@ -3916,6 +3926,41 @@ button.cal-day:hover {
   background: none;
   border: none;
   text-align: left;
+}
+
+/* Narrowed past its heading, a column truncates rather than pushing its
+   neighbour along — the grid tracks are the layout, not the text. */
+.lk-th-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The handle fills the grid gap, so it is grabbable without overlapping
+   either column's text. */
+.lk-col-resize {
+  position: absolute;
+  top: 0;
+  right: -0.75rem;
+  width: 0.75rem;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.lk-col-resize::after {
+  content: "";
+  position: absolute;
+  top: 15%;
+  left: 50%;
+  width: 1px;
+  height: 70%;
+  background: var(--border);
+}
+
+.lk-col-resize:hover::after {
+  background: var(--accent);
+  width: 2px;
 }
 
 .lk-th:hover {
