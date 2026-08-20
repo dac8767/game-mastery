@@ -5,51 +5,55 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import {
+  LOOKUP_COLUMNS,
   LOOKUP_TITLES,
   LookupKind,
   abilityCells,
+  columnTemplate,
   features,
   itemFacts,
   itemSubtitle,
-  lookupSubtitle,
   monsterSubtitle,
   monsterTraitLines,
+  sortByColumn,
   spellCells,
 } from "@/components/lookupFields";
-import {
-  FilterState,
-  SORTS,
-  applyFilters,
-  sortRows,
-} from "@/components/lookupFilters";
+import { FilterState, applyFilters } from "@/components/lookupFilters";
 import { LookupFilters } from "@/components/LookupFilters";
 
 /**
  * The Lookup screens: spells, items, monsters.
  *
- * One component for all three. They differ in which index they read,
- * which filters they offer and how a row prints — and all three of
- * those are declarations elsewhere, so this file is the shape of the
- * screen rather than three screens in a trench coat.
+ * A full-width table with sortable columns, where a row expands
+ * DOWNWARD in place to show the whole entry. Expanding in the list
+ * rather than opening a side panel is what lets you compare two things
+ * — open both, and they sit in the table with the rows you were
+ * scanning still around them.
+ *
+ * One component for all three kinds. The columns, the filters and the
+ * expanded layout are all declarations elsewhere, so this file is the
+ * shape of the screen rather than three screens in a trench coat.
  *
  * The whole lightweight index is fetched once and filtered in memory.
  * That is the cheap option here rather than the expensive one, because
  * this data has no write path and a subscription to it delivers once
- * and then sits silent — see convex/lookup.ts. It also means every
- * filter is free: no query per keystroke, and no filter that cannot be
- * expressed because no index backs it.
- *
- * The full row — description, stat block — is fetched by id only when
- * something is opened.
+ * and then sits silent — see convex/lookup.ts. The full row, with its
+ * description and stat block, is fetched by id only when a row is
+ * actually opened.
  */
 
-/** How many results the list draws before asking you to narrow down. */
+/** How many rows the table draws before asking you to narrow down. */
 const MAX_ROWS = 300;
 
 export function LookupTool({ kind }: { kind: LookupKind }) {
   const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState("name");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [sort, setSort] = useState<{ key: string; desc: boolean }>({
+    key: "name",
+    desc: false,
+  });
+  // A Set rather than one id: comparing two spells means having both
+  // open at once, which a single-selection panel cannot do.
+  const [open, setOpen] = useState<Set<string>>(new Set());
 
   const spells = useQuery(api.lookup.indexSpells, kind === "spells" ? {} : "skip");
   const items = useQuery(api.lookup.indexItems, kind === "items" ? {} : "skip");
@@ -65,33 +69,28 @@ export function LookupTool({ kind }: { kind: LookupKind }) {
   );
 
   const matched = useMemo(
-    () => sortRows(kind, applyFilters(kind, all, filters), sort),
+    () => sortByColumn(kind, applyFilters(kind, all, filters), sort.key, sort.desc),
     [kind, all, filters, sort]
   );
   const shown = matched.slice(0, MAX_ROWS);
 
-  // Fetched only for what is open. Three hooks rather than one, because
-  // a Convex query reference is static and the id is typed per table.
-  const spell = useQuery(
-    api.lookup.getSpell,
-    kind === "spells" && selectedId
-      ? { id: selectedId as Id<"spells"> }
-      : "skip"
-  );
-  const item = useQuery(
-    api.lookup.getItem,
-    kind === "items" && selectedId ? { id: selectedId as Id<"items"> } : "skip"
-  );
-  const monster = useQuery(
-    api.lookup.getMonster,
-    kind === "monsters" && selectedId
-      ? { id: selectedId as Id<"monsters"> }
-      : "skip"
-  );
-  const selected = (kind === "spells" ? spell : kind === "items" ? item : monster) as
-    | Record<string, unknown>
-    | null
-    | undefined;
+  const columns = LOOKUP_COLUMNS[kind];
+  const template = columnTemplate(kind);
+
+  const toggle = (id: string) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const sortBy = (key: string) =>
+    setSort((prev) =>
+      // Clicking the sorted column reverses it; clicking another starts
+      // that one ascending, which is what a first click should mean.
+      prev.key === key ? { key, desc: !prev.desc } : { key, desc: false }
+    );
 
   const loading = index === undefined;
   const empty = !loading && all.length === 0;
@@ -117,76 +116,130 @@ export function LookupTool({ kind }: { kind: LookupKind }) {
             total={all.length}
           />
 
-          <div className="lookup-body">
-            <div className="lookup-side">
-              <div className="lookup-sort">
-                <span className="lf-label">Sort</span>
-                <select
-                  className="lf-input"
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value)}
+          <div className="lk-table">
+            <div
+              className="lk-head"
+              style={{ ["--lk-cols" as string]: template }}
+            >
+              {columns.map((c) => (
+                <button
+                  key={c.key}
+                  type="button"
+                  className={`lk-th${c.align === "center" ? " center" : ""}${
+                    sort.key === c.key ? " sorted" : ""
+                  }`}
+                  onClick={() => sortBy(c.key)}
                 >
-                  {SORTS[kind].map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="lookup-list">
-                {shown.length === 0 && (
-                  <p className="muted lookup-hint">
-                    Nothing matches those filters.
-                  </p>
-                )}
-                {shown.map((row) => {
-                  const id = String(row._id);
-                  const subtitle = lookupSubtitle(kind, row);
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      className={`lookup-row${
-                        selectedId === id ? " selected" : ""
-                      }`}
-                      onClick={() => setSelectedId(id)}
-                    >
-                      <span className="lookup-row-name">
-                        {String(row.name)}
-                      </span>
-                      {subtitle && (
-                        <span className="lookup-row-sub">{subtitle}</span>
-                      )}
-                    </button>
-                  );
-                })}
-                {/* Never truncate silently: a list that stops at 300
-                    with no explanation reads as missing data. */}
-                {matched.length > shown.length && (
-                  <p className="muted lookup-hint">
-                    Showing {shown.length} of {matched.length}. Narrow the
-                    filters to see the rest.
-                  </p>
-                )}
-              </div>
+                  {c.label}
+                  <span className="lk-arrow">
+                    {sort.key === c.key ? (sort.desc ? "▾" : "▴") : "⇅"}
+                  </span>
+                </button>
+              ))}
+              <span />
             </div>
 
-            <aside className="lookup-panel">
-              {selectedId && selected === undefined && (
-                <p className="muted lookup-hint">Loading…</p>
+            <div className="lk-rows">
+              {shown.length === 0 && (
+                <p className="muted lookup-hint">
+                  Nothing matches those filters.
+                </p>
               )}
-              {selected ? (
-                <LookupDetail kind={kind} row={selected} />
-              ) : (
-                !selectedId && (
-                  <p className="muted lookup-hint">Pick one to read it.</p>
-                )
+
+              {shown.map((row) => {
+                const id = String(row._id);
+                const isOpen = open.has(id);
+                return (
+                  <div
+                    key={id}
+                    className={`lk-entry${isOpen ? " open" : ""}`}
+                  >
+                    <div
+                      className="lk-tr"
+                      style={{ ["--lk-cols" as string]: template }}
+                      onClick={() => toggle(id)}
+                    >
+                      {columns.map((c) => (
+                        <span
+                          key={c.key}
+                          className={`lk-td${
+                            c.align === "center" ? " center" : ""
+                          }${c.primary ? " primary" : ""}`}
+                        >
+                          <span className="lk-cell">{c.get(row) ?? "—"}</span>
+                          {c.primary && typeof row.source === "string" && (
+                            <span className="lk-cell-sub">{row.source}</span>
+                          )}
+                        </span>
+                      ))}
+                      <button
+                        type="button"
+                        className="lk-expand"
+                        aria-label={isOpen ? "Collapse" : "Expand"}
+                        aria-expanded={isOpen}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggle(id);
+                        }}
+                      >
+                        {isOpen ? "−" : "+"}
+                      </button>
+                    </div>
+
+                    {isOpen && <ExpandedRow kind={kind} id={id} />}
+                  </div>
+                );
+              })}
+
+              {/* Never truncate silently: a table that stops at 300 with
+                  no explanation reads as missing data. */}
+              {matched.length > shown.length && (
+                <p className="muted lookup-hint">
+                  Showing {shown.length} of {matched.length}. Narrow the filters
+                  to see the rest.
+                </p>
               )}
-            </aside>
+            </div>
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * The opened row.
+ *
+ * Its own component so the fetch is scoped to it: closing the row
+ * unmounts the hook and the subscription with it, rather than leaving
+ * one query per row you have ever looked at.
+ */
+function ExpandedRow({ kind, id }: { kind: LookupKind; id: string }) {
+  const spell = useQuery(
+    api.lookup.getSpell,
+    kind === "spells" ? { id: id as Id<"spells"> } : "skip"
+  );
+  const item = useQuery(
+    api.lookup.getItem,
+    kind === "items" ? { id: id as Id<"items"> } : "skip"
+  );
+  const monster = useQuery(
+    api.lookup.getMonster,
+    kind === "monsters" ? { id: id as Id<"monsters"> } : "skip"
+  );
+
+  const row = (kind === "spells" ? spell : kind === "items" ? item : monster) as
+    | Record<string, unknown>
+    | null
+    | undefined;
+
+  return (
+    <div className="lk-panel">
+      {row === undefined && <p className="muted lookup-hint">Loading…</p>}
+      {row === null && (
+        <p className="muted lookup-hint">That entry is no longer there.</p>
+      )}
+      {row && <LookupDetail kind={kind} row={row} />}
     </div>
   );
 }

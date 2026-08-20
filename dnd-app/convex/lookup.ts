@@ -115,6 +115,7 @@ export const indexMonsters = query({
         size: r.size ?? null,
         creatureType: r.creatureType ?? null,
         alignment: r.alignment ?? null,
+        habitat: r.habitat ?? null,
         cr: r.cr ?? null,
         ac: r.ac ?? null,
         hp: r.hp ?? null,

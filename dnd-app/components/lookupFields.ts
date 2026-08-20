@@ -241,24 +241,154 @@ export function features(raw: unknown): Feature[] {
 }
 
 // ---------------------------------------------------------------------
-// The results list
+// The table
 // ---------------------------------------------------------------------
 
-/** The one line under a name in the results list. */
-export function lookupSubtitle(
-  kind: LookupKind,
-  row: Record<string, unknown>
-): string {
-  if (kind === "spells") {
-    const level = formatSpellLevel(row.level);
-    return [level === "Cantrip" ? level : level && `Level ${level}`, str(row.school)]
-      .filter(Boolean)
-      .join(" · ");
-  }
-  if (kind === "items") return itemSubtitle(row);
+export type Row = Record<string, unknown>;
 
-  const cr = formatCr(row.cr);
-  return [monsterSubtitle(row) || null, cr && `CR ${cr}`]
-    .filter(Boolean)
-    .join(" · ");
+export interface LookupColumn {
+  key: string;
+  label: string;
+  /** Display text. null prints as an em dash rather than a gap. */
+  get: (row: Row) => string | null;
+  /**
+   * What this column sorts on. Absent means "sort by what it shows",
+   * which is right for text and wrong for anything whose display form
+   * is not its order — a CR of "1/4" sorts between "1/8" and "1/2" only
+   * as a number.
+   */
+  sort?: (row: Row) => number | string;
+  /** A CSS grid track. */
+  width: string;
+  /** The name column: bigger, and carries the source underneath. */
+  primary?: boolean;
+  align?: "center";
+}
+
+const RARITY_ORDER = [
+  "Common",
+  "Uncommon",
+  "Rare",
+  "Very Rare",
+  "Legendary",
+  "Artifact",
+];
+
+/** Sorts last rather than first — unknown is not the same as lowest. */
+const LAST = Number.POSITIVE_INFINITY;
+
+const NAME_COLUMN: LookupColumn = {
+  key: "name",
+  label: "Name",
+  width: "minmax(11rem, 2fr)",
+  primary: true,
+  get: (r) => str(r.name),
+};
+
+export const LOOKUP_COLUMNS: Record<LookupKind, LookupColumn[]> = {
+  monsters: [
+    {
+      key: "cr",
+      label: "CR",
+      width: "4.5rem",
+      align: "center",
+      get: (r) => formatCr(r.cr),
+      sort: (r) => (typeof r.cr === "number" ? r.cr : LAST),
+    },
+    NAME_COLUMN,
+    { key: "creatureType", label: "Type", width: "8rem", get: (r) => str(r.creatureType) },
+    { key: "size", label: "Size", width: "7rem", get: (r) => str(r.size) },
+    { key: "alignment", label: "Alignment", width: "9rem", get: (r) => str(r.alignment) },
+    { key: "habitat", label: "Habitat", width: "10rem", get: (r) => str(r.habitat) },
+    { key: "hp", label: "HP", width: "4.5rem", align: "center", get: (r) => str(r.hp), sort: (r) => (typeof r.hp === "number" ? r.hp : LAST) },
+    { key: "ac", label: "AC", width: "4.5rem", align: "center", get: (r) => str(r.ac), sort: (r) => (typeof r.ac === "number" ? r.ac : LAST) },
+  ],
+  spells: [
+    {
+      key: "level",
+      label: "Level",
+      width: "5rem",
+      align: "center",
+      get: (r) => formatSpellLevel(r.level),
+      sort: (r) => (typeof r.level === "number" ? r.level : LAST),
+    },
+    NAME_COLUMN,
+    { key: "school", label: "School", width: "9rem", get: (r) => str(r.school) },
+    { key: "castingTime", label: "Casting Time", width: "8rem", get: (r) => str(r.castingTime) },
+    { key: "range", label: "Range/Area", width: "10rem", get: (r) => spellRangeArea(r) },
+    { key: "components", label: "Components", width: "7rem", get: (r) => str(r.components) },
+    { key: "duration", label: "Duration", width: "9rem", get: (r) => spellDuration(r) },
+  ],
+  items: [
+    NAME_COLUMN,
+    {
+      key: "kind",
+      label: "Category",
+      width: "9rem",
+      get: (r) => ITEM_KIND_LABELS[String(r.kind ?? "")] ?? str(r.kind),
+    },
+    {
+      key: "rarity",
+      label: "Rarity",
+      width: "8rem",
+      get: (r) => str(r.rarity),
+      sort: (r) => {
+        const i = RARITY_ORDER.indexOf(String(r.rarity ?? ""));
+        return i === -1 ? LAST : i;
+      },
+    },
+    {
+      key: "attunement",
+      label: "Attune",
+      width: "5.5rem",
+      align: "center",
+      get: (r) => (r.attunement === true ? "Yes" : null),
+      sort: (r) => (r.attunement === true ? 0 : 1),
+    },
+    { key: "price", label: "Cost", width: "7rem", get: (r) => str(r.price) },
+    {
+      key: "weight",
+      label: "Weight",
+      width: "6rem",
+      align: "center",
+      get: (r) => (typeof r.weight === "number" ? `${r.weight} lb` : null),
+      sort: (r) => (typeof r.weight === "number" ? r.weight : LAST),
+    },
+  ],
+};
+
+/** The grid template a kind's header and rows both use. */
+export function columnTemplate(kind: LookupKind): string {
+  // The trailing track is the expand/collapse button.
+  return `${LOOKUP_COLUMNS[kind].map((c) => c.width).join(" ")} 2.25rem`;
+}
+
+/**
+ * Sort by a column, ascending or descending.
+ *
+ * Name is always the tiebreak, so two monsters at CR 8 keep a stable,
+ * meaningful order rather than whatever the table happened to return.
+ */
+export function sortByColumn(
+  kind: LookupKind,
+  rows: Row[],
+  key: string,
+  descending: boolean
+): Row[] {
+  const col = LOOKUP_COLUMNS[kind].find((c) => c.key === key);
+  const name = (r: Row) => String(r.name ?? "").toLowerCase();
+  const of = (r: Row) => {
+    if (!col) return name(r);
+    if (col.sort) return col.sort(r);
+    return (col.get(r) ?? "").toLowerCase();
+  };
+
+  const dir = descending ? -1 : 1;
+  return rows.slice().sort((a, b) => {
+    const x = of(a);
+    const y = of(b);
+    if (x < y) return -dir;
+    if (x > y) return dir;
+    return name(a).localeCompare(name(b));
+  });
 }

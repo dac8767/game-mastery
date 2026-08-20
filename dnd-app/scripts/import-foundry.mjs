@@ -811,6 +811,13 @@ function monsterFeatures(doc) {
   const legendary = [];
 
   for (const item of doc.items ?? []) {
+    const type = (item.type ?? "").toLowerCase();
+    // A stat block's Traits and Actions come from FEATURES and the
+    // weapons they attack with. The rest of an actor's items are
+    // inventory: a bugbear's chain shirt is why its AC is 15, not a
+    // trait called "Chain Shirt".
+    if (type !== "feat" && type !== "weapon") continue;
+
     const is = sys(item);
     const name = clean(item.name);
     if (!name) continue;
@@ -818,8 +825,21 @@ function monsterFeatures(doc) {
     const text = stripHtml(is.description?.value);
     const entry = { name, text: text ?? "" };
 
+    // Legendary actions declare themselves through their ACTIVATION
+    // cost rather than a subtype — Derek's export has no "legendary"
+    // feat subtype at all, and 82 features with a legendary activation.
+    const activations = [
+      clean(is.activation?.type),
+      ...Object.values(is.activities ?? {}).map((a) =>
+        clean(a.activation?.type)
+      ),
+    ];
     const kind = clean(is.type?.value).toLowerCase();
-    if (kind === "legendary" || kind === "lair") {
+    if (
+      kind === "legendary" ||
+      kind === "lair" ||
+      activations.some((t) => t === "legendary" || t === "lair")
+    ) {
       legendary.push(entry);
       continue;
     }
@@ -827,8 +847,7 @@ function monsterFeatures(doc) {
     // an activation cost.
     const activated =
       (item.type ?? "").toLowerCase() === "weapon" ||
-      Boolean(clean(is.activation?.type)) ||
-      Object.values(is.activities ?? {}).some((a) => clean(a.activation?.type));
+      activations.some(Boolean);
 
     (activated ? actions : traits).push(entry);
   }
@@ -850,10 +869,14 @@ function monsterSkills(skills) {
 
 function monsterSenses(senses) {
   if (!senses || typeof senses !== "object") return undefined;
+  // dnd5e nests the distances under `.ranges`; reading them off the
+  // senses object directly finds nothing, which is how 393 monsters
+  // arrived with no senses at all.
+  const ranges = senses.ranges ?? senses;
   const units = clean(senses.units) || "ft";
   const parts = ["darkvision", "blindsight", "tremorsense", "truesight"]
     .map((k) => {
-      const n = Number(senses[k]);
+      const n = Number(ranges[k]);
       return Number.isFinite(n) && n > 0 ? `${humanize(k)} ${n} ${units}` : null;
     })
     .filter(Boolean);
@@ -862,13 +885,92 @@ function monsterSenses(senses) {
   return parts.length > 0 ? parts.join(", ") : undefined;
 }
 
+/**
+ * Proficiency bonus and XP are DERIVED from CR, not stored.
+ *
+ * Foundry computes both when it prepares an actor, so `toObject()` —
+ * which is source data — has neither. The 5e tables are fixed, so they
+ * are computed here rather than left blank.
+ */
+function proficiencyFor(cr) {
+  if (!Number.isFinite(cr)) return undefined;
+  if (cr < 1) return 2;
+  return Math.max(2, Math.ceil(cr / 4) + 1);
+}
+
+/** The XP-by-CR table, verbatim. */
+const XP_BY_CR = {
+  0: 10, 0.125: 25, 0.25: 50, 0.5: 100,
+  1: 200, 2: 450, 3: 700, 4: 1100, 5: 1800, 6: 2300, 7: 2900, 8: 3900,
+  9: 5000, 10: 5900, 11: 7200, 12: 8400, 13: 10000, 14: 11500, 15: 13000,
+  16: 15000, 17: 18000, 18: 20000, 19: 22000, 20: 25000, 21: 33000,
+  22: 41000, 23: 50000, 24: 62000, 25: 75000, 26: 90000, 27: 105000,
+  28: 120000, 29: 135000, 30: 155000,
+};
+
+function xpFor(cr) {
+  return Number.isFinite(cr) ? XP_BY_CR[cr] : undefined;
+}
+
+/** "Forest, Grassland" — a D&D Beyond column Foundry does carry. */
+function monsterHabitat(habitat) {
+  if (!habitat || typeof habitat !== "object") return undefined;
+  const parts = [
+    ...(habitat.value ?? []).map((h) =>
+      humanize(typeof h === "string" ? h : h?.type)
+    ),
+    clean(habitat.custom),
+  ].filter(Boolean);
+  return parts.length > 0 ? [...new Set(parts)].join(", ") : undefined;
+}
+
+/**
+ * Armor Class, which Foundry stores three different ways.
+ *
+ * `calc: "natural"` and `calc: "flat"` put the real number in `flat`.
+ * `calc: "default"` puts nothing anywhere — Foundry derives it when it
+ * prepares the actor, and source data has only the ingredients. Of
+ * Derek's 385 monsters, 211 are natural, 136 are default, and reading
+ * `flat` alone leaves those 136 with no AC at all.
+ *
+ * The default calculation is the ordinary unarmoured one: 10 + DEX,
+ * plus a worn armour item's rating if there is one. Computing it is not
+ * inventing a number — it is the same arithmetic Foundry does.
+ */
+function monsterAc(doc, s) {
+  const flat = Number(s.attributes?.ac?.flat);
+  if (Number.isFinite(flat) && flat > 0) return flat;
+
+  const dex = Number(s.abilities?.dex?.value);
+  const dexMod = Number.isFinite(dex) ? Math.floor((dex - 10) / 2) : 0;
+
+  let base = null;
+  let shield = 0;
+  for (const item of doc.items ?? []) {
+    const armor = sys(item).armor;
+    const value = Number(armor?.value);
+    if (!Number.isFinite(value) || value <= 0) continue;
+    if (clean(sys(item).type?.value).toLowerCase() === "shield") {
+      shield += value;
+    } else if (base === null || value > base) {
+      base = value;
+      // Medium and heavy armour cap how much DEX applies.
+      const cap = Number(armor?.dex);
+      if (Number.isFinite(cap)) base += Math.min(dexMod, cap) - dexMod;
+    }
+  }
+
+  const total = (base ?? 10) + dexMod + shield;
+  return total > 0 ? total : undefined;
+}
+
 function actorToMonster(doc) {
   const s = sys(doc);
   const details = s.details ?? {};
   const attrs = s.attributes ?? {};
   const typeField = details.type;
 
-  const ac = Number(attrs.ac?.value ?? attrs.ac?.flat ?? attrs.ac);
+  const ac = monsterAc(doc, s);
   const hp = Number(attrs.hp?.max ?? attrs.hp?.value);
   const cr = Number(details.cr);
 
@@ -886,7 +988,7 @@ function actorToMonster(doc) {
     creatureType,
     alignment: clean(details.alignment) || undefined,
     cr: Number.isFinite(cr) ? cr : undefined,
-    ac: Number.isFinite(ac) ? ac : undefined,
+    ac: ac,
     hp: Number.isFinite(hp) ? hp : undefined,
     speed: formatSpeed(attrs.movement),
     abilities: abilityScores(s.abilities),
@@ -900,12 +1002,13 @@ function actorToMonster(doc) {
       ].filter(Boolean);
       return list.length > 0 ? list.join(", ") : undefined;
     })(),
+    habitat: monsterHabitat(details.habitat),
     proficiencyBonus: Number.isFinite(Number(attrs.prof))
       ? Number(attrs.prof)
-      : undefined,
+      : proficiencyFor(cr),
     xp: Number.isFinite(Number(details.xp?.value))
       ? Number(details.xp.value)
-      : undefined,
+      : xpFor(cr),
     ...(() => {
       const f = monsterFeatures(doc);
       return {
@@ -1017,7 +1120,7 @@ if (rest.includes("-o") && !outDir) {
 
 const documents = readDocuments(path);
 const journalsById = new Map();
-const skipped = { unrecognised: 0, characters: 0 };
+const skipped = { unrecognised: 0, characters: 0, vehicles: 0 };
 
 // Journals first: a scene's notes reference them by id.
 for (const doc of documents) {
@@ -1048,6 +1151,13 @@ for (const doc of documents) {
     // Player characters belong to players, not to the NPC roster.
     if (type === "character") {
       skipped.characters++;
+      continue;
+    }
+    // A vehicle is not a monster and not a person. Its "creature type"
+    // is a propulsion category ("Air"), which would sit in the monster
+    // list looking like a species.
+    if (type === "vehicle" || type === "group") {
+      skipped.vehicles++;
       continue;
     }
     // The SAME actor is written both ways, because only Derek knows
@@ -1108,6 +1218,9 @@ console.log(`  ${journalsById.size} journal(s) read for descriptions`);
 console.log(`  ${pinned} pin(s) placed, ${unpinned} without coordinates`);
 if (skipped.characters > 0) {
   console.log(`  ${skipped.characters} player character(s) skipped`);
+}
+if (skipped.vehicles > 0) {
+  console.log(`  ${skipped.vehicles} vehicle(s) skipped`);
 }
 if (skipped.unrecognised > 0) {
   console.log(`  ${skipped.unrecognised} document(s) of other kinds skipped`);

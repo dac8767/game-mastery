@@ -855,21 +855,98 @@ export const unit = {
         .length === 1
     );
 
-    // Every kind's subtitle must resolve on a nearly empty row — a
-    // sparse import is the normal case, not the exception.
+    // The table's columns: every one must render on a nearly empty row,
+    // because a sparse import is the normal case rather than the
+    // exception, and a column that throws takes the whole screen down.
     for (const kind of ["spells", "items", "monsters"]) {
+      const cols = look.LOOKUP_COLUMNS[kind];
+      check(`${kind} declares columns`, cols.length > 0);
+      check(
+        `${kind} column keys are unique`,
+        new Set(cols.map((c) => c.key)).size === cols.length
+      );
+      check(
+        `${kind} has exactly one primary column`,
+        cols.filter((c) => c.primary).length === 1
+      );
       let ok = true;
-      try {
-        look.lookupSubtitle(kind, { name: "x" });
-      } catch {
-        ok = false;
+      for (const c of cols) {
+        try {
+          c.get({});
+          if (c.sort) c.sort({});
+        } catch {
+          ok = false;
+        }
       }
-      check(`lookupSubtitle.${kind} survives a nearly empty row`, ok);
+      check(`${kind} columns survive an empty row`, ok);
+      // The grid template must have a track per column plus the expand
+      // button, or the header and the rows stop lining up.
+      check(
+        `${kind} template has a track per column plus the button`,
+        look.columnTemplate(kind).trim().split(/\s+(?![^(]*\))/).length >=
+          cols.length + 1
+      );
     }
+
+    // Sorting is by COLUMN now, and a column's display form is not
+    // always its order: CR "1/4" sits between "1/8" and "1/2" only as a
+    // number, and rarity is an order nobody would guess alphabetically.
+    const mons = [
+      { name: "Ettin", cr: 8 },
+      { name: "Kobold", cr: 0.125 },
+      { name: "Aarakocra", cr: 0.25 },
+      { name: "Mystery", cr: null },
+    ];
     check(
-      "a cantrip's subtitle names it",
-      look.lookupSubtitle("spells", { level: 0, school: "Evocation" }) ===
-        "Cantrip · Evocation"
+      "CR sorts numerically, and an unknown CR sorts last",
+      eq(
+        look.sortByColumn("monsters", mons, "cr", false).map((r) => r.name),
+        ["Kobold", "Aarakocra", "Ettin", "Mystery"]
+      )
+    );
+    check(
+      "descending reverses it",
+      look.sortByColumn("monsters", mons, "cr", true)[0].name === "Mystery"
+    );
+    check(
+      "name is the tiebreak, so equal values keep a meaningful order",
+      eq(
+        look
+          .sortByColumn(
+            "monsters",
+            [
+              { name: "Zed", cr: 1 },
+              { name: "Amy", cr: 1 },
+            ],
+            "cr",
+            false
+          )
+          .map((r) => r.name),
+        ["Amy", "Zed"]
+      )
+    );
+    check(
+      "rarity sorts by the printed order, not alphabetically",
+      eq(
+        look
+          .sortByColumn(
+            "items",
+            [
+              { name: "a", rarity: "Legendary" },
+              { name: "b", rarity: "Common" },
+              { name: "c", rarity: "Rare" },
+            ],
+            "rarity",
+            false
+          )
+          .map((r) => r.rarity),
+        ["Common", "Rare", "Legendary"]
+      )
+    );
+    check(
+      "an unknown sort key falls back to name rather than throwing",
+      look.sortByColumn("items", [{ name: "b" }, { name: "a" }], "nope", false)[0]
+        .name === "a"
     );
 
     // ---- the Lookup filters ----------------------------------------
@@ -943,24 +1020,6 @@ export const unit = {
       "hasActiveAdvanced sees a hidden filter",
       filt.hasActiveAdvanced("spells", { ritual: true }) === true &&
         filt.hasActiveAdvanced("spells", { name: "x" }) === false
-    );
-
-    // Sorting.
-    const byLevel = filt.sortRows("spells", spellRows, "level").map((r) => r.name);
-    check("sort by level, then name", eq(byLevel, ["Fire Bolt", "Detect Magic", "Fireball"]));
-    const monsterRows = [
-      { name: "Ettin", cr: 8 },
-      { name: "Kobold", cr: 0.125 },
-      { name: "Mystery", cr: null },
-    ];
-    // Unknown is not the same as harmless: a monster with no CR sorts
-    // last rather than sitting at the top as if it were CR 0.
-    check(
-      "a monster with no CR sorts last, not as CR 0",
-      eq(
-        filt.sortRows("monsters", monsterRows, "cr").map((r) => r.name),
-        ["Kobold", "Ettin", "Mystery"]
-      )
     );
 
     // Every declared filter must be reachable and total.
@@ -1064,6 +1123,55 @@ export const unit = {
         },
       },
       {
+        _id: "m1",
+        name: "Ettin Test",
+        type: "npc",
+        prototypeToken: {},
+        system: {
+          details: {
+            cr: 8,
+            type: { value: "giant" },
+            alignment: "Chaotic Neutral",
+            habitat: { value: [{ type: "forest" }, { type: "underdark" }] },
+            biography: { value: "<p>Two heads.</p>" },
+          },
+          traits: { size: "lg", languages: { value: ["giant", "orc"] } },
+          attributes: {
+            ac: { flat: 15, calc: "natural" },
+            hp: { max: 123 },
+            movement: { walk: 40, units: "ft" },
+            senses: { units: "ft", ranges: { darkvision: 60 } },
+          },
+          abilities: { str: { value: 21 }, dex: { value: 8 } },
+          skills: { prc: { value: 1 } },
+        },
+        items: [
+          { name: "Chain Shirt", type: "equipment", system: { armor: { value: 13 } } },
+          { name: "Two Heads", type: "feat", system: { description: { value: "<p>Advantage.</p>" } } },
+          { name: "Morningstar", type: "weapon", system: { description: { value: "<p>Hit.</p>" } } },
+          { name: "Lash", type: "feat", system: { activation: { type: "legendary" }, description: { value: "<p>Tail.</p>" } } },
+        ],
+      },
+      {
+        _id: "m2",
+        name: "Default AC Test",
+        type: "npc",
+        prototypeToken: {},
+        system: {
+          details: { cr: 1, type: { value: "beast" } },
+          traits: { size: "med" },
+          attributes: { ac: { flat: null, calc: "default" }, hp: { max: 10 } },
+          abilities: { dex: { value: 14 } },
+        },
+      },
+      {
+        _id: "v1",
+        name: "Airship",
+        type: "vehicle",
+        prototypeToken: {},
+        system: { details: { type: { value: "air" } }, attributes: { hp: { max: 300 } } },
+      },
+      {
         _id: "i2",
         name: "Animated Shield",
         type: "equipment",
@@ -1097,6 +1205,8 @@ export const unit = {
 
     const outSpells = readRows("spells.jsonl");
     const outItems = readRows("items.jsonl");
+    const outMonsters = readRows("monsters.jsonl");
+    const monDefault = outMonsters.find((r) => r.name === "Default AC Test");
     const fb = outSpells.find((r) => r.name === "Fireball");
     const am = outSpells.find((r) => r.name === "Animal Messenger");
     const axe = outItems.find((r) => r.name === "Berserker Axe");
@@ -1157,6 +1267,42 @@ export const unit = {
       "a level-scaling duration says so instead of printing the formula",
       am.duration === "Varies (hours)"
     );
+
+    // Proficiency bonus and XP are DERIVED from CR — Foundry computes
+    // them when it prepares an actor, so source data has neither, and
+    // reading them off the document leaves every monster blank.
+    const mon = outMonsters.find((r) => r.name === "Ettin Test");
+    check("proficiency is computed from CR", mon.proficiencyBonus === 3);
+    check("XP is computed from CR", mon.xp === 3900);
+    // Foundry nests sense distances under `.ranges`; reading them off
+    // the senses object directly finds nothing.
+    check("senses come from the nested ranges", mon.senses === "Darkvision 60 ft");
+    check("habitat is joined and humanized", mon.habitat === "Forest, Underdark");
+    // calc "natural" and "flat" store the number; "default" stores
+    // nothing and means 10 + DEX.
+    check("a natural AC is read straight", mon.ac === 15);
+    check("a default AC is computed as 10 + DEX", monDefault.ac === 12);
+    // A stat block's traits are FEATURES, not inventory: a chain shirt
+    // is why the AC is 15, not a trait called "Chain Shirt".
+    check(
+      "armor is not a trait",
+      !(mon.traits ?? []).some((t) => t.name === "Chain Shirt")
+    );
+    check(
+      "a weapon is an action",
+      (mon.actions ?? []).some((a) => a.name === "Morningstar")
+    );
+    check(
+      "an always-on feature is a trait",
+      (mon.traits ?? []).some((t) => t.name === "Two Heads")
+    );
+    // Legendary actions declare themselves by activation cost, not by a
+    // feat subtype — Derek's export has no "legendary" subtype at all.
+    check(
+      "a legendary activation makes a legendary action",
+      (mon.legendaryActions ?? []).some((a) => a.name === "Lash")
+    );
+    check("a vehicle is not a monster", !outMonsters.some((r) => r.name === "Airship"));
 
     check("rarity is humanized", axe.rarity === "Very Rare");
     check(

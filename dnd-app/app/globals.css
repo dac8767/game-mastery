@@ -3872,3 +3872,173 @@ button.cal-day:hover {
 .lf-toggle:hover {
   background: var(--accent-soft);
 }
+
+/* ---------- Lookup: the table ---------- */
+
+.lk-table {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+/* The header and every row share one grid template, set as a variable
+   per kind — otherwise the columns drift apart the moment one of them
+   holds a longer word than the header did. */
+.lk-head,
+.lk-tr {
+  display: grid;
+  grid-template-columns: var(--lk-cols);
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.lk-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 0.35rem 0.6rem;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.lk-th {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  text-align: left;
+}
+
+.lk-th:hover {
+  color: var(--text);
+}
+
+.lk-th.sorted {
+  color: var(--accent);
+}
+
+.lk-th.center {
+  justify-content: center;
+}
+
+.lk-arrow {
+  font-size: 0.7rem;
+  opacity: 0.55;
+}
+
+.lk-th.sorted .lk-arrow {
+  opacity: 1;
+}
+
+.lk-rows {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.4rem 0;
+  align-content: start;
+}
+
+.lk-entry {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.lk-entry.open {
+  border-color: var(--accent);
+}
+
+.lk-tr {
+  padding: 0.5rem 0.6rem;
+  cursor: pointer;
+}
+
+.lk-tr:hover {
+  background: var(--bg-inset);
+}
+
+.lk-td {
+  min-width: 0;
+  font-size: 0.84rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lk-td.center {
+  text-align: center;
+}
+
+/* The name column carries its source underneath, so it is the one cell
+   that stacks rather than truncating to one line. */
+.lk-td.primary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  white-space: normal;
+}
+
+.lk-td.primary .lk-cell {
+  font-weight: 600;
+}
+
+.lk-cell-sub {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.lk-expand {
+  width: 1.6rem;
+  height: 1.6rem;
+  justify-self: end;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-inset);
+  color: var(--text-dim);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0;
+}
+
+.lk-expand:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.lk-entry.open .lk-expand {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* The expanded panel, pushing the rows below it down. */
+.lk-panel {
+  padding: 0.9rem 1.1rem 1.1rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+@media (max-width: 1000px) {
+  /* Below this the columns stop being readable, so the row becomes the
+     name and the expand button, and everything else lives in the panel
+     you open. */
+  .lk-head {
+    display: none;
+  }
+
+  .lk-tr {
+    grid-template-columns: minmax(0, 1fr) 2.25rem;
+  }
+
+  .lk-td:not(.primary) {
+    display: none;
+  }
+}

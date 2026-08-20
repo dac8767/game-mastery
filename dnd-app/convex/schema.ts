@@ -282,6 +282,7 @@ export default defineSchema({
         cha: v.optional(v.number()),
       })
     ),
+    habitat: v.optional(v.string()),
     skills: v.optional(v.string()),
     senses: v.optional(v.string()),
     languages: v.optional(v.string()),

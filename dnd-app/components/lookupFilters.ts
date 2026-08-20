@@ -343,6 +343,13 @@ const MONSTER_FILTERS: FilterDef[] = [
     match: (row, value) => anyOf(row.size, value as string[]),
   },
   {
+    key: "habitat",
+    label: "Habitat",
+    control: { type: "text" },
+    hint: "Forest, Urban…",
+    match: (row, value) => contains(row.habitat, value as string),
+  },
+  {
     key: "alignment",
     label: "Alignment",
     control: { type: "text" },
@@ -434,50 +441,3 @@ export function hasActiveAdvanced(
   );
 }
 
-/** Sort keys the list offers, per kind. */
-export function sortRows(kind: LookupKind, rows: Row[], by: string): Row[] {
-  const out = rows.slice();
-  const name = (r: Row) => text(r.name).toLowerCase();
-
-  if (by === "name") {
-    return out.sort((a, b) => name(a).localeCompare(name(b)));
-  }
-  if (kind === "spells" && by === "level") {
-    return out.sort(
-      (a, b) =>
-        Number(a.level ?? 0) - Number(b.level ?? 0) ||
-        name(a).localeCompare(name(b))
-    );
-  }
-  if (kind === "monsters" && by === "cr") {
-    // A monster with no CR sorts last rather than as CR 0 — unknown is
-    // not the same as harmless.
-    const cr = (r: Row) =>
-      typeof r.cr === "number" ? r.cr : Number.POSITIVE_INFINITY;
-    return out.sort((a, b) => cr(a) - cr(b) || name(a).localeCompare(name(b)));
-  }
-  if (kind === "items" && by === "rarity") {
-    const order = RARITIES.map((r) => r.value);
-    const rank = (r: Row) => {
-      const i = order.indexOf(text(r.rarity));
-      return i === -1 ? order.length : i;
-    };
-    return out.sort((a, b) => rank(a) - rank(b) || name(a).localeCompare(name(b)));
-  }
-  return out.sort((a, b) => name(a).localeCompare(name(b)));
-}
-
-export const SORTS: Record<LookupKind, { value: string; label: string }[]> = {
-  spells: [
-    { value: "name", label: "Name" },
-    { value: "level", label: "Level" },
-  ],
-  items: [
-    { value: "name", label: "Name" },
-    { value: "rarity", label: "Rarity" },
-  ],
-  monsters: [
-    { value: "name", label: "Name" },
-    { value: "cr", label: "Challenge" },
-  ],
-};

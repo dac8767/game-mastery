@@ -569,15 +569,20 @@ export const integrity = {
           `lookupFilters has [${filterKinds}]`
       );
     }
-    // Every kind must have a filter set and a sort list behind it, or
-    // its screen renders a bar with nothing in it.
+    // Every kind must have a filter set and a column set behind it, or
+    // its screen renders a bar and a table with nothing in them.
     const filtersSrc = read("components", "lookupFilters.ts");
+    const fieldsSrc = read("components", "lookupFields.ts");
     for (const kind of fieldKinds) {
       if (!new RegExp(`\\b${kind}:\\s*\\w*FILTERS`).test(filtersSrc)) {
         problems.push(`LookupKind "${kind}" has no entry in FILTERS`);
       }
-      if (!new RegExp(`\\b${kind}:\\s*\\[`).test(filtersSrc)) {
-        problems.push(`LookupKind "${kind}" has no entry in SORTS`);
+      if (
+        !new RegExp(`\\b${kind}:\\s*\\[`).test(
+          fieldsSrc.slice(fieldsSrc.indexOf("LOOKUP_COLUMNS"))
+        )
+      ) {
+        problems.push(`LookupKind "${kind}" has no entry in LOOKUP_COLUMNS`);
       }
     }
 
