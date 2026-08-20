@@ -535,6 +535,38 @@ export const integrity = {
           `routes only [${routes.join(", ")}] — every image would answer ` +
           "with the landing page instead of a file"
       );
+    } else {
+      // Where to PUT the files is a third fact, in a third file, and it
+      // only looks like the other two. `web` is a URL prefix Caddy
+      // strips; /srv/web is a path inside the container; and the host
+      // directory is whatever docker-compose mounts there. Copying to
+      // the wrong one of those lands every file one directory away from
+      // where it is served — which looks exactly like copying nothing.
+      const rootMatch = caddyfile
+        .slice(caddyfile.indexOf(`handle_path /${firstSegment}/*`))
+        .match(/root\s+\*\s+(\S+)/);
+      if (!rootMatch) {
+        throw new Error(`no root for the /${firstSegment}/* route in Caddyfile`);
+      }
+      const compose = readFileSync(
+        appPath("..", "map-server", "docker-compose.yml"),
+        "utf8"
+      );
+      const mount = compose.match(
+        new RegExp(`-\\s+(\\S+):${rootMatch[1]}(?::\\w+)?\\s*$`, "m")
+      );
+      if (!mount) {
+        problems.push(
+          `map-server/docker-compose.yml mounts nothing at ${rootMatch[1]}, ` +
+            `which is what Caddy serves /${firstSegment}/* from`
+        );
+      } else if (!read("scripts", "fetch-foundry-images.mjs").includes(mount[1])) {
+        problems.push(
+          "fetch-foundry-images.mjs prints a copy command that does not " +
+            `name ${mount[1]} — the directory docker-compose actually ` +
+            `mounts as ${rootMatch[1]}`
+        );
+      }
     }
 
     // Both scripts must take the prefix from mirror.mjs. A second copy

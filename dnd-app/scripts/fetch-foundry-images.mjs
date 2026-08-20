@@ -26,13 +26,18 @@
  * The output directory is shaped for the map server, not for Foundry:
  * everything lands under `web/foundry/`, which is the one thing that
  * makes these reachable — Caddy routes `/web/*` and nothing else that
- * would match. So the whole directory copies onto /srv/ as it stands:
+ * would match. See scripts/mirror.mjs.
  *
- *   rsync -a foundry-images/ poweredge:/srv/
+ * The `web/` level is the ROUTE, not a directory on the PowerEdge:
+ * docker-compose mounts the host's /srv/maps-web as the container's
+ * /srv/web, which Caddy serves at /web/. So it is the CONTENTS of
+ * `web/` that get copied, into the host path the compose file names —
+ * the closing message prints the exact command, and a guard holds it to
+ * what the compose file actually mounts.
  *
- * and every stored path resolves as
+ * Every stored path then resolves as
  * `${NEXT_PUBLIC_MAP_SERVER}/web/foundry/icons/...`, the same convention
- * NPC portraits and location maps already use. See scripts/mirror.mjs.
+ * NPC portraits and location maps already use.
  *
  * Nothing is uploaded to Convex: these are seven thousand small shared
  * icons, and the free tier's file storage is better spent on Derek's own
@@ -113,6 +118,20 @@ if (!Number.isInteger(jobs) || jobs < 1 || jobs > 64) {
 }
 
 // ---------------------------------------------------------------------
+
+/**
+ * The route the mirror is served under, and the directory on the map
+ * server that Caddy serves it FROM.
+ *
+ * These are different things that look alike: `web` is a URL prefix
+ * Caddy strips, and /srv/maps-web is a path on the PowerEdge that
+ * docker-compose mounts as the container's /srv/web. Copying to /srv/
+ * because the paths here start with `web/` puts every file one
+ * directory away from where it is served. The integrity guard reads
+ * both files and fails if this stops matching them.
+ */
+const ROUTE = FOUNDRY_MIRROR.split("/")[0];
+const MAP_SERVER_ROOT = "/srv/maps-web";
 
 const documents = JSON.parse(readFileSync(source, "utf8"));
 const list = Array.isArray(documents) ? documents : [documents];
@@ -227,10 +246,14 @@ if (missing.length > 0) {
 }
 if (failed > 0) console.log(`  ${failed} failed for other reasons`);
 
+// The trailing slash on the source is load-bearing: it copies the
+// CONTENTS of web/ into the mount, so `foundry/` lands beside the
+// map-server's own directories instead of nesting a second `web/`.
 console.log(
-  `\nnext: copy the whole directory onto the map server, as it stands —\n` +
-    `it is already shaped as ${FOUNDRY_MIRROR}/...\n\n` +
-    `  rsync -a --info=progress2 ${outDir}/ YOUR-MAP-SERVER:/srv/\n\n` +
+  `\nnext: copy it onto the map server —\n\n` +
+    `  rsync -a --info=progress2 ${join(outDir, ROUTE)}/ ` +
+    `YOUR-MAP-SERVER:${MAP_SERVER_ROOT}/\n\n` +
+    "(YOUR-MAP-SERVER is the only part to fill in)\n\n" +
     (sample
       ? "then check one lands:\n" +
         `  curl -sI "$NEXT_PUBLIC_MAP_SERVER/${FOUNDRY_MIRROR}/${sample}"\n`
