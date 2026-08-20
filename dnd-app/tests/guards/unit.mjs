@@ -1148,6 +1148,7 @@ export const unit = {
         _id: "s1",
         name: "Fireball",
         type: "spell",
+        img: "icons/magic/fire/beam-jet-stream.webp",
         system: {
           level: 3,
           school: "evo",
@@ -1192,6 +1193,7 @@ export const unit = {
         _id: "i1",
         name: "Berserker Axe",
         type: "weapon",
+        img: "https://cdn.example.com/axe.png",
         system: {
           rarity: "veryRare",
           attunement: "required",
@@ -1256,6 +1258,7 @@ export const unit = {
         _id: "i2",
         name: "Animated Shield",
         type: "equipment",
+        img: "icons/svg/item-bag.svg",
         system: {
           rarity: "rare",
           attunement: "",
@@ -1396,6 +1399,26 @@ export const unit = {
       (mon.legendaryActions ?? []).some((a) => a.name === "Lash")
     );
     check("a vehicle is not a monster", !outMonsters.some((r) => r.name === "Airship"));
+
+    // Artwork. The path has to be reachable, not merely faithful: what
+    // Foundry calls "icons/..." the map server only serves from under
+    // the mirror prefix, and storing Foundry's own path gave 7,361
+    // images a URL that answers with the landing page.
+    const { FOUNDRY_MIRROR } = await import(
+      pathToFileURL(join(APP_ROOT, "scripts", "mirror.mjs")).href
+    );
+    check(
+      "artwork is stored under the mirror the map server serves",
+      fb.image === `${FOUNDRY_MIRROR}/icons/magic/fire/beam-jet-stream.webp`
+    );
+    check(
+      "a placeholder icon is not artwork",
+      shield.image === undefined
+    );
+    check(
+      "an already-hosted image is left alone rather than mirrored",
+      axe.image === undefined
+    );
 
     check("rarity is humanized", axe.rarity === "Very Rare");
     check(

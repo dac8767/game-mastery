@@ -68,6 +68,7 @@ import {
 } from "node:fs";
 import { join, extname, basename } from "node:path";
 import { parseOrExit } from "./args.mjs";
+import { FOUNDRY_MIRROR } from "./mirror.mjs";
 
 // ---------------------------------------------------------------------
 // Reading whatever Foundry gave us
@@ -497,7 +498,10 @@ function relativeImage(img) {
   // an NPC portrait and wrong for everything else: for a spell or an
   // item those paths ARE the artwork, and dropping them is why nothing
   // had a picture.
-  return img;
+  //
+  // The mirror prefix is what makes the path REACHABLE. Foundry's own
+  // paths start at roots the map server does not route; see mirror.mjs.
+  return `${FOUNDRY_MIRROR}/${img}`;
 }
 
 /**

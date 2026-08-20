@@ -16,7 +16,7 @@
  *   - the query hands back fields the schema may no longer have
  */
 
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import {
   read,
   exists,
@@ -468,6 +468,62 @@ export const integrity = {
           `clear-lookup.mjs empties \`${table}\`, which is not one of the ` +
             "Lookup tables — it deletes data, so it must only ever name " +
             "tables that can be re-imported"
+        );
+      }
+    }
+
+    // ---- the artwork mirror must be a path the map server serves ----
+    // This is the failure it exists for: the importer stored Foundry's
+    // own "icons/..." paths, the fetcher wrote files in Foundry's own
+    // shape, and the Caddyfile routes /web/* and /originals/* and
+    // nothing else. Each file was reasonable alone. Together they gave
+    // 7,361 images a URL that answers 200 with the words "Map server
+    // up." — which an <img> cannot decode, so onError hid every one and
+    // nothing anywhere reported a problem.
+    const mirrorSrc = read("scripts", "mirror.mjs");
+    const mirrorMatch = mirrorSrc.match(
+      /export const FOUNDRY_MIRROR\s*=\s*"([^"]+)"/
+    );
+    if (!mirrorMatch) {
+      throw new Error("no FOUNDRY_MIRROR in scripts/mirror.mjs");
+    }
+    const mirror = mirrorMatch[1];
+
+    // The route is on the other side of a boundary nothing else crosses:
+    // a Caddy config, in another directory, deployed to another machine.
+    const caddyfile = readFileSync(
+      appPath("..", "map-server", "Caddyfile"),
+      "utf8"
+    );
+    const routes = [...caddyfile.matchAll(/handle_path\s+\/([^/\s*]+)\/\*/g)].map(
+      (m) => m[1]
+    );
+    if (routes.length === 0) {
+      throw new Error("found no handle_path routes in map-server/Caddyfile");
+    }
+    const firstSegment = mirror.split("/")[0];
+    if (!routes.includes(firstSegment)) {
+      problems.push(
+        `artwork is stored under "${mirror}/", but map-server/Caddyfile ` +
+          `routes only [${routes.join(", ")}] — every image would answer ` +
+          "with the landing page instead of a file"
+      );
+    }
+
+    // Both scripts must take the prefix from mirror.mjs. A second copy
+    // spelled out by hand is how the two halves drift apart: files
+    // written under one path, rows pointing at another.
+    for (const file of ["import-foundry.mjs", "fetch-foundry-images.mjs"]) {
+      const src = read("scripts", file);
+      if (!/import \{ FOUNDRY_MIRROR \} from "\.\/mirror\.mjs"/.test(src)) {
+        problems.push(
+          `scripts/${file} does not import FOUNDRY_MIRROR from mirror.mjs`
+        );
+      }
+      if (stripComments(src).includes(`"${mirror}`)) {
+        problems.push(
+          `scripts/${file} spells out "${mirror}" instead of using ` +
+            "FOUNDRY_MIRROR — the two copies can drift"
         );
       }
     }

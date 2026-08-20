@@ -23,17 +23,26 @@
  * ---------------------------------------------------------------------
  * What to do with the result
  *
- * The output directory mirrors Foundry's structure, so copying it onto
- * the map server's web root makes every path resolve as
- * `${NEXT_PUBLIC_MAP_SERVER}/icons/...`, the same convention NPC
- * portraits and location maps already use. Nothing is uploaded to
- * Convex: these are seven thousand small shared icons, and the free
- * tier's file storage is better spent on Derek's own images.
+ * The output directory is shaped for the map server, not for Foundry:
+ * everything lands under `web/foundry/`, which is the one thing that
+ * makes these reachable — Caddy routes `/web/*` and nothing else that
+ * would match. So the whole directory copies onto /srv/ as it stands:
+ *
+ *   rsync -a foundry-images/ poweredge:/srv/
+ *
+ * and every stored path resolves as
+ * `${NEXT_PUBLIC_MAP_SERVER}/web/foundry/icons/...`, the same convention
+ * NPC portraits and location maps already use. See scripts/mirror.mjs.
+ *
+ * Nothing is uploaded to Convex: these are seven thousand small shared
+ * icons, and the free tier's file storage is better spent on Derek's own
+ * images.
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 import { parseOrExit } from "./args.mjs";
+import { FOUNDRY_MIRROR } from "./mirror.mjs";
 
 const USAGE =
   "usage: node scripts/fetch-foundry-images.mjs <export.json> [-o dir] " +
@@ -146,9 +155,13 @@ let failed = 0;
  * first one stops the run rather than repeating itself once per file.
  */
 let unreachable = null;
+let sample = null;
 
 async function fetchOne(path) {
-  const target = join(outDir, path);
+  // Fetched from Foundry's path, written under the mirror's. The two
+  // differ on purpose: Foundry serves "icons/..." from its own root, and
+  // the map server serves it from under "web/". See mirror.mjs.
+  const target = join(outDir, FOUNDRY_MIRROR, path);
 
   if (!force && existsSync(target)) {
     skipped++;
@@ -175,6 +188,10 @@ async function fetchOne(path) {
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, body);
   fetched++;
+  // Kept so the closing message can name a file that is actually there
+  // to curl. A hand-picked example is a path this script may have
+  // skipped, which makes the one check you run answer 404.
+  sample ??= path;
 
   if (fetched % 250 === 0) process.stdout.write(`  ${fetched} fetched…\n`);
 }
@@ -211,6 +228,11 @@ if (missing.length > 0) {
 if (failed > 0) console.log(`  ${failed} failed for other reasons`);
 
 console.log(
-  `\nnext: copy ${outDir}/ onto the map server's web root, keeping the\n` +
-    "structure, so the paths resolve as ${NEXT_PUBLIC_MAP_SERVER}/icons/...\n"
+  `\nnext: copy the whole directory onto the map server, as it stands —\n` +
+    `it is already shaped as ${FOUNDRY_MIRROR}/...\n\n` +
+    `  rsync -a --info=progress2 ${outDir}/ YOUR-MAP-SERVER:/srv/\n\n` +
+    (sample
+      ? "then check one lands:\n" +
+        `  curl -sI "$NEXT_PUBLIC_MAP_SERVER/${FOUNDRY_MIRROR}/${sample}"\n`
+      : "")
 );
