@@ -169,6 +169,70 @@ const ITEM_TYPES = new Set([
 // Small shared helpers
 // ---------------------------------------------------------------------
 
+/** dnd5e abbreviates these everywhere; nobody says "int" out loud. */
+const ABILITIES = {
+  str: "Strength",
+  dex: "Dexterity",
+  con: "Constitution",
+  int: "Intelligence",
+  wis: "Wisdom",
+  cha: "Charisma",
+};
+
+const SKILLS = {
+  acr: "Acrobatics",
+  ani: "Animal Handling",
+  arc: "Arcana",
+  ath: "Athletics",
+  dec: "Deception",
+  his: "History",
+  ins: "Insight",
+  inv: "Investigation",
+  itm: "Intimidation",
+  med: "Medicine",
+  nat: "Nature",
+  prc: "Perception",
+  prf: "Performance",
+  per: "Persuasion",
+  rel: "Religion",
+  slt: "Sleight of Hand",
+  ste: "Stealth",
+  sur: "Survival",
+};
+
+/**
+ * `[[/check ability=int skill=inv dc=15]]` reads as a sentence in
+ * Foundry and as key=value soup anywhere else.
+ *
+ * When the DC is a data path rather than a number — `@attributes.spell.dc`,
+ * by far the common case — the DC is left OFF entirely rather than
+ * rendered. The sentence around it almost always already says "against
+ * your spell save DC", so printing it twice is worse than trusting the
+ * prose.
+ */
+function formatCheck(kind, inner) {
+  const args = {};
+  for (const [, k, v] of inner.matchAll(/(\w+)=("[^"]*"|\S+)/g)) {
+    args[k] = v.replace(/^"|"$/g, "");
+  }
+
+  const ability = ABILITIES[args.ability] ?? humanize(args.ability);
+  const skill = SKILLS[args.skill] ?? humanize(args.skill);
+  const dcNumber = Number(args.dc);
+  const dc =
+    Number.isFinite(dcNumber) && !String(args.dc ?? "").includes("@")
+      ? `DC ${dcNumber} `
+      : "";
+
+  if (kind === "save") {
+    return ability ? `${dc}${ability} saving throw` : `${dc}saving throw`;
+  }
+  if (!ability) return `${dc}check`;
+  return skill
+    ? `${dc}${ability} (${skill}) check`
+    : `${dc}${ability} check`;
+}
+
 /** Foundry biographies are HTML. The NPC table's fields are plain text. */
 function stripHtml(html) {
   if (typeof html !== "string" || !html) return undefined;
@@ -201,9 +265,42 @@ function stripHtml(html) {
     // form has to be handled first, or the label is thrown away along
     // with the brackets.
     .replace(/[@&]\w+\[[^\]]*\]\{([^}]*)\}/g, "$1")
-    .replace(/[@&]\w+\[([^\]]*)\]/g, "$1")
-    .replace(/\[\[\/?[a-z]*\s*([^\]]*)\]\]/g, "$1")
+    // The unlabelled form keeps its content, minus the switches:
+    // `&Reference[Charmed apply=false]` is the word "Charmed", and
+    // `apply=false` is an instruction to Foundry, not part of the rule.
+    .replace(/[@&]\w+\[([^\]]*)\]/g, (_, inner) =>
+      inner.replace(/\s*\w+=("[^"]*"|\S+)/g, "").trim()
+    )
+    .replace(/\[\[\/(check|save|conc)\s+([^\]]*)\]\]/g, (_, kind, inner) =>
+      formatCheck(kind === "save" || kind === "conc" ? "save" : "check", inner)
+    )
+    // Anything else inline — `[[/r 1d6]]`, `[[/damage 8d6 fire average=false]]`
+    // — keeps its content with the key=value switches dropped.
+    .replace(/\[\[\/?[a-z]*\s*([^\]]*)\]\]/g, (_, inner) =>
+      inner.replace(/\s*\w+=("[^"]*"|\S+)/g, "").trim()
+    )
 
+    // Foundry DATA PATHS — `@attributes.spell.dc`, `@item.level`. These
+    // are interpolated against the caster at render time, and outside
+    // Foundry there is nothing to interpolate against. The three common
+    // ones say something exact in English, so they are translated rather
+    // than dropped; a data path IS its English reading, so this is not
+    // inventing rules text. Anything else dotted goes, along with a
+    // trailing formatting verb ("capitalize").
+    .replace(/@attributes\.spell\.dc(\s+\w+)?/g, "your spell save DC")
+    .replace(/@item\.level(\s+\w+)?/g, "the spell's level")
+    .replace(/@details\.level(\s+\w+)?/g, "your level")
+    .replace(
+      /@[A-Za-z][\w.]*(\s+(?:capitalize|format|lowercase|uppercase))?/g,
+      ""
+    )
+
+    // Tidy what removal and reconstruction left behind. The doubling is
+    // real: the prose around `[[/check ...]]` often already ends in the
+    // word "check", which the enricher supplies too.
+    .replace(/\b(check|saving throw|save)\s+\1\b/gi, "$1")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/ ([.,;:!?])/g, "$1")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
@@ -413,54 +510,183 @@ const SCHOOLS = {
 function spellProps(s) {
   const list = Array.isArray(s.properties) ? s.properties : [];
   const legacy = s.components ?? {};
-  const has = (key, legacyKey) =>
-    list.includes(key) || legacy[legacyKey ?? key] === true;
+  const has = (key) => list.includes(key) || legacy[key] === true;
 
   return {
     ritual: has("ritual"),
     concentration: has("concentration"),
-    vocal: has("vocal", "vsm") || legacy.vocal === true,
-    somatic: has("somatic") || legacy.somatic === true,
-    material: has("material") || legacy.material === true,
+    vocal: has("vocal"),
+    somatic: has("somatic"),
+    material: has("material"),
   };
 }
 
+/**
+ * dnd5e's unit slugs, spelled the way a spell entry reads.
+ *
+ * "inst" is the one that matters: it is the most common duration in the
+ * game, and "Inst" is not a word.
+ */
+const UNITS = {
+  inst: "Instantaneous",
+  perm: "Permanent",
+  spec: "Special",
+  disp: "Until dispelled",
+  dstr: "Until dispelled or triggered",
+  touch: "Touch",
+  self: "Self",
+  any: "Any",
+  turn: "turn",
+  round: "round",
+  minute: "minute",
+  hour: "hour",
+  day: "day",
+  week: "week",
+  month: "month",
+  year: "year",
+  ft: "ft",
+  mi: "mile",
+};
+
+/** Time words take an s; "ft" does not. */
+const PLURALISES = new Set([
+  "mi",
+  "turn",
+  "round",
+  "minute",
+  "hour",
+  "day",
+  "week",
+  "month",
+  "year",
+]);
+
+/**
+ * `{ value: 10, units: "minute" }` -> "10 minutes";
+ * `{ units: "inst" }`              -> "Instantaneous".
+ */
 function unitised(obj, fallbackUnits) {
   if (!obj || typeof obj !== "object") return undefined;
+  const rawUnits = clean(obj.units ?? fallbackUnits);
+  const units = UNITS[rawUnits] ?? humanize(rawUnits);
   const value = obj.value;
-  const units = clean(obj.units ?? fallbackUnits);
+
   if (value === null || value === undefined || value === "") {
-    return humanize(units);
+    // No number: the units ARE the answer ("Touch", "Instantaneous").
+    return units || undefined;
   }
-  return units ? `${value} ${units}` : String(value);
+
+  // A level-scaling duration is a Foundry roll formula — "@item.level *
+  // 48 - 72" hours. There is no caster here to evaluate it against, and
+  // printing the formula is worse than saying it varies.
+  if (typeof value === "string" && value.includes("@")) {
+    const word = PLURALISES.has(rawUnits) ? `${units}s` : units;
+    return word ? `Varies (${word})` : "Varies";
+  }
+
+  if (!units) return String(value);
+
+  const n = Number(value);
+  const plural =
+    PLURALISES.has(rawUnits) && Number.isFinite(n) && n !== 1 ? "s" : "";
+  return `${value} ${units}${plural}`;
+}
+
+/**
+ * What it costs to cast, in the game's own words.
+ *
+ * A null `value` is the common case and means "one of these" — the 2024
+ * rules write that as "Action" and "Bonus Action", not "1 action".
+ */
+const ACTIVATIONS = {
+  action: "Action",
+  bonus: "Bonus Action",
+  reaction: "Reaction",
+  legendary: "Legendary Action",
+  lair: "Lair Action",
+  special: "Special",
+};
+
+function formatActivation(activation) {
+  if (!activation || typeof activation !== "object") return undefined;
+  const type = clean(activation.type);
+  if (!type) return undefined;
+
+  const n = Number(activation.value);
+  // `value: 1` and `value: null` mean the same thing for an Action, and
+  // an export contains both — so "1 Action" and "Action" would sit next
+  // to each other in the same list.
+  if (!Number.isFinite(n) || n <= 0 || (n === 1 && ACTIVATIONS[type])) {
+    return ACTIVATIONS[type] ?? humanize(type);
+  }
+  const word = UNITS[type] ?? humanize(type);
+  const plural = PLURALISES.has(type) && n !== 1 ? "s" : "";
+  return `${n} ${word}${plural}`;
+}
+
+/**
+ * The two 2024-rules labels a spell description interpolates: who it
+ * affects, and the shape it fills. Both are already in `system.target`,
+ * so they are rebuilt rather than deleted — Fireball's description is
+ * "@labels.description.affects capitalize in a @labels.description.template
+ * centered on that point", and removing them leaves "in a centered on
+ * that point".
+ */
+function targetLabels(target) {
+  const affects = target?.affects ?? {};
+  const template = target?.template ?? {};
+
+  const who = clean(affects.type);
+  const count = Number(affects.count);
+  const affectsText = who
+    ? Number.isFinite(count) && count > 1
+      ? `${count} ${who}s`
+      : `each ${who}`
+    : "";
+
+  const shape = clean(template.type);
+  const size = clean(template.size);
+  const units = clean(template.units) === "ft" ? "foot" : clean(template.units);
+  const templateText = shape
+    ? size
+      ? `${size}-${units} ${humanize(shape)}`
+      : humanize(shape)
+    : "";
+
+  return { affectsText, templateText };
 }
 
 function spellToRow(doc) {
   const s = sys(doc);
   const p = spellProps(s);
+  const labels = targetLabels(s.target);
+
+  // Substituted BEFORE the HTML pass, so the reconstructed words go
+  // through the same tidying as the rest of the prose.
+  const rawDescription = (s.description?.value ?? "")
+    .replace(/@labels\.description\.affects(\s+capitalize)?/g, (_, cap) =>
+      cap
+        ? labels.affectsText.replace(/^./, (c) => c.toUpperCase())
+        : labels.affectsText
+    )
+    .replace(/@labels\.description\.template/g, labels.templateText);
 
   const components = [p.vocal && "V", p.somatic && "S", p.material && "M"]
     .filter(Boolean)
     .join(", ");
 
-  const activation = s.activation ?? {};
-  const castingTime =
-    activation.value && activation.type
-      ? `${activation.value} ${activation.type}`
-      : humanize(activation.type);
-
   const row = {
     name: clean(doc.name) || "Unnamed",
     level: Number.isFinite(Number(s.level)) ? Number(s.level) : 0,
     school: SCHOOLS[clean(s.school)] ?? humanize(s.school),
-    castingTime,
+    castingTime: formatActivation(s.activation),
     range: unitised(s.range),
     components: components || undefined,
     materials: clean(s.materials?.value) || undefined,
     duration: unitised(s.duration),
     ritual: p.ritual,
     concentration: p.concentration,
-    description: stripHtml(s.description?.value),
+    description: stripHtml(rawDescription),
     source: formatSource(s.source),
   };
   return row;

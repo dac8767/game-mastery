@@ -12,7 +12,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -775,6 +775,167 @@ export const unit = {
       look.lookupSubtitle("spells", { level: 0, school: "Evocation" }) ===
         "Cantrip · Evocation"
     );
+
+    // ---- the Foundry converter -------------------------------------
+    // Every case below was found in Derek's real 976-document export
+    // rather than imagined, and each one produced visibly wrong text
+    // before it was fixed. The script is plain .mjs, so it is run as a
+    // subprocess over a fixture rather than imported.
+    const fixture = [
+      {
+        _id: "s1",
+        name: "Fireball",
+        type: "spell",
+        system: {
+          level: 3,
+          school: "evo",
+          activation: { type: "action", value: 1, condition: "" },
+          range: { value: "150", units: "ft" },
+          duration: { value: "", units: "inst" },
+          materials: { value: "a ball of bat guano and sulfur" },
+          properties: ["vocal", "somatic", "material"],
+          target: {
+            affects: { type: "creature", count: "" },
+            template: { type: "sphere", size: "20", units: "ft" },
+          },
+          source: { rules: "2024", book: "", custom: "" },
+          description: {
+            value:
+              "<p>@labels.description.affects capitalize in a " +
+              "@labels.description.template centered on that point makes a " +
+              "Dexterity saving throw. It takes " +
+              "[[/damage 8d6 fire average=false]] damage, and can be " +
+              "&amp;Reference[Blinded apply=false] by it. Make an " +
+              "[[/check ability=int skill=inv dc=@attributes.spell.dc]] check " +
+              "(see @UUID[Compendium.dnd5e.x.y]{Gameplay Toolbox}).</p>",
+          },
+        },
+      },
+      {
+        _id: "s2",
+        name: "Animal Messenger",
+        type: "spell",
+        system: {
+          level: 2,
+          school: "enc",
+          activation: { type: "minute", value: 10 },
+          range: { value: "1", units: "mi" },
+          duration: { value: "@item.level * 48 - 72", units: "hour" },
+          properties: ["ritual", "concentration", "vocal"],
+          description: { value: "<p>Plain.</p>" },
+        },
+      },
+      {
+        _id: "i1",
+        name: "Berserker Axe",
+        type: "weapon",
+        system: {
+          rarity: "veryRare",
+          attunement: "required",
+          attuned: false,
+          price: { value: 4000, denomination: "gp" },
+          weight: { value: 0, units: "lb" },
+          type: { value: "martialM" },
+          source: { rules: "2024" },
+          description: { value: "<p>An axe.</p>" },
+        },
+      },
+      {
+        _id: "i2",
+        name: "Animated Shield",
+        type: "equipment",
+        system: {
+          rarity: "rare",
+          attunement: "",
+          type: { value: "shield" },
+          weight: { value: 6, units: "lb" },
+          description: { value: "<p>A shield.</p>" },
+        },
+      },
+    ];
+
+    const fixDir = mkdtempSync(join(tmpdir(), "gm-foundry-"));
+    writeFileSync(join(fixDir, "in.json"), JSON.stringify(fixture));
+    const conv = spawnSync(
+      "node",
+      ["scripts/import-foundry.mjs", join(fixDir, "in.json"), "cid", "-o", fixDir],
+      { cwd: APP_ROOT, encoding: "utf8" }
+    );
+    if (conv.status !== 0) {
+      throw new Error(`import-foundry.mjs failed:\n${conv.stderr}`);
+    }
+
+    const readRows = (f) =>
+      readFileSync(join(fixDir, f), "utf8")
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => JSON.parse(l));
+
+    const outSpells = readRows("spells.jsonl");
+    const outItems = readRows("items.jsonl");
+    const fb = outSpells.find((r) => r.name === "Fireball");
+    const am = outSpells.find((r) => r.name === "Animal Messenger");
+    const axe = outItems.find((r) => r.name === "Berserker Axe");
+    const shield = outItems.find((r) => r.name === "Animated Shield");
+
+    check("the converter splits spells from items", outSpells.length === 2 && outItems.length === 2);
+
+    // Nothing Foundry-shaped may survive into a description.
+    const dirty = (r) => /@[A-Za-z]|\[\[|\w+=\S|&amp;|<[a-z]/i.test(r.description ?? "");
+    check(
+      "no Foundry markup survives into any description",
+      ![...outSpells, ...outItems].some(dirty)
+    );
+
+    check("school abbreviations expand", fb.school === "Evocation");
+    check("an Action is not written '1 Action'", fb.castingTime === "Action");
+    check("'inst' reads as Instantaneous", fb.duration === "Instantaneous");
+    check("components come from the properties array", fb.components === "V, S, M");
+    check(
+      "the 2024 target labels are rebuilt from system.target",
+      fb.description.startsWith("Each creature in a 20-foot Sphere centered")
+    );
+    check(
+      "a check enricher becomes a sentence",
+      /an Intelligence \(Investigation\) check\b/.test(fb.description)
+    );
+    check(
+      "the doubled noun after a check enricher is collapsed",
+      !/check check/i.test(fb.description)
+    );
+    check(
+      "a reference enricher keeps its word and drops its switches",
+      /Blinded by it/.test(fb.description)
+    );
+    check(
+      "a damage enricher keeps the dice",
+      /8d6 fire damage/i.test(fb.description)
+    );
+    check(
+      "a labelled UUID enricher keeps only its label",
+      /Gameplay Toolbox/.test(fb.description)
+    );
+
+    check("ritual is read from properties", am.ritual === true);
+    check("concentration is read from properties", am.concentration === true);
+    check("a single mile is not '1 miles'", am.range === "1 mile");
+    check("plural units pluralize", am.castingTime === "10 minutes");
+    check(
+      "a level-scaling duration says so instead of printing the formula",
+      am.duration === "Varies (hours)"
+    );
+
+    check("rarity is humanized", axe.rarity === "Very Rare");
+    check(
+      "attunement is 'required', not a boolean field named attuned",
+      axe.attunement === true && shield.attunement === false
+    );
+    check("price reads with its denomination", axe.price === "4000 gp");
+    check("a weight of 0 means unset, not weightless", axe.weight === undefined);
+    check("source is composed from the object", axe.source === "SRD 2024");
+    check("a weapon is a weapon", axe.kind === "weapon");
+    check("shield subtype folds into armor", shield.kind === "armor");
 
     return problems;
   },
