@@ -67,6 +67,7 @@ import {
   existsSync,
 } from "node:fs";
 import { join, extname, basename } from "node:path";
+import { parseOrExit } from "./args.mjs";
 
 // ---------------------------------------------------------------------
 // Reading whatever Foundry gave us
@@ -1248,23 +1249,31 @@ function clamp01(n) {
 // Main
 // ---------------------------------------------------------------------
 
-const [, , path, campaignId, ...rest] = process.argv;
+const USAGE =
+  "usage: node scripts/import-foundry.mjs <path> <campaignId> [-o out/] [--dry-run]\n\n" +
+  "  <path>        a Foundry export .json, a NeDB .db, or a directory\n" +
+  "  <campaignId>  the Convex id of the campaign to import into\n" +
+  "  -o out/       where to write the JSONL (default: foundry-import)\n" +
+  "  --dry-run     report what is in the file and write nothing\n";
 
-if (!path || !campaignId) {
-  console.error(
-    "usage: node scripts/import-foundry.mjs <path> <campaignId> [-o out/] [--dry-run]\n\n" +
-      "  <path>        a Foundry export .json, a NeDB .db, or a directory\n" +
-      "  <campaignId>  the Convex id of the campaign to import into\n" +
-      "  --dry-run     report what is in the file and write nothing\n"
-  );
+const { positionals, flags } = parseOrExit(
+  process.argv.slice(2),
+  {
+    "-o": { value: true, default: "foundry-import" },
+    "--dry-run": {},
+    "--help": {},
+  },
+  USAGE
+);
+
+const [path, campaignId] = positionals;
+
+if (!path || !campaignId || flags["--help"]) {
+  console.error(USAGE);
   process.exit(1);
 }
 
-const outDir = rest[rest.indexOf("-o") + 1] ?? "foundry-import";
-if (rest.includes("-o") && !outDir) {
-  console.error("-o needs a directory");
-  process.exit(1);
-}
+const outDir = flags["-o"];
 
 // A wrong path is the most likely thing to go wrong here, and Node's
 // answer to it is an ENOENT stack trace that buries the one fact that
@@ -1286,7 +1295,7 @@ if (!existsSync(path)) {
  * can be inspected — and its counts reported — without producing four
  * JSONL files and an import you may not want.
  */
-const dryRun = rest.includes("--dry-run");
+const dryRun = flags["--dry-run"];
 
 const documents = readDocuments(path);
 const journalsById = new Map();

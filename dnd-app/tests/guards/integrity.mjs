@@ -16,9 +16,11 @@
  *   - the query hands back fields the schema may no longer have
  */
 
+import { readdirSync } from "node:fs";
 import {
   read,
   exists,
+  appPath,
   blockAfter,
   topLevelKeys,
   stringProps,
@@ -29,6 +31,13 @@ import {
 
 /** Convex adds these to every document. */
 const SYSTEM_FIELDS = ["_id", "_creationTime"];
+
+/**
+ * The reference library: shared across campaigns, read-only in the app,
+ * and the only tables whose contents can be thrown away and re-imported.
+ * Several checks below turn on exactly that property.
+ */
+const LOOKUP_TABLES = ["spells", "items", "monsters"];
 
 /**
  * Fields the query COMPUTES rather than reads from the table.
@@ -404,7 +413,7 @@ export const integrity = {
         : schemaSrc.slice(start, start + 1 + next);
     };
 
-    for (const table of ["spells", "items", "monsters"]) {
+    for (const table of LOOKUP_TABLES) {
       const block = tableRegion(table);
       if (/campaignId/.test(block)) {
         problems.push(
@@ -429,6 +438,56 @@ export const integrity = {
         "convex/lookup.ts defines a mutation — the reference library is " +
           "read-only in the app and loaded by `npx convex import`"
       );
+    }
+
+    // Changing the shape of a Lookup table means emptying it first —
+    // Convex validates the rows already stored against the new schema
+    // and rejects the push over a single leftover. clear-lookup.mjs is
+    // what does the emptying, from a hand-written list, so a fourth
+    // Lookup table would otherwise be added to the schema and quietly
+    // left out of the one script that can unblock it.
+    const cleared = constArrayStrings(
+      read("scripts", "clear-lookup.mjs"),
+      "TABLES",
+      "clear-lookup.mjs"
+    );
+    for (const table of LOOKUP_TABLES) {
+      if (!cleared.includes(table)) {
+        problems.push(
+          `clear-lookup.mjs does not empty ${table} — a change to its ` +
+            "shape would be unpushable with no way to clear it"
+        );
+      }
+    }
+    for (const table of cleared) {
+      // The inverse matters more: this script DELETES, and a name that
+      // is no longer a Lookup table is a name that belongs to something
+      // Derek typed by hand.
+      if (!LOOKUP_TABLES.includes(table)) {
+        problems.push(
+          `clear-lookup.mjs empties \`${table}\`, which is not one of the ` +
+            "Lookup tables — it deletes data, so it must only ever name " +
+            "tables that can be re-imported"
+        );
+      }
+    }
+
+    // ---- flags must not be read by position ------------------------
+    // `args[args.indexOf("--from") + 1]` reads args[0] when the flag is
+    // ABSENT, because indexOf returns -1 — and the `?? default` beside
+    // it never fires, because args[0] is a string. That shipped, and
+    // sent seven thousand requests to a URL built out of the export's
+    // own filename. scripts/args.mjs is the replacement.
+    for (const file of readdirSync(appPath("scripts"))) {
+      if (!file.endsWith(".mjs") || file === "args.mjs") continue;
+      const src = stripComments(read("scripts", file));
+      if (/indexOf\([^)]*\)\s*\+\s*1\s*\]/.test(src)) {
+        problems.push(
+          `scripts/${file} reads a flag as \`indexOf(...) + 1\`, which ` +
+            "resolves to the first positional argument when the flag is " +
+            "absent — use parseArgs from scripts/args.mjs"
+        );
+      }
     }
 
     // Required (non-optional) schema fields must always be written, or

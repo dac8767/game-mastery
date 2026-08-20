@@ -1057,6 +1057,87 @@ export const unit = {
       );
     }
 
+    // ---- command-line parsing ---------------------------------------
+    // The regression this exists for: reading a flag's value as
+    // `args[args.indexOf("--from") + 1]` returns args[0] when the flag
+    // is ABSENT, because indexOf returns -1 — and the `?? default`
+    // beside it never fires, because args[0] is a string. It shipped,
+    // and built a Foundry URL out of the export's own filename.
+    const { parseArgs } = await import(
+      pathToFileURL(join(APP_ROOT, "scripts", "args.mjs")).href
+    );
+
+    const SPEC = {
+      "-o": { value: true, default: "out" },
+      "--from": { value: true, default: "http://localhost:30000" },
+      "--force": {},
+    };
+    const parse = (...argv) => parseArgs(argv, SPEC);
+    const threw = (...argv) => {
+      try {
+        parseArgs(argv, SPEC);
+        return false;
+      } catch {
+        return true;
+      }
+    };
+
+    check(
+      "an absent value flag falls back to its default",
+      parse("export.json")["flags"]["--from"] === "http://localhost:30000"
+    );
+    check(
+      "an absent flag does not consume the first positional",
+      parse("export.json")["flags"]["-o"] === "out"
+    );
+    check(
+      "the positional is still the positional",
+      eq(parse("export.json", "--force").positionals, ["export.json"])
+    );
+    check(
+      "an absent switch is false, not undefined",
+      parse("export.json").flags["--force"] === false
+    );
+
+    check(
+      "a value flag reads the token after it",
+      parse("f", "-o", "images").flags["-o"] === "images"
+    );
+    check(
+      "the flag's value is not mistaken for a positional",
+      eq(parse("f", "-o", "images").positionals, ["f"])
+    );
+    check(
+      "--flag=value works too",
+      parse("f", "--from=http://box:1234").flags["--from"] === "http://box:1234"
+    );
+    check(
+      "a switch is true when present",
+      parse("f", "--force").flags["--force"] === true
+    );
+    check(
+      "flags may come before the positional",
+      eq(parse("-o", "images", "f").positionals, ["f"])
+    );
+
+    // The failure modes that used to be silent.
+    check("an unknown option is an error", threw("f", "--dryrun"));
+    check("a value flag with nothing after it is an error", threw("f", "-o"));
+    check(
+      "a value flag followed by another flag is an error",
+      threw("f", "--from", "--force")
+    );
+    check("a switch given a value is an error", threw("f", "--force=yes"));
+    check(
+      "a value that merely looks odd is still accepted",
+      parse("f", "-o", "-weird-dir").flags["-o"] === "-weird-dir"
+    );
+    check("a bare - is a positional", eq(parse("-").positionals, ["-"]));
+    check(
+      "no arguments at all yields the defaults",
+      parse().flags["-o"] === "out" && parse().positionals.length === 0
+    );
+
     // ---- the Foundry converter -------------------------------------
     // Every case below was found in Derek's real 976-document export
     // rather than imagined, and each one produced visibly wrong text

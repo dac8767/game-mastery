@@ -27,35 +27,79 @@
  * the map server's web root makes every path resolve as
  * `${NEXT_PUBLIC_MAP_SERVER}/icons/...`, the same convention NPC
  * portraits and location maps already use. Nothing is uploaded to
- * Convex: these are a thousand small shared icons, and the free tier's
- * file storage is better spent on Derek's own images.
+ * Convex: these are seven thousand small shared icons, and the free
+ * tier's file storage is better spent on Derek's own images.
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, normalize } from "node:path";
+import { parseOrExit } from "./args.mjs";
 
-const args = process.argv.slice(2);
-const source = args.find((a) => !a.startsWith("-"));
-const outDir = args[args.indexOf("-o") + 1] ?? "foundry-images";
-const from = (args[args.indexOf("--from") + 1] ?? "http://localhost:30000").replace(
-  /\/+$/,
-  ""
+const USAGE =
+  "usage: node scripts/fetch-foundry-images.mjs <export.json> [-o dir] " +
+  "[--from url] [--jobs n] [--force]\n\n" +
+  "  <export.json>  the file the Foundry macro downloaded\n" +
+  "  -o dir         where to write them (default: foundry-images)\n" +
+  "  --from url     the running Foundry (default: http://localhost:30000)\n" +
+  "  --jobs n       how many to fetch at once (default: 8)\n" +
+  "  --force        re-download files that are already there\n";
+
+const { positionals, flags } = parseOrExit(
+  process.argv.slice(2),
+  {
+    "-o": { value: true, default: "foundry-images" },
+    "--from": { value: true, default: "http://localhost:30000" },
+    "--jobs": { value: true, default: "8" },
+    "--force": {},
+    "--help": {},
+  },
+  USAGE
 );
-const force = args.includes("--force");
 
-if (!source || args.includes("--help")) {
+const source = positionals[0];
+const outDir = flags["-o"];
+const from = flags["--from"].replace(/\/+$/, "");
+const force = flags["--force"];
+
+if (!source || flags["--help"]) {
+  console.error(USAGE);
+  process.exit(1);
+}
+
+if (positionals.length > 1) {
   console.error(
-    "usage: node scripts/fetch-foundry-images.mjs <export.json> [-o dir] [--from url] [--force]\n\n" +
-      "  <export.json>  the file the Foundry macro downloaded\n" +
-      "  -o dir         where to write them (default: foundry-images)\n" +
-      "  --from url     the running Foundry (default: http://localhost:30000)\n" +
-      "  --force        re-download files that are already there\n"
+    `expected one export file, got ${positionals.length}: ` +
+      `${positionals.join(", ")}\n\n${USAGE}`
   );
   process.exit(1);
 }
 
 if (!existsSync(source)) {
   console.error(`Cannot find: ${source}`);
+  process.exit(1);
+}
+
+// Checked before a single request, so a typo'd --from says so once
+// rather than seven thousand times. The scheme is checked too, not just
+// that it parses: `new URL("localhost:30000")` does NOT throw — it reads
+// "localhost:" as the scheme — and then every fetch fails for a reason
+// that says nothing about the missing http://.
+let fromUrl;
+try {
+  fromUrl = new URL(from);
+} catch {
+  fromUrl = null;
+}
+if (!fromUrl || !/^https?:$/.test(fromUrl.protocol)) {
+  console.error(
+    `--from must be an http:// or https:// URL, got: ${from}\n\n${USAGE}`
+  );
+  process.exit(1);
+}
+
+const jobs = Number(flags["--jobs"]);
+if (!Number.isInteger(jobs) || jobs < 1 || jobs > 64) {
+  console.error(`--jobs must be a whole number from 1 to 64, got ${flags["--jobs"]}`);
   process.exit(1);
 }
 
@@ -73,42 +117,50 @@ const collect = (img) => {
   if (typeof img !== "string" || !img) return;
   if (/^https?:\/\//i.test(img)) return; // already hosted somewhere
   if (img.startsWith("icons/svg/")) return; // Foundry's placeholders
+  // Everything written is written under outDir. A path that climbs out
+  // of it is not artwork, whatever it claims to be.
+  if (img.startsWith("/") || normalize(img).startsWith("..")) return;
   paths.add(img);
 };
 
 for (const doc of list) {
   collect(doc?.img);
   for (const item of doc?.items ?? []) collect(item?.img);
-  for (const token of [doc?.prototypeToken?.texture?.src]) collect(token);
+  collect(doc?.prototypeToken?.texture?.src);
 }
 
 console.log(`${paths.size} distinct image(s) referenced by ${list.length} document(s)`);
-console.log(`fetching from ${from}\n`);
+console.log(`fetching from ${from} (${jobs} at a time)\n`);
 
 let fetched = 0;
 let skipped = 0;
 const missing = [];
 let failed = 0;
 
-for (const path of paths) {
+/**
+ * Fetched in parallel because there are thousands of them and each is a
+ * few kilobytes: the whole run is round-trip latency, not bandwidth.
+ *
+ * A connection error is not a per-file problem — it means Foundry is not
+ * running, and every remaining file will fail the same way — so the
+ * first one stops the run rather than repeating itself once per file.
+ */
+let unreachable = null;
+
+async function fetchOne(path) {
   const target = join(outDir, path);
 
   if (!force && existsSync(target)) {
     skipped++;
-    continue;
+    return;
   }
 
   let res;
   try {
     res = await fetch(`${from}/${encodeURI(path)}`);
   } catch (e) {
-    // A connection error is not a per-file problem — it means Foundry
-    // is not running, and every remaining file will fail the same way.
-    console.error(
-      `\nCould not reach ${from} — is Foundry open with the world loaded?\n` +
-        `(${e instanceof Error ? e.message : e})`
-    );
-    process.exit(1);
+    unreachable ??= e instanceof Error ? e.message : String(e);
+    return;
   }
 
   if (!res.ok) {
@@ -116,14 +168,34 @@ for (const path of paths) {
     // leaves its paths behind in documents that still reference them.
     if (res.status === 404) missing.push(path);
     else failed++;
-    continue;
+    return;
   }
 
+  const body = Buffer.from(await res.arrayBuffer());
   mkdirSync(dirname(target), { recursive: true });
-  writeFileSync(target, Buffer.from(await res.arrayBuffer()));
+  writeFileSync(target, body);
   fetched++;
 
-  if (fetched % 100 === 0) process.stdout.write(`  ${fetched} fetched…\n`);
+  if (fetched % 250 === 0) process.stdout.write(`  ${fetched} fetched…\n`);
+}
+
+const queue = [...paths];
+let next = 0;
+
+await Promise.all(
+  Array.from({ length: Math.min(jobs, queue.length) }, async () => {
+    while (next < queue.length && unreachable === null) {
+      await fetchOne(queue[next++]);
+    }
+  })
+);
+
+if (unreachable !== null) {
+  console.error(
+    `\nCould not reach ${from} — is Foundry open with the world loaded?\n` +
+      `(${unreachable})`
+  );
+  process.exit(1);
 }
 
 console.log(`\n  ${fetched} fetched into ${outDir}/`);

@@ -24,6 +24,7 @@
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
+import { parseOrExit } from "./args.mjs";
 
 /** Minimal RFC 4180 parser — fields may contain commas, quotes, newlines. */
 function parseCsv(text) {
@@ -129,15 +130,20 @@ function portrait(s, npcName) {
 
 // ---------------------------------------------------------------------
 
-const [csvPath, campaignId] = process.argv.slice(2);
-const outFlag = process.argv.indexOf("-o");
-const outPath =
-  outFlag !== -1 ? process.argv[outFlag + 1] : "npcs.jsonl";
+const USAGE =
+  "usage: node scripts/import-npcs.mjs <csv-path> <campaignId> [-o npcs.jsonl]";
 
-if (!csvPath || !campaignId) {
-  console.error(
-    "usage: node scripts/import-npcs.mjs <csv-path> <campaignId> [-o npcs.jsonl]"
-  );
+const { positionals, flags } = parseOrExit(
+  process.argv.slice(2),
+  { "-o": { value: true, default: "npcs.jsonl" }, "--help": {} },
+  USAGE
+);
+
+const [csvPath, campaignId] = positionals;
+const outPath = flags["-o"];
+
+if (!csvPath || !campaignId || flags["--help"]) {
+  console.error(USAGE);
   process.exit(1);
 }
 
