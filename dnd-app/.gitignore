@@ -17,3 +17,12 @@ next-env.d.ts
 
 # convex snapshots — full database dumps, including DM notes
 backups/
+
+# Foundry artwork. Thousands of files and a few hundred MB, none of it
+# ours — it is fetched from a running Foundry by
+# scripts/fetch-foundry-images.mjs and belongs on the map server, not in
+# the repo. public/web/ is the same mirror served locally while there is
+# no map server to point at.
+foundry-images/
+foundry-import/
+/public/web/

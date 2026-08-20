@@ -246,16 +246,24 @@ if (missing.length > 0) {
 }
 if (failed > 0) console.log(`  ${failed} failed for other reasons`);
 
-// The trailing slash on the source is load-bearing: it copies the
-// CONTENTS of web/ into the mount, so `foundry/` lands beside the
-// map-server's own directories instead of nesting a second `web/`.
+// Two places these can be served from, and the stored paths are the
+// same for both — which one is in use is NEXT_PUBLIC_MAP_SERVER being
+// set or not, never a re-import.
+//
+// The trailing slash on the rsync source is load-bearing: it copies the
+// CONTENTS of web/ into the mount, so `foundry/` lands beside the map
+// server's own directories instead of nesting a second `web/`.
 console.log(
-  `\nnext: copy it onto the map server —\n\n` +
-    `  rsync -a --info=progress2 ${join(outDir, ROUTE)}/ ` +
-    `YOUR-MAP-SERVER:${MAP_SERVER_ROOT}/\n\n` +
-    "(YOUR-MAP-SERVER is the only part to fill in)\n\n" +
+  "\nnext — serve them from one of two places:\n\n" +
+    "  no map server yet? let the app serve them itself:\n" +
+    `    mv ${join(outDir, ROUTE)} public/${ROUTE}\n` +
+    "    (or re-run this with  -o public  to write them straight there)\n" +
+    "    leave NEXT_PUBLIC_MAP_SERVER unset, and restart the dev server\n\n" +
+    "  map server up? put them on it:\n" +
+    `    rsync -a --info=progress2 ${join(outDir, ROUTE)}/ ` +
+    `YOUR-MAP-SERVER:${MAP_SERVER_ROOT}/\n` +
+    "    (YOUR-MAP-SERVER is the only part to fill in)\n" +
     (sample
-      ? "then check one lands:\n" +
-        `  curl -sI "$NEXT_PUBLIC_MAP_SERVER/${FOUNDRY_MIRROR}/${sample}"\n`
+      ? `\nthen this should load: /${FOUNDRY_MIRROR}/${sample}\n`
       : "")
 );

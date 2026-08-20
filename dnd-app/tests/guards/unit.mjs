@@ -1011,6 +1011,40 @@ export const unit = {
         .name === "a"
     );
 
+    // ---- where a row's artwork is fetched from ----------------------
+    // The same stored path has to work against the map server and
+    // against the app's own public/ directory, because standing up the
+    // map server later must not mean re-importing 7,361 rows.
+    check(
+      "with a map server, the path hangs off it",
+      look.artSrc("web/foundry/icons/a.webp", "https://maps.example.com") ===
+        "https://maps.example.com/web/foundry/icons/a.webp"
+    );
+    check(
+      "with no map server, the path is root-relative to the app",
+      look.artSrc("web/foundry/icons/a.webp", undefined) ===
+        "/web/foundry/icons/a.webp"
+    );
+    check(
+      "an unset env var reads as empty, not as the string 'undefined'",
+      look.artSrc("web/foundry/icons/a.webp", "") === "/web/foundry/icons/a.webp"
+    );
+    // "//web/foundry/..." is PROTOCOL-relative: the browser reads "web"
+    // as a hostname and leaves the app. A trailing slash in .env.local
+    // is the likeliest way to get one.
+    check(
+      "a trailing slash on the map server does not make a protocol-relative url",
+      look.artSrc("web/foundry/icons/a.webp", "https://maps.example.com/") ===
+        "https://maps.example.com/web/foundry/icons/a.webp"
+    );
+    check(
+      "a leading slash on the stored path does not either",
+      look.artSrc("/web/foundry/icons/a.webp", "") === "/web/foundry/icons/a.webp"
+    );
+    check("no image is no src", look.artSrc(undefined, "https://m") === null);
+    check("an empty image is no src", look.artSrc("   ", "https://m") === null);
+    check("a non-string image is no src", look.artSrc(42, "https://m") === null);
+
     // ---- the Lookup filters ----------------------------------------
     // These run in the browser on every keystroke, so a wrong rule
     // silently HIDES rows rather than erroring — the failure mode is a

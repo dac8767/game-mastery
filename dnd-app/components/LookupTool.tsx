@@ -11,6 +11,7 @@ import {
   LOOKUP_TITLES,
   LookupKind,
   abilityCells,
+  artSrc,
   columnTemplate,
   blocks as readBlocks,
   features,
@@ -373,23 +374,24 @@ function LookupDetail({
 }
 
 /**
- * A row's artwork, served from the map server.
+ * A row's artwork.
  *
- * The path is Foundry-relative ("icons/magic/..."), the same convention
- * NPC portraits and location maps use — see
- * scripts/fetch-foundry-images.mjs for getting the files there. With no
- * map server configured there is nothing to point at, so it renders
- * nothing rather than a broken image on every row.
+ * The path is mirror-relative ("web/foundry/icons/..."), the same
+ * convention NPC portraits and location maps use — see
+ * scripts/fetch-foundry-images.mjs for getting the files there, and
+ * artSrc for which base they hang off. Either the map server serves the
+ * mirror or the app serves it out of public/; the stored path is the
+ * same for both, so which one is in use is an environment variable
+ * rather than a re-import.
  */
 function Art({ row, className }: { row: Record<string, unknown>; className: string }) {
-  const mapServer = process.env.NEXT_PUBLIC_MAP_SERVER ?? "";
-  const path = typeof row.image === "string" ? row.image : "";
-  if (!path || !mapServer) return null;
+  const src = artSrc(row.image, process.env.NEXT_PUBLIC_MAP_SERVER);
+  if (!src) return null;
   return (
     /* eslint-disable-next-line @next/next/no-img-element */
     <img
       className={className}
-      src={`${mapServer}/${path}`}
+      src={src}
       alt=""
       loading="lazy"
       // A missing file is common while the mirror is catching up, and a

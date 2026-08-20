@@ -403,6 +403,29 @@ export const LOOKUP_COLUMNS: Record<LookupKind, LookupColumn[]> = {
 export const MIN_LOOKUP_COL = 56;
 
 /**
+ * Where a row's artwork is fetched from.
+ *
+ * `image` is a mirror-relative path — "web/foundry/icons/..." — and the
+ * base is NEXT_PUBLIC_MAP_SERVER when there is one. With no map server
+ * configured this returns a ROOT-RELATIVE url instead of nothing, so
+ * the app can serve the same mirror out of public/ and the paths stay
+ * identical either way. Standing up the map server later is then a
+ * change to one environment variable rather than to the stored data.
+ *
+ * A file that is not there fails the same way in both cases, and the
+ * <img> hides itself on error rather than showing a broken-image icon
+ * on every row.
+ */
+export function artSrc(image: unknown, mapServer: string | undefined): string | null {
+  if (typeof image !== "string" || image.trim() === "") return null;
+  // A trailing slash on the env var would otherwise produce "//web/...",
+  // which is a PROTOCOL-RELATIVE url — the browser reads "web" as a
+  // hostname and leaves the app entirely.
+  const base = (mapServer ?? "").replace(/\/+$/, "");
+  return `${base}/${image.replace(/^\/+/, "")}`;
+}
+
+/**
  * The grid template a kind's header and rows both use.
  *
  * `widths` are the pixel widths someone has dragged a column to. A
