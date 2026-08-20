@@ -18,6 +18,35 @@ import { authTables } from "@convex-dev/auth/server";
  *   per campaign that every player client subscribes to. The DM changes
  *   it (active map, active encounter) and all screens follow instantly.
  */
+/**
+ * A description, as ordered blocks rather than one flattened string.
+ *
+ * Foundry writes real tables and lists into descriptions, and
+ * flattening them runs a d100 table's cells together into an
+ * unreadable sentence. Blocks keep a table a table, in its place in the
+ * prose — and keep raw HTML out of the database, so nothing downstream
+ * is ever rendered as markup.
+ */
+const blockValidator = v.union(
+  v.object({ type: v.literal("text"), text: v.string() }),
+  v.object({
+    type: v.literal("table"),
+    /** Empty when the table had no header row of its own. */
+    headers: v.array(v.string()),
+    rows: v.array(v.array(v.string())),
+  }),
+  v.object({
+    type: v.literal("list"),
+    ordered: v.boolean(),
+    items: v.array(v.string()),
+  })
+);
+
+const featureValidator = v.object({
+  name: v.string(),
+  blocks: v.array(blockValidator),
+});
+
 export default defineSchema({
   ...authTables,
 
@@ -221,6 +250,17 @@ export default defineSchema({
    */
   spells: defineTable({
     name: v.string(),
+    /**
+     * Artwork, as a Foundry-relative path ("icons/magic/...").
+     *
+     * Stored as a path and served from the map server, the same way
+     * NPC portraits and location maps are — the files come out of a
+     * running Foundry via scripts/fetch-foundry-images.mjs. Keeping
+     * paths rather than uploading a thousand icons into file storage
+     * keeps the free tier's storage for things that are actually
+     * Derek's.
+     */
+    image: v.optional(v.string()),
     level: v.number(), // 0 = cantrip
     school: v.optional(v.string()),
     castingTime: v.optional(v.string()),
@@ -236,7 +276,7 @@ export default defineSchema({
     damageEffect: v.optional(v.string()),
     ritual: v.boolean(),
     concentration: v.boolean(),
-    description: v.optional(v.string()),
+    blocks: v.optional(v.array(blockValidator)),
     source: v.optional(v.string()),
   })
     .index("by_name", ["name"])
@@ -247,13 +287,18 @@ export default defineSchema({
 
   items: defineTable({
     name: v.string(),
+    image: v.optional(v.string()),
     /** weapon | armor | gear | consumable | tool | container | other */
     kind: v.string(),
+    /** The real dnd5e subtype the kind bucket flattens: "wondrous". */
+    subtype: v.optional(v.string()),
+    /** "Magical, Adamantine" — the Details tab's property checkboxes. */
+    properties: v.optional(v.string()),
     rarity: v.optional(v.string()),
     price: v.optional(v.string()),
     weight: v.optional(v.number()),
     attunement: v.boolean(),
-    description: v.optional(v.string()),
+    blocks: v.optional(v.array(blockValidator)),
     source: v.optional(v.string()),
   })
     .index("by_name", ["name"])
@@ -264,6 +309,7 @@ export default defineSchema({
 
   monsters: defineTable({
     name: v.string(),
+    image: v.optional(v.string()),
     size: v.optional(v.string()),
     creatureType: v.optional(v.string()),
     alignment: v.optional(v.string()),
@@ -295,16 +341,10 @@ export default defineSchema({
      * whole or not at all, and splitting it would turn one row into
      * thirty.
      */
-    traits: v.optional(
-      v.array(v.object({ name: v.string(), text: v.string() }))
-    ),
-    actions: v.optional(
-      v.array(v.object({ name: v.string(), text: v.string() }))
-    ),
-    legendaryActions: v.optional(
-      v.array(v.object({ name: v.string(), text: v.string() }))
-    ),
-    description: v.optional(v.string()),
+    traits: v.optional(v.array(featureValidator)),
+    actions: v.optional(v.array(featureValidator)),
+    legendaryActions: v.optional(v.array(featureValidator)),
+    blocks: v.optional(v.array(blockValidator)),
     source: v.optional(v.string()),
   })
     .index("by_name", ["name"])

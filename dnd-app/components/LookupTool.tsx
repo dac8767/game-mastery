@@ -5,11 +5,14 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import {
+  Block,
+  Feature,
   LOOKUP_COLUMNS,
   LOOKUP_TITLES,
   LookupKind,
   abilityCells,
   columnTemplate,
+  blocks as readBlocks,
   features,
   itemFacts,
   itemSubtitle,
@@ -179,9 +182,18 @@ export function LookupTool({ kind }: { kind: LookupKind }) {
                             c.align === "center" ? " center" : ""
                           }${c.primary ? " primary" : ""}`}
                         >
-                          <span className="lk-cell">{c.get(row) ?? "—"}</span>
-                          {c.primary && typeof row.source === "string" && (
-                            <span className="lk-cell-sub">{row.source}</span>
+                          {c.primary && <Art row={row} className="lk-art" />}
+                          {c.primary ? (
+                            <span className="lk-name-cell">
+                              <span className="lk-cell">
+                                {c.get(row) ?? "—"}
+                              </span>
+                              {typeof row.source === "string" && (
+                                <span className="lk-cell-sub">{row.source}</span>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="lk-cell">{c.get(row) ?? "—"}</span>
                           )}
                         </span>
                       ))}
@@ -274,24 +286,24 @@ function LookupDetail({
   kind: LookupKind;
   row: Record<string, unknown>;
 }) {
-  const description =
-    typeof row.description === "string" ? row.description : "";
+  const body = readBlocks(row.blocks);
   const source = typeof row.source === "string" ? row.source : "";
 
   return (
     <article className={`lk lk-${kind}`}>
+      <Art row={row} className="lk-art-big" />
       <h2 className="lk-name">{String(row.name)}</h2>
 
       {kind === "items" && <ItemHead row={row} />}
       {kind === "spells" && <SpellHead row={row} />}
       {kind === "monsters" && <MonsterBlock row={row} />}
 
-      {description && (
+      {body.length > 0 && (
         <section className="lk-body">
           {/* On a monster this is a section of its own, under the block:
               the stat block is reference, the description is story. */}
           {kind === "monsters" && <h3 className="lk-h">Description</h3>}
-          <Prose text={description} />
+          <Blocks blocks={body} />
         </section>
       )}
 
@@ -301,6 +313,35 @@ function LookupDetail({
 
       {source && <p className="lk-source">{source}</p>}
     </article>
+  );
+}
+
+/**
+ * A row's artwork, served from the map server.
+ *
+ * The path is Foundry-relative ("icons/magic/..."), the same convention
+ * NPC portraits and location maps use — see
+ * scripts/fetch-foundry-images.mjs for getting the files there. With no
+ * map server configured there is nothing to point at, so it renders
+ * nothing rather than a broken image on every row.
+ */
+function Art({ row, className }: { row: Record<string, unknown>; className: string }) {
+  const mapServer = process.env.NEXT_PUBLIC_MAP_SERVER ?? "";
+  const path = typeof row.image === "string" ? row.image : "";
+  if (!path || !mapServer) return null;
+  return (
+    /* eslint-disable-next-line @next/next/no-img-element */
+    <img
+      className={className}
+      src={`${mapServer}/${path}`}
+      alt=""
+      loading="lazy"
+      // A missing file is common while the mirror is catching up, and a
+      // broken-image icon on every row is worse than no picture.
+      onError={(e) => {
+        e.currentTarget.style.display = "none";
+      }}
+    />
   );
 }
 
@@ -428,36 +469,82 @@ function MonsterBlock({ row }: { row: Record<string, unknown> }) {
   );
 }
 
-function FeatureList({
-  title,
-  items,
-}: {
-  title: string;
-  items: { name: string; text: string }[];
-}) {
+function FeatureList({ title, items }: { title: string; items: Feature[] }) {
   if (items.length === 0) return null;
   return (
     <section className="lk-features">
       <h3 className="lk-h">{title}</h3>
       {items.map((f) => (
         <div key={f.name} className="lk-feature">
-          <span className="lk-feature-name">{f.name}.</span>{" "}
-          <Prose text={f.text} inline />
+          {/* The name runs into the first paragraph the way a stat
+              block prints it, so the lead block is inlined and the
+              rest — a table, a numbered list — follows underneath. */}
+          <p className="lk-feature-lead">
+            <span className="lk-feature-name">{f.name}.</span>{" "}
+            {f.blocks[0]?.type === "text" ? f.blocks[0].text : ""}
+          </p>
+          <Blocks
+            blocks={f.blocks[0]?.type === "text" ? f.blocks.slice(1) : f.blocks}
+          />
         </div>
       ))}
     </section>
   );
 }
 
-/** Blank-line-separated paragraphs, the way the converter writes them. */
-function Prose({ text, inline }: { text: string; inline?: boolean }) {
-  const paras = text.split(/\n{2,}/).filter((p) => p.trim());
-  if (inline) return <>{paras.join(" ")}</>;
+/**
+ * Text, tables and lists, in the order the source had them.
+ *
+ * Nothing here is markup: the importer turned the HTML into data, so a
+ * table is rendered as real elements rather than injected.
+ */
+function Blocks({ blocks }: { blocks: Block[] }) {
   return (
     <>
-      {paras.map((p, i) => (
-        <p key={i}>{p}</p>
-      ))}
+      {blocks.map((b, i) => {
+        if (b.type === "text") {
+          return b.text
+            .split(/\n{2,}/)
+            .filter((p) => p.trim())
+            .map((p, j) => <p key={`${i}-${j}`}>{p}</p>);
+        }
+
+        if (b.type === "list") {
+          const List = b.ordered ? "ol" : "ul";
+          return (
+            <List key={i} className="lk-list">
+              {b.items.map((item, j) => (
+                <li key={j}>{item}</li>
+              ))}
+            </List>
+          );
+        }
+
+        return (
+          <div key={i} className="lk-table-wrap">
+            <table className="lk-datatable">
+              {b.headers.length > 0 && (
+                <thead>
+                  <tr>
+                    {b.headers.map((h, j) => (
+                      <th key={j}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+              )}
+              <tbody>
+                {b.rows.map((r, j) => (
+                  <tr key={j}>
+                    {r.map((c, k) => (
+                      <td key={k}>{c}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
     </>
   );
 }

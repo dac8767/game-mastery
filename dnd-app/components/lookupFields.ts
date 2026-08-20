@@ -224,9 +224,48 @@ export function monsterTraitLines(
   return out;
 }
 
+export type Block =
+  | { type: "text"; text: string }
+  | { type: "table"; headers: string[]; rows: string[][] }
+  | { type: "list"; ordered: boolean; items: string[] };
+
 export interface Feature {
   name: string;
-  text: string;
+  blocks: Block[];
+}
+
+/**
+ * Blocks, defended against a row that predates them or arrived
+ * malformed. A description is content, not structure the UI can trust:
+ * one bad row must render short, never throw and take the screen down.
+ */
+export function blocks(raw: unknown): Block[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((b): Block[] => {
+    if (!b || typeof b !== "object") return [];
+    const o = b as Record<string, unknown>;
+    if (o.type === "text" && typeof o.text === "string") {
+      return o.text.trim() ? [{ type: "text" as const, text: o.text }] : [];
+    }
+    if (o.type === "table") {
+      const rows = Array.isArray(o.rows)
+        ? o.rows.filter(Array.isArray).map((r) => r.map((c) => String(c ?? "")))
+        : [];
+      const headers = Array.isArray(o.headers)
+        ? o.headers.map((h) => String(h ?? ""))
+        : [];
+      return headers.length || rows.length
+        ? [{ type: "table" as const, headers, rows }]
+        : [];
+    }
+    if (o.type === "list" && Array.isArray(o.items)) {
+      const items = o.items.map((i) => String(i ?? "")).filter(Boolean);
+      return items.length
+        ? [{ type: "list" as const, ordered: o.ordered === true, items }]
+        : [];
+    }
+    return [];
+  });
 }
 
 /** Named blocks, defended against a row that never carried any. */
@@ -236,7 +275,7 @@ export function features(raw: unknown): Feature[] {
     if (!f || typeof f !== "object") return [];
     const name = str((f as Record<string, unknown>).name);
     if (!name) return [];
-    return [{ name, text: str((f as Record<string, unknown>).text) ?? "" }];
+    return [{ name, blocks: blocks((f as Record<string, unknown>).blocks) }];
   });
 }
 

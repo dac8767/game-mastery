@@ -74,6 +74,7 @@ export const indexSpells = query({
       rows: rows.map((r) => ({
         _id: r._id,
         name: r.name,
+        image: r.image ?? null,
         level: r.level,
         school: r.school ?? null,
         castingTime: r.castingTime ?? null,
@@ -101,7 +102,10 @@ export const indexItems = query({
       rows: rows.map((r) => ({
         _id: r._id,
         name: r.name,
+        image: r.image ?? null,
         kind: r.kind,
+        subtype: r.subtype ?? null,
+        properties: r.properties ?? null,
         rarity: r.rarity ?? null,
         price: r.price ?? null,
         weight: r.weight ?? null,
@@ -125,6 +129,7 @@ export const indexMonsters = query({
       rows: rows.map((r) => ({
         _id: r._id,
         name: r.name,
+        image: r.image ?? null,
         size: r.size ?? null,
         creatureType: r.creatureType ?? null,
         alignment: r.alignment ?? null,

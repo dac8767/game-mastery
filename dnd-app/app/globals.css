@@ -4051,3 +4051,96 @@ button.cal-day:hover {
   background: rgba(217, 95, 59, 0.1);
   font-size: 0.82rem;
 }
+
+/* ---------- Lookup: tables and lists inside a description ---------- */
+
+/* A wide d100 table scrolls inside its own box rather than widening the
+   panel and pushing the whole row layout sideways. */
+.lk-table-wrap {
+  overflow-x: auto;
+  margin: 0 0 0.8rem;
+}
+
+.lk-datatable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+.lk-datatable th {
+  text-align: left;
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.lk-datatable td {
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.lk-datatable tr:last-child td {
+  border-bottom: none;
+}
+
+/* The first column of a roll table is the die range: narrow, and read
+   as a number rather than as prose. */
+.lk-datatable td:first-child {
+  white-space: nowrap;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.lk-list {
+  margin: 0 0 0.8rem;
+  padding-left: 1.3rem;
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.lk-list li {
+  margin-bottom: 0.25rem;
+}
+
+.lk-feature-lead {
+  margin: 0 0 0.4rem;
+}
+
+/* ---------- Lookup: artwork ---------- */
+
+.lk-art {
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  object-fit: cover;
+  border-radius: 5px;
+  background: var(--bg-inset);
+}
+
+.lk-td.primary {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lk-name-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 0;
+}
+
+.lk-art-big {
+  float: right;
+  width: 6rem;
+  height: 6rem;
+  object-fit: contain;
+  margin: 0 0 0.5rem 0.75rem;
+  border-radius: 8px;
+  background: var(--bg-inset);
+}

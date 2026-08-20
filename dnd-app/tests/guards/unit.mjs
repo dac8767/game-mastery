@@ -1214,8 +1214,20 @@ export const unit = {
 
     check("the converter splits spells from items", outSpells.length === 2 && outItems.length === 2);
 
-    // Nothing Foundry-shaped may survive into a description.
-    const dirty = (r) => /@[A-Za-z]|\[\[|\w+=\S|&amp;|<[a-z]/i.test(r.description ?? "");
+    // A description is BLOCKS now, so the text has to be gathered back
+    // out of them before it can be checked.
+    const textOf = (r) =>
+      (r.blocks ?? [])
+        .map((b) =>
+          b.type === "text"
+            ? b.text
+            : b.type === "list"
+              ? b.items.join(" ")
+              : [...b.headers, ...b.rows.flat()].join(" ")
+        )
+        .join("\n");
+
+    const dirty = (r) => /@[A-Za-z]|\[\[|\w+=\S|&amp;|<[a-z]/i.test(textOf(r));
     check(
       "no Foundry markup survives into any description",
       ![...outSpells, ...outItems].some(dirty)
@@ -1227,36 +1239,36 @@ export const unit = {
     check("components come from the properties array", fb.components === "V, S, M");
     check(
       "the 2024 target labels are rebuilt from system.target",
-      fb.description.startsWith("Each creature in a 20-foot Sphere centered")
+      textOf(fb).startsWith("Each creature in a 20-foot Sphere centered")
     );
     check(
       "a check enricher becomes a sentence",
-      /an Intelligence \(Investigation\) check\b/.test(fb.description)
+      /an Intelligence \(Investigation\) check\b/.test(textOf(fb))
     );
     check(
       "the doubled noun after a check enricher is collapsed",
-      !/check check/i.test(fb.description)
+      !/check check/i.test(textOf(fb))
     );
     check(
       "a reference enricher keeps its word and drops its switches",
-      /Blinded by it/.test(fb.description)
+      /Blinded by it/.test(textOf(fb))
     );
     check(
       "a damage enricher keeps the dice",
-      /8d6 fire damage/i.test(fb.description)
+      /8d6 fire damage/i.test(textOf(fb))
     );
     check(
       "a labelled UUID enricher keeps only its label",
-      /Gameplay Toolbox/.test(fb.description)
+      /Gameplay Toolbox/.test(textOf(fb))
     );
     // A BARE data path, outside any enricher — the 29-occurrence case.
     check(
       "a bare @attributes.spell.dc is translated into words",
-      /against your spell save DC/.test(fb.description)
+      /against your spell save DC/.test(textOf(fb))
     );
     check(
       "a bare @item.level is translated into words",
-      /using the spell's level slots/.test(fb.description)
+      /using the spell's level slots/.test(textOf(fb))
     );
 
     check("ritual is read from properties", am.ritual === true);

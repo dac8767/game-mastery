@@ -281,9 +281,16 @@ function stripHtml(html) {
     // form has to be handled first, or the label is thrown away along
     // with the brackets.
     .replace(/[@&]\w+\[[^\]]*\]\{([^}]*)\}/g, "$1")
-    // The unlabelled form keeps its content, minus the switches:
-    // `&Reference[Charmed apply=false]` is the word "Charmed", and
-    // `apply=false` is an instruction to Foundry, not part of the rule.
+    // An unlabelled @UUID is a document ID, not words, and @Embed pulls
+    // in another document's whole body. Outside Foundry there is nothing
+    // to resolve or embed, and keeping the inner text leaves
+    // "Compendium.dnd5e.spells24.Item.phbsplGoodberry0" sitting in the
+    // description as if it were prose. Both are dropped.
+    .replace(/@(?:UUID|Embed)\[[^\]]*\]/g, "")
+    // Every other unlabelled form keeps its content, minus the
+    // switches: `&Reference[Charmed apply=false]` is the word
+    // "Charmed", and `apply=false` is an instruction to Foundry rather
+    // than part of the rule.
     .replace(/[@&]\w+\[([^\]]*)\]/g, (_, inner) =>
       inner.replace(/\s*\w+=("[^"]*"|\S+)/g, "").trim()
     )
@@ -321,6 +328,79 @@ function stripHtml(html) {
     .trim();
 
   return text.length > 0 ? text : undefined;
+}
+
+/**
+ * A description as ORDERED BLOCKS rather than one flattened string.
+ *
+ * Foundry writes real tables and lists into descriptions — 111 tables
+ * and 66 lists in Derek's export — and flattening them runs a d100
+ * table's cells together into an unreadable sentence. Splitting keeps
+ * each one a table, in its place in the prose, and keeps the app free
+ * of raw HTML: nothing here is ever rendered as markup, only as data.
+ *
+ * Cell and item text goes through exactly the same pipeline as the
+ * prose around it, so an enricher inside a table cell is handled the
+ * same way as one in a paragraph.
+ */
+function toBlocks(html) {
+  if (typeof html !== "string" || !html) return undefined;
+
+  const blocks = [];
+  // Split on tables and lists, KEEPING them: a captured group in the
+  // separator is what puts the delimiters back into the result, which
+  // is how the ordering survives.
+  const parts = html.split(
+    /(<table[\s\S]*?<\/table>|<[uo]l[\s\S]*?<\/[uo]l>)/i
+  );
+
+  for (const part of parts) {
+    if (!part) continue;
+
+    if (/^<table/i.test(part)) {
+      const table = parseTable(part);
+      if (table) blocks.push(table);
+      continue;
+    }
+    if (/^<[uo]l/i.test(part)) {
+      const list = parseList(part);
+      if (list) blocks.push(list);
+      continue;
+    }
+
+    const text = stripHtml(part);
+    if (text) blocks.push({ type: "text", text });
+  }
+
+  return blocks.length > 0 ? blocks : undefined;
+}
+
+function parseTable(html) {
+  const rowsOf = (chunk) =>
+    [...chunk.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) =>
+      [...m[1].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)].map(
+        (c) => stripHtml(c[1]) ?? ""
+      )
+    );
+
+  // A <thead> names the header explicitly. Without one, the first row
+  // is NOT promoted: a headerless table is a real thing, and guessing
+  // would silently eat its first row of data.
+  const head = html.match(/<thead[\s\S]*?<\/thead>/i);
+  const body = html.replace(/<thead[\s\S]*?<\/thead>/i, "");
+  const headers = head ? (rowsOf(head[0])[0] ?? []) : [];
+  const rows = rowsOf(body).filter((r) => r.length > 0);
+
+  if (headers.length === 0 && rows.length === 0) return null;
+  return { type: "table", headers, rows };
+}
+
+function parseList(html) {
+  const items = [...html.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)]
+    .map((m) => stripHtml(m[1]) ?? "")
+    .filter(Boolean);
+  if (items.length === 0) return null;
+  return { type: "list", ordered: /^<ol/i.test(html), items };
 }
 
 const clean = (s) => (typeof s === "string" ? s.replace(/\s+/g, " ").trim() : "");
@@ -411,9 +491,35 @@ function actorToNpc(doc, campaignId) {
 function relativeImage(img) {
   if (typeof img !== "string" || !img) return undefined;
   if (/^https?:\/\//i.test(img)) return undefined;
-  if (img.startsWith("icons/")) return undefined;
-  if (img.startsWith("systems/")) return undefined;
+  if (isPlaceholderImage(img)) return undefined;
+  // `icons/` and `systems/` were dropped here too, which was right for
+  // an NPC portrait and wrong for everything else: for a spell or an
+  // item those paths ARE the artwork, and dropping them is why nothing
+  // had a picture.
   return img;
+}
+
+/**
+ * Foundry's generic silhouettes.
+ *
+ * `icons/svg/mystery-man.svg` is what every un-illustrated actor has,
+ * so writing it would give hundreds of NPCs the same portrait. The rest
+ * of `icons/svg/` is the same kind of thing — item-bag, aura, direction
+ * — placeholders rather than art.
+ */
+function isPlaceholderImage(img) {
+  return img.startsWith("icons/svg/");
+}
+
+/**
+ * The library's artwork, kept as the Foundry-relative path.
+ *
+ * Same convention as map-server portraits: the path is stored and the
+ * file is served from NEXT_PUBLIC_MAP_SERVER. scripts/fetch-foundry-images.mjs
+ * pulls the files out of a running Foundry so they can be put there.
+ */
+function libraryImage(doc) {
+  return relativeImage(doc.img);
 }
 
 // ---------------------------------------------------------------------
@@ -427,6 +533,28 @@ function relativeImage(img) {
  * armour and a ring of invisibility — so they are folded into one small
  * bucket that is actually worth filtering by.
  */
+/** dnd5e's property slugs, spelled out. */
+const ITEM_PROPERTIES = {
+  mgc: "Magical",
+  ada: "Adamantine",
+  foc: "Focus",
+  stealthDisadvantage: "Stealth Disadvantage",
+  amm: "Ammunition",
+  fin: "Finesse",
+  hvy: "Heavy",
+  lgt: "Light",
+  lod: "Loading",
+  rch: "Reach",
+  rel: "Reload",
+  ret: "Returning",
+  spc: "Special",
+  thr: "Thrown",
+  two: "Two-Handed",
+  ver: "Versatile",
+  sil: "Silvered",
+  ver2: "Versatile",
+};
+
 const EQUIPMENT_KINDS = {
   light: "armor",
   medium: "armor",
@@ -489,6 +617,7 @@ function itemToRow(doc) {
 
   const row = {
     name: clean(doc.name) || "Unnamed",
+    image: libraryImage(doc),
     kind: itemKind(doc),
     rarity: humanize(s.rarity),
     price: formatPrice(s.price),
@@ -497,7 +626,17 @@ function itemToRow(doc) {
     // different field meaning "is it attuned right now", which is a
     // property of one character's copy, not of the item.
     attunement: clean(s.attunement).toLowerCase() === "required",
-    description: stripHtml(s.description?.value),
+    // The Details tab's own facts. `type.value` is the real subtype
+    // ("trinket", "wondrous"), which the kind bucket flattens away, and
+    // `properties` is where Magical / Adamantine / Focus live.
+    subtype: humanize(s.type?.value),
+    properties: (() => {
+      const list = (s.properties ?? [])
+        .map((p) => ITEM_PROPERTIES[p] ?? humanize(p))
+        .filter(Boolean);
+      return list.length > 0 ? list.join(", ") : undefined;
+    })(),
+    blocks: toBlocks(s.description?.value),
     source: formatSource(s.source),
   };
   return row;
@@ -759,6 +898,7 @@ function spellToRow(doc) {
 
   const row = {
     name: clean(doc.name) || "Unnamed",
+    image: libraryImage(doc),
     level: Number.isFinite(Number(s.level)) ? Number(s.level) : 0,
     school: SCHOOLS[clean(s.school)] ?? humanize(s.school),
     castingTime: formatActivation(s.activation),
@@ -771,7 +911,7 @@ function spellToRow(doc) {
     damageEffect: spellActivity(s).damageEffect,
     ritual: p.ritual,
     concentration: p.concentration,
-    description: stripHtml(rawDescription),
+    blocks: toBlocks(rawDescription),
     source: formatSource(s.source),
   };
   return row;
@@ -829,8 +969,7 @@ function monsterFeatures(doc) {
     const name = clean(item.name);
     if (!name) continue;
 
-    const text = stripHtml(is.description?.value);
-    const entry = { name, text: text ?? "" };
+    const entry = { name, blocks: toBlocks(is.description?.value) ?? [] };
 
     // Legendary actions declare themselves through their ACTIVATION
     // cost rather than a subtype — Derek's export has no "legendary"
@@ -991,6 +1130,7 @@ function actorToMonster(doc) {
 
   const row = {
     name: clean(doc.name) || "Unnamed",
+    image: libraryImage(doc),
     size: SIZES[s.traits?.size] ?? humanize(s.traits?.size),
     creatureType,
     alignment: clean(details.alignment) || undefined,
@@ -1024,9 +1164,9 @@ function actorToMonster(doc) {
         legendaryActions: f.legendary.length ? f.legendary : undefined,
       };
     })(),
-    description:
-      stripHtml(details.biography?.public) ??
-      stripHtml(details.biography?.value),
+    blocks:
+      toBlocks(details.biography?.public) ??
+      toBlocks(details.biography?.value),
     source: formatSource(details.source ?? s.source),
   };
   return row;
