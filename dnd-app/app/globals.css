@@ -4042,3 +4042,12 @@ button.cal-day:hover {
     display: none;
   }
 }
+
+.lk-capped {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--bloodied);
+  border-radius: 8px;
+  background: rgba(217, 95, 59, 0.1);
+  font-size: 0.82rem;
+}

@@ -37,12 +37,25 @@ import { requireUser } from "./auth";
 /**
  * Ceiling on one index fetch.
  *
- * The SRD is roughly 340 spells, 640 items and 500 monsters, so this is
- * several times the real size — it exists so a runaway import cannot
- * turn one screen into a multi-megabyte download, not because the limit
- * is expected to bind.
+ * Two different costs bound this, and the smaller one is not the
+ * obvious one:
+ *
+ *   - What the BROWSER downloads is small, because the heavy fields are
+ *     stripped: measured at roughly 0.4 MB for 3,000 rows.
+ *   - What the QUERY READS is not, because Convex has no projection —
+ *     `db.query()` returns whole documents, descriptions and stat
+ *     blocks included, and only then are they stripped. Measured at
+ *     roughly 1 MB per 1,000 rows, against a per-query read limit in
+ *     the low tens of MB.
+ *
+ * So the read is what sets this, at a level with room underneath it.
+ * `capped` rides back with the rows and the screen SAYS SO when it
+ * binds — a library that silently stops at a round number reads as
+ * missing data, and the fix (splitting the text into its own table so
+ * the index reads small documents) is a real change worth prompting
+ * rather than hiding.
  */
-const MAX_INDEX = 2000;
+const MAX_INDEX = 5000;
 
 async function requireReader(ctx: QueryCtx) {
   // Signed in is the whole bar. The library has nothing in it that one

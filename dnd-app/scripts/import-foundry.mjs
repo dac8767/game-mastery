@@ -2,7 +2,7 @@
 /**
  * Foundry VTT export  ->  Game Mastery.
  *
- *   node scripts/import-foundry.mjs <path> <campaignId> [-o out/]
+ *   node scripts/import-foundry.mjs <path> <campaignId> [-o out/] [--dry-run]
  *
  *   npx convex import --table npcs out/npcs.jsonl --append
  *   npx convex run locations:importLocations "$(cat out/locations.json)" \
@@ -1105,9 +1105,10 @@ const [, , path, campaignId, ...rest] = process.argv;
 
 if (!path || !campaignId) {
   console.error(
-    "usage: node scripts/import-foundry.mjs <path> <campaignId> [-o out/]\n\n" +
+    "usage: node scripts/import-foundry.mjs <path> <campaignId> [-o out/] [--dry-run]\n\n" +
       "  <path>        a Foundry export .json, a NeDB .db, or a directory\n" +
-      "  <campaignId>  the Convex id of the campaign to import into\n"
+      "  <campaignId>  the Convex id of the campaign to import into\n" +
+      "  --dry-run     report what is in the file and write nothing\n"
   );
   process.exit(1);
 }
@@ -1117,6 +1118,15 @@ if (rest.includes("-o") && !outDir) {
   console.error("-o needs a directory");
   process.exit(1);
 }
+
+/**
+ * A big export is worth looking at before converting it.
+ *
+ * `--dry-run` reads and classifies but writes nothing, so a 130 MB file
+ * can be inspected — and its counts reported — without producing four
+ * JSONL files and an import you may not want.
+ */
+const dryRun = rest.includes("--dry-run");
 
 const documents = readDocuments(path);
 const journalsById = new Map();
@@ -1179,7 +1189,7 @@ for (const doc of documents) {
   if (kind !== "journal") skipped.unrecognised++;
 }
 
-mkdirSync(outDir, { recursive: true });
+if (!dryRun) mkdirSync(outDir, { recursive: true });
 
 const jsonl = (rows) => rows.map((r) => JSON.stringify(r)).join("\n") + "\n";
 
@@ -1188,16 +1198,20 @@ const monsterPath = join(outDir, "monsters.jsonl");
 const spellPath = join(outDir, "spells.jsonl");
 const itemPath = join(outDir, "items.jsonl");
 
-writeFileSync(npcPath, jsonl(npcs));
-writeFileSync(monsterPath, jsonl(monsters));
-writeFileSync(spellPath, jsonl(spells));
-writeFileSync(itemPath, jsonl(itemRows));
+if (!dryRun) {
+  writeFileSync(npcPath, jsonl(npcs));
+  writeFileSync(monsterPath, jsonl(monsters));
+  writeFileSync(spellPath, jsonl(spells));
+  writeFileSync(itemPath, jsonl(itemRows));
+}
 
 const locPath = join(outDir, "locations.json");
-writeFileSync(
-  locPath,
-  JSON.stringify({ campaignId, locations }, null, 2) + "\n"
-);
+if (!dryRun) {
+  writeFileSync(
+    locPath,
+    JSON.stringify({ campaignId, locations }, null, 2) + "\n"
+  );
+}
 
 // A short report, so a silently-empty import is visible before it runs.
 const scenes = locations.filter((l) => !l.parentKey);
@@ -1206,13 +1220,19 @@ const unpinned = locations.filter(
   (l) => l.parentKey && l.x === undefined
 ).length;
 
+// In a dry run nothing was written, so naming files that do not exist
+// would be a lie told in the report meant to prevent one.
+const to = (p) => (dryRun ? "" : ` -> ${p}`);
+
 console.log(`read ${documents.length} document(s) from ${basename(path)}`);
-console.log(`  ${spells.length} spell(s) -> ${spellPath}`);
-console.log(`  ${itemRows.length} item(s) -> ${itemPath}`);
-console.log(`  ${monsters.length} monster(s) -> ${monsterPath}`);
-console.log(`  ${npcs.length} of those also written as NPCs -> ${npcPath}`);
+console.log(`  ${spells.length} spell(s)${to(spellPath)}`);
+console.log(`  ${itemRows.length} item(s)${to(itemPath)}`);
+console.log(`  ${monsters.length} monster(s)${to(monsterPath)}`);
 console.log(
-  `  ${scenes.length} scene(s) and ${locations.length - scenes.length} pin(s) -> ${locPath}`
+  `  ${npcs.length} of those also available as NPCs${to(npcPath)}`
+);
+console.log(
+  `  ${scenes.length} scene(s) and ${locations.length - scenes.length} pin(s)${to(locPath)}`
 );
 console.log(`  ${journalsById.size} journal(s) read for descriptions`);
 console.log(`  ${pinned} pin(s) placed, ${unpinned} without coordinates`);
@@ -1232,6 +1252,11 @@ if (withoutPortrait > 0) {
     `\nnote: ${withoutPortrait} NPC(s) have no usable image path — Foundry's ` +
       "built-in placeholder icons are deliberately not imported."
   );
+}
+
+if (dryRun) {
+  console.log("\n--dry-run: nothing was written. Drop the flag to convert.");
+  process.exit(0);
 }
 
 const lines = ["\nnext — run only the ones with rows in them:\n"];

@@ -94,6 +94,9 @@ export function LookupTool({ kind }: { kind: LookupKind }) {
 
   const loading = index === undefined;
   const empty = !loading && all.length === 0;
+  // Never truncate silently. If the library outgrew what one query can
+  // read, the screen says which rows are missing and why.
+  const capped = index?.capped === true;
 
   return (
     <div className="lookup">
@@ -115,6 +118,16 @@ export function LookupTool({ kind }: { kind: LookupKind }) {
             matched={matched.length}
             total={all.length}
           />
+
+          {capped && (
+            <p className="form-error lk-capped">
+              This library is larger than one query can read, so only the
+              first {all.length} {LOOKUP_TITLES[kind].toLowerCase()} are
+              loaded — alphabetically, so the end of the alphabet is
+              missing. Tell Claude and the text can be split into its own
+              table to lift the limit.
+            </p>
+          )}
 
           <div className="lk-table">
             <div
