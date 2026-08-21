@@ -5346,3 +5346,176 @@ button.cal-day:hover {
 .tpl-fields li.off .tpl-field-name {
   opacity: 0.45;
 }
+
+/* ---------- The WYSIWYG record designer ---------- */
+
+/* The editor is the record, so it borrows the record's own frame. */
+.tpl-wys {
+  margin: 0.75rem 0;
+  padding: 0.9rem 1rem 1.1rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.tpl-head {
+  pointer-events: none;
+}
+
+.tpl-head .portrait-empty {
+  height: 9rem;
+}
+
+.tpl-head-note {
+  pointer-events: auto;
+  align-self: center;
+  max-width: 9rem;
+  text-align: right;
+}
+
+/* A tab is a chip you can type into and drop a field onto. */
+.tpl-tabchip {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.2rem 0.3rem;
+  border-bottom: 2px solid transparent;
+  border-radius: 8px 8px 0 0;
+}
+
+.tpl-tabchip.on {
+  border-bottom-color: var(--accent);
+  background: var(--bg-inset);
+}
+
+.tpl-tabchip.over {
+  background: var(--accent-soft);
+  border-bottom-color: var(--accent);
+}
+
+.tpl-tabchip-name {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.15rem 0.3rem;
+  min-width: 3rem;
+}
+
+.tpl-tabchip-name:hover {
+  border-color: var(--border);
+}
+
+.tpl-tabchip-name:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--bg-inset);
+}
+
+.tpl-tabchip-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  padding: 0 0.15rem;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.tpl-tabchip-btn:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.tpl-tabchip-btn:disabled {
+  opacity: 0.3;
+}
+
+.tpl-newtab {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  margin-left: 0.35rem;
+}
+
+.tpl-grid {
+  min-height: 6rem;
+  align-content: start;
+}
+
+/* Each field carries its own affordances: a grip to move it, an edge
+   to widen it, and a readout of how wide it currently is. */
+.tpl-field {
+  position: relative;
+  padding: 0.3rem 0.45rem 0.4rem;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  cursor: grab;
+  background: var(--bg-raised);
+}
+
+.tpl-field:active {
+  cursor: grabbing;
+}
+
+.tpl-field:hover {
+  border-color: var(--accent);
+}
+
+.tpl-field.over {
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.tpl-field .detail-input,
+.tpl-field .detail-check {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.tpl-grip {
+  color: var(--text-dim);
+  margin-right: 0.35rem;
+  letter-spacing: -0.1em;
+}
+
+/* The right edge, widened into something you can actually grab. */
+.tpl-resize {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 9px;
+  height: 100%;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.tpl-resize::after {
+  content: "";
+  position: absolute;
+  top: 20%;
+  bottom: 20%;
+  left: 3px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.tpl-field:hover .tpl-resize::after {
+  background: var(--accent);
+}
+
+.tpl-span {
+  position: absolute;
+  right: 0.5rem;
+  top: 0.3rem;
+  font-size: 0.62rem;
+  color: var(--text-dim);
+}
+
+.tpl-empty {
+  grid-column: 1 / -1;
+  margin: 1.5rem 0;
+  text-align: center;
+}

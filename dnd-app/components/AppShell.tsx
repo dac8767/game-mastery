@@ -173,16 +173,11 @@ export function AppShell({
           </div>
         ))}
 
+        {/* Account actions only. Settings is an ordinary sidebar item
+            now — arrangeable like the rest, and pinned visible by
+            sidebarLayout — so a second hard-coded link here rendered it
+            twice. */}
         <div className="sidebar-footer">
-          <Link
-            href={`${base}/settings`}
-            className={`nav-item${
-              pathname === `${base}/settings` ? " active" : ""
-            }`}
-          >
-            <span className="nav-icon">⚙</span>
-            Settings
-          </Link>
           <Link href="/" className="nav-item subtle">
             <span className="nav-icon">⇤</span>
             All campaigns

@@ -15,6 +15,7 @@
  *   Campaign     this campaign, as a thing with a name and a picture
  *   Game Master  the authority itself — previewing it, handing it over
  *   Players      who is at the table and what they play
+ *   Templates    how a record is laid out, campaign-wide
  *   Interface    how the app looks and reads, yours alone
  *
  * That is why the theme and the date format are together and away from
@@ -27,6 +28,7 @@ export type SettingsTab =
   | "campaign"
   | "gm"
   | "players"
+  | "templates"
   | "interface";
 
 export interface SettingsTabDef {
@@ -61,6 +63,13 @@ export const SETTINGS_TABS: SettingsTabDef[] = [
     id: "players",
     label: "Players",
     blurb: "Who is at the table and what they play. Campaign-wide.",
+    dmOnly: true,
+  },
+  {
+    id: "templates",
+    label: "Templates",
+    blurb:
+      "How the campaign’s records are laid out. Campaign-wide — everyone opens an NPC to the same arrangement.",
     dmOnly: true,
   },
   {

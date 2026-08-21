@@ -524,6 +524,24 @@ export const integrity = {
       }
     }
 
+    // No nav destination may ALSO be hard-coded into the shell.
+    //
+    // Settings shipped in the sidebar twice this way: it became an
+    // ordinary arrangeable item, and the footer kept its own link to
+    // it. Both rendered, neither was wrong on its own, and the layout
+    // system had no way to know about the second one — hiding Settings
+    // in the designer would have removed one of the two.
+    for (const item of navSrc.matchAll(/\bslug:\s*"([^"]+)"/g)) {
+      const slug = item[1];
+      if (shellSrc.includes("${base}/" + slug)) {
+        problems.push(
+          `AppShell hard-codes a link to "${slug}", which the sidebar layout ` +
+            "also renders — it would appear twice, and hiding it would " +
+            "remove only one of them"
+        );
+      }
+    }
+
     // And the sidebar has to be built from the person's layout rather
     // than from the groups directly, or arranging it does nothing.
     if (!/visibleSidebar\(/.test(shellSrc)) {

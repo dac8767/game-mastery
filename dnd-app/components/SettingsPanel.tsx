@@ -225,8 +225,11 @@ export function SettingsPanel({
             </div>
           </section>
 
-          {isDm && <NpcTemplateDesigner campaignId={campaignId} />}
         </>
+      )}
+
+      {tab === "templates" && (
+        <NpcTemplateDesigner campaignId={campaignId} />
       )}
 
       {tab === "gm" && (

@@ -809,6 +809,10 @@ export const unit = {
       st.visibleTabs(false).length > 0
     );
     check(
+      "the Templates tab exists and is the DM's",
+      st.SETTINGS_TABS.find((t) => t.id === "templates")?.dmOnly === true
+    );
+    check(
       "the first tab is one everybody can see",
       st.SETTINGS_TABS[0].dmOnly !== true
     );
