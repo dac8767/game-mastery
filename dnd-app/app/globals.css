@@ -1066,16 +1066,39 @@ body.col-resizing {
   min-width: 0;
 }
 
-.record-titles h2 {
-  margin: 0;
+/* The name and nickname are ordinary editable fields wearing a
+   heading's clothes: no label, no box until you reach for them. */
+.record-title .detail-input,
+.record-title .detail-value {
   font-size: 1.5rem;
+  font-weight: 600;
   line-height: 1.2;
+  padding: 0.1rem 0.3rem;
 }
 
-.record-nickname {
-  margin: 0.2rem 0 0;
+.record-subtitle .detail-input,
+.record-subtitle .detail-value {
   font-size: 1rem;
   color: var(--text-dim);
+  padding: 0.1rem 0.3rem;
+}
+
+.record-title .detail-input,
+.record-subtitle .detail-input {
+  border-color: transparent;
+  background: transparent;
+  margin-left: -0.3rem;
+}
+
+.record-title .detail-input:hover,
+.record-subtitle .detail-input:hover {
+  border-color: var(--border);
+  background: var(--bg-inset);
+}
+
+.record-title .detail-input:focus,
+.record-subtitle .detail-input:focus {
+  background: var(--bg-inset);
 }
 
 .record-summary {

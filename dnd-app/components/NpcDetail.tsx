@@ -130,6 +130,14 @@ export function NpcDetail({
   const allowed = COLUMNS.filter((c) => isDm || !c.dmOnly).map((c) => c.key);
   const sections = arrange(allowed.filter((k) => !HEADER_KEYS.includes(k)));
 
+  // The header's own fields, minus the portrait, which has its own
+  // control. An empty one is dropped only when it is also read-only —
+  // a DM with no nickname set still needs somewhere to type one.
+  const headerFields = HEADER_KEYS.filter((k) => k !== "portraitPath")
+    .map((k) => COLUMN_BY_KEY.get(k))
+    .filter((c): c is ColumnDef => Boolean(c))
+    .filter((c) => (isDm || !c.dmOnly) && (canEdit(c) || toInput(npc, c)));
+
   const summary = SUMMARY_KEYS.map((key) => {
     const col = COLUMN_BY_KEY.get(key);
     const text = col ? toInput(npc, col) : "";
@@ -142,8 +150,21 @@ export function NpcDetail({
         <PortraitField npc={npc} editable={isDm} />
 
         <div className="record-titles">
-          <h2>{npc.name}</h2>
-          {npc.nickname && <p className="record-nickname">“{npc.nickname}”</p>}
+          {/* Through RecordField like everything else, not as a heading
+              with the value baked in: name and nickname are editable
+              columns, and rendering them as text is how a DM quietly
+              loses the ability to rename an NPC from its own record. */}
+          {headerFields.map((col) => (
+            <RecordField
+              key={col.key}
+              col={col}
+              value={toInput(npc, col)}
+              editable={canEdit(col)}
+              dmOnly={Boolean(col.dmOnly)}
+              variant={col.key === "name" ? "title" : "subtitle"}
+              onCommit={(text) => commit(col, text)}
+            />
+          ))}
           {summary.length > 0 && (
             <p className="record-summary">
               {summary.map((s) => (
@@ -209,12 +230,15 @@ function RecordField({
   value,
   editable,
   dmOnly,
+  variant,
   onCommit,
 }: {
   col: ColumnDef;
   value: string;
   editable: boolean;
   dmOnly: boolean;
+  /** Header fields are the same control, worn larger and unlabelled. */
+  variant?: "title" | "subtitle";
   onCommit: (text: string) => void;
 }) {
   const [draft, setDraft] = useState(value);
@@ -223,14 +247,16 @@ function RecordField({
   useEffect(() => setDraft(value), [value]);
 
   const className = `detail-field${dmOnly ? " dm-field" : ""}${
-    isWide(col) ? " wide" : ""
-  }`;
+    isWide(col) && !variant ? " wide" : ""
+  }${variant ? ` record-${variant}` : ""}`;
 
   if (!editable) {
     return (
       <div className={className}>
-        <div className="detail-label">{col.label}</div>
-        <div className="detail-value">{value}</div>
+        {!variant && <div className="detail-label">{col.label}</div>}
+        <div className="detail-value">
+          {variant === "subtitle" ? `“${value}”` : value}
+        </div>
       </div>
     );
   }
@@ -241,10 +267,12 @@ function RecordField({
 
   return (
     <div className={className}>
-      <div className="detail-label">
-        {col.label}
-        {dmOnly && <span className="dm-tag">DM only</span>}
-      </div>
+      {!variant && (
+        <div className="detail-label">
+          {col.label}
+          {dmOnly && <span className="dm-tag">DM only</span>}
+        </div>
+      )}
 
       {col.kind === "boolean" ? (
         <label className="detail-check">
@@ -272,7 +300,14 @@ function RecordField({
           className="detail-input"
           type={col.kind === "number" ? "number" : "text"}
           value={draft}
-          placeholder={col.kind === "chips" ? "comma, separated" : undefined}
+          aria-label={variant ? col.label : undefined}
+          placeholder={
+            variant
+              ? col.label
+              : col.kind === "chips"
+                ? "comma, separated"
+                : undefined
+          }
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commitIfChanged}
           onKeyDown={(e) => {

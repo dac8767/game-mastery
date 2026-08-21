@@ -236,6 +236,36 @@ export const integrity = {
         );
       }
     }
+    // Every editable field needs an editor somewhere in the record.
+    // This is not hypothetical: moving `name` and `nickname` into the
+    // header rendered them as a heading and a line of text, and the DM
+    // silently lost the ability to rename an NPC from its own record.
+    // Nothing failed — the field was simply gone as a control.
+    //
+    // The header's fields are the exception the check has to allow, so
+    // it demands they go through the same RecordField the sections use.
+    // Rendering one as `{npc.name}` is exactly the regression above.
+    const detailSrc = read("components", "NpcDetail.tsx");
+    if (!/headerFields\.map\(/.test(detailSrc)) {
+      problems.push(
+        "NpcDetail no longer maps the header's fields through RecordField — " +
+          "a header field rendered as bare text is a field the DM cannot edit"
+      );
+    }
+    for (const key of headerKeys) {
+      // The portrait has its own control rather than a text input.
+      if (key === "portraitPath") continue;
+      // A JSX child, which is a rendered value — not `alt={npc.name}`
+      // or a `${npc.name}` inside an aria-label, both of which are the
+      // name being USED rather than shown as the field.
+      if (new RegExp(`(?<![=$])\\{npc\\.${key}\\}`).test(detailSrc)) {
+        problems.push(
+          `NpcDetail renders \`${key}\` as bare text, so it is read-only ` +
+            "in the record even though the column is editable"
+        );
+      }
+    }
+
     // A field cannot be in two sections: whichever renders second wins,
     // and editing the loser writes to a control the eye has already
     // scrolled past.
