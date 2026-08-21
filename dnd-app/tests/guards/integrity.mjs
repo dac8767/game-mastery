@@ -495,11 +495,16 @@ export const integrity = {
           "make themselves the DM of any campaign they can see"
       );
     }
-    if (!/by_campaign_user/.test(transferBody)) {
+    // The membership lookup has to be for the RECIPIENT. The outgoing
+    // DM is looked up through the same index a few lines later, so
+    // merely finding the index name here passed with the recipient's
+    // check deleted — which is the whole check.
+    const compactTransfer = transferBody.replace(/\s+/g, "");
+    if (!/by_campaign_user[\s\S]{0,120}?args\.toUserId/.test(compactTransfer)) {
       problems.push(
-        "campaigns.transferDm does not check the recipient is a member — a " +
-          "campaign handed to someone outside it is lost, since only its DM " +
-          "can hand it back"
+        "campaigns.transferDm does not look up the RECIPIENT's membership — " +
+          "a campaign handed to someone outside it is lost, since only its " +
+          "DM can hand it back"
       );
     }
 
