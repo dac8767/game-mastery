@@ -14,6 +14,8 @@ import {
   addDays,
   addMonths,
   formatDate,
+  formatLongDate,
+  formatMonthYear,
   monthGrid,
   occursOn,
   reconcile,
@@ -117,66 +119,136 @@ export function CalendarTool({
   const eventsOn = (date: CalendarDate) =>
     eventList.filter((e) => occursOn(settings, e, date));
 
+  const setDate = async (patch: Partial<CalendarDate>) => {
+    if (!today) return;
+    const next = { ...today, ...patch };
+    try {
+      setError(null);
+      await setCurrentDate({ campaignId, ...next });
+      setView({ year: next.year, month: next.month });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not set the date.");
+    }
+  };
+
   return (
     <div className="cal">
-      <div className="cal-bar">
-        <button type="button" className="npc-btn" onClick={() => step(-1)}>
-          ‹
-        </button>
-        <div className="cal-title">
-          {settings.monthNames[view.month]} {view.year}
+      {/* What day it is in the world, and — for the DM — the controls
+          that change it. A panel of its own, above the grid: the date
+          is a fact about the campaign, and the grid below is a way of
+          looking at the month around it. */}
+      <section className="cal-now-panel">
+        <div className="cal-now-line">
+          <span className="cal-now-icon" aria-hidden="true">
+            🗓
+          </span>
+          <span className="cal-now-label">Current Date:</span>
+          <span className="cal-now-value">
+            {today ? formatLongDate(settings, today) : ""}
+          </span>
         </div>
-        <button type="button" className="npc-btn" onClick={() => step(1)}>
-          ›
-        </button>
 
-        <button
-          type="button"
-          className="npc-btn"
-          onClick={() => today && setView({ year: today.year, month: today.month })}
-        >
-          Today
-        </button>
+        {settings.ageName && (
+          <div className="cal-now-line">
+            <span className="cal-now-icon" aria-hidden="true">
+              🔥
+            </span>
+            <span className="cal-now-label">Current Age:</span>
+            <span className="cal-now-value">{settings.ageName}</span>
+          </div>
+        )}
 
-        {/* The campaign's clock. Only these two arrows move it — the grid
-            below selects a day to look at and never sets one. */}
-        <div className="cal-now-bar">
-          {isDm && (
+        {isDm && today && (
+          <div className="cal-set-row">
+            <span className="cal-now-label">Set Date:</span>
+            <input
+              type="number"
+              className="cal-set-day"
+              min={1}
+              max={settings.daysPerMonth}
+              value={today.day}
+              aria-label="Day"
+              onChange={(e) => void setDate({ day: Number(e.target.value) })}
+            />
+            <select
+              className="cal-set-month"
+              value={today.month}
+              aria-label="Month"
+              onChange={(e) => void setDate({ month: Number(e.target.value) })}
+            >
+              {settings.monthNames.map((m, i) => (
+                <option key={i} value={i}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              className="cal-set-year"
+              value={today.year}
+              aria-label="Year"
+              onChange={(e) => void setDate({ year: Number(e.target.value) })}
+            />
             <button
               type="button"
               className="npc-btn"
               onClick={() => void nudge(-1)}
               title="Back one day"
-              aria-label="Back one day"
             >
-              ‹
+              −1
             </button>
-          )}
-          <span className="cal-now-date">
-            {today ? formatDate(settings, today) : ""}
-          </span>
-          {isDm && (
             <button
               type="button"
               className="npc-btn"
               onClick={() => void nudge(1)}
               title="Forward one day"
-              aria-label="Forward one day"
             >
-              ›
+              +1
+            </button>
+            <button
+              type="button"
+              className="npc-btn cal-settings-btn"
+              onClick={() => setEditing((v) => !v)}
+            >
+              {editing ? "Close settings" : "Settings"}
+            </button>
+          </div>
+        )}
+      </section>
+
+      <div className="cal-bar">
+        <button
+          type="button"
+          className="npc-btn cal-step"
+          onClick={() => step(-1)}
+          aria-label="Previous month"
+        >
+          ‹
+        </button>
+        <div className="cal-title-block">
+          <div className="cal-title">
+            {formatMonthYear(settings, view.year, view.month)}
+          </div>
+          {today && !sameDate({ ...view, day: today.day }, today) && (
+            <button
+              type="button"
+              className="cal-goto-today"
+              onClick={() =>
+                setView({ year: today.year, month: today.month })
+              }
+            >
+              Go to Today
             </button>
           )}
         </div>
-
-        {isDm && (
-          <button
-            type="button"
-            className="npc-btn"
-            onClick={() => setEditing((v) => !v)}
-          >
-            {editing ? "Close settings" : "Settings"}
-          </button>
-        )}
+        <button
+          type="button"
+          className="npc-btn cal-step"
+          onClick={() => step(1)}
+          aria-label="Next month"
+        >
+          ›
+        </button>
       </div>
 
       {error && <p className="form-error">{error}</p>}
@@ -229,7 +301,12 @@ export function CalendarTool({
                         }}
                         title={formatDate(settings, cell)}
                       >
-                        <span className="cal-daynum">{day}</span>
+                        <span className="cal-day-top">
+                          <span className="cal-daynum">{day}</span>
+                          {isToday && (
+                            <span className="cal-today-pill">Today</span>
+                          )}
+                        </span>
                         <span className="cal-day-events">
                           {onThisDay.map((e) => (
                             <span className="cal-chip" key={e._id}>
@@ -580,6 +657,35 @@ function CalendarSettingsForm({
       </section>
 
       <section className="settings-block">
+        <h2>The age</h2>
+        <p className="settings-note">
+          Both optional. The name is read on its own — &ldquo;The Age of
+          Embers&rdquo; — and the short form goes inside a date, where the
+          long one would not fit: &ldquo;The 10th of Autumn, AE 744&rdquo;.
+        </p>
+        <div className="cal-date-row">
+          <label className="cal-field">
+            Name of the age
+            <input
+              className="detail-input"
+              value={draft.ageName ?? ""}
+              placeholder="The Age of Embers"
+              onChange={(e) => setDraft((d) => ({ ...d, ageName: e.target.value }))}
+            />
+          </label>
+          <label className="cal-field">
+            Short form
+            <input
+              className="detail-input"
+              value={draft.eraAbbr ?? ""}
+              placeholder="AE"
+              onChange={(e) => setDraft((d) => ({ ...d, eraAbbr: e.target.value }))}
+            />
+          </label>
+        </div>
+      </section>
+
+      <section className="settings-block">
         <h2>Current date</h2>
         <div className="cal-date-row">
           <label className="cal-field">
@@ -614,7 +720,15 @@ function CalendarSettingsForm({
             />
           </label>
         </div>
+        {/* Both forms, because the era changes one and not the other
+            and it should be obvious which is which before saving. */}
         <p className="settings-note">
+          {formatLongDate(draft, {
+            year: draft.currentYear,
+            month: draft.currentMonth,
+            day: draft.currentDay,
+          })}
+          {" — "}
           {formatDate(draft, {
             year: draft.currentYear,
             month: draft.currentMonth,

@@ -3090,11 +3090,43 @@ body.col-resizing {
   flex: 1;
 }
 
+/* The month bar: arrows at the ends, the month centred between them. */
 .cal-bar {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  flex-wrap: wrap;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.cal-title-block {
+  flex: 1;
+  text-align: center;
+  min-width: 0;
+}
+
+.cal-step {
+  flex: none;
+  font-size: 1rem;
+  padding: 0.3rem 0.75rem;
+}
+
+/* A link rather than a button: it moves the view, not the world. */
+.cal-goto-today {
+  display: block;
+  margin: 0.1rem auto 0;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 0.8rem;
+}
+
+.cal-goto-today:hover {
+  text-decoration: underline;
 }
 
 .cal-bar .npc-btn {
@@ -3103,9 +3135,8 @@ body.col-resizing {
 }
 
 .cal-title {
-  font-size: 1rem;
+  font-size: 1.15rem;
   font-weight: 600;
-  min-width: 10rem;
   text-align: center;
 }
 
@@ -3122,8 +3153,14 @@ body.col-resizing {
   min-height: 0;
 }
 
+/* A header ROW with its own ground, as on a wall calendar. */
+.cal-grid thead th {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+}
+
 .cal-grid th {
-  padding: 0.35rem 0.25rem;
+  padding: 0.5rem 0.25rem;
   font-size: 0.7rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -3152,7 +3189,7 @@ body.col-resizing {
 }
 
 .cal-grid td.cal-now {
-  border-color: var(--accent);
+  border: 2px solid var(--accent);
   background: var(--accent-soft);
 }
 
@@ -4763,21 +4800,83 @@ button.cal-day:hover {
   font-size: 0.84rem;
 }
 
-/* ---------- Calendar: the day panel and its events ---------- */
+/* ---------- Calendar: the date panel, the day panel, events ---------- */
 
-/* The campaign's clock, with the two controls that move it. Nothing
-   else does — the grid selects a day to look at. */
-.cal-now-bar {
+/* What day it is in the world. Its own card above the grid, because
+   the date is the fact and the month grid is a way of looking at it. */
+.cal-now-panel {
+  flex: none;
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.85rem 1rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.cal-now-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.cal-now-icon {
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.cal-now-label {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  flex: none;
+}
+
+.cal-now-value {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.cal-set-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.4rem;
+  margin-top: 0.25rem;
+}
+
+.cal-set-row input,
+.cal-set-row select {
+  padding: 0.35rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.cal-set-day {
+  width: 4.5rem;
+}
+.cal-set-year {
+  width: 6rem;
+}
+.cal-set-month {
+  min-width: 9rem;
+}
+
+/* Pushed to the far end so it reads as "and also settings", not as
+   another date control. */
+.cal-settings-btn {
   margin-left: auto;
 }
 
-.cal-now-date {
-  font-size: 0.85rem;
-  font-weight: 600;
-  white-space: nowrap;
+.cal-day-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.3rem;
+  width: 100%;
 }
 
 .cal-daynum {
@@ -4785,9 +4884,29 @@ button.cal-day:hover {
   color: var(--text-dim);
 }
 
+/* Today is a filled disc and a pill, not just a tinted cell: on a
+   month of thirty identical squares the tint alone is easy to miss. */
 .cal-grid td.cal-now .cal-daynum {
-  color: var(--accent);
+  display: grid;
+  place-items: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg);
   font-weight: 700;
+}
+
+.cal-today-pill {
+  flex: none;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 /* Selected is a different thing from current, and has to look it: one

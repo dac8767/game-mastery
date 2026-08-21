@@ -26,6 +26,22 @@ export interface CalendarSettings {
   currentMonth: number;
   /** 1-based, the way a person says a date. */
   currentDay: number;
+  /**
+   * The era the campaign is in — "The Age of Embers".
+   *
+   * Named rather than numbered because it is a thing that happens in
+   * the world, not a unit. Optional: a campaign that never mentions an
+   * age simply has none, and every date reads the same without it.
+   */
+  ageName?: string;
+  /**
+   * How the era is written INSIDE a date — the "AE" of "AE 744".
+   *
+   * Separate from ageName because the long form does not belong in a
+   * date. "The 10th of Autumn, The Age of Embers 744" is not what
+   * anyone says.
+   */
+  eraAbbr?: string;
 }
 
 export interface CalendarDate {
@@ -78,6 +94,8 @@ export const DEFAULT_CALENDAR: CalendarSettings = {
   currentYear: 1491,
   currentMonth: 0,
   currentDay: 1,
+  ageName: "",
+  eraAbbr: "",
 };
 
 const clamp = (n: number, min: number, max: number) =>
@@ -135,6 +153,10 @@ export function reconcile(s: CalendarSettings): CalendarSettings {
     ),
     currentMonth: clamp(s.currentMonth, 0, monthsPerYear - 1),
     currentDay: clamp(s.currentDay, 1, daysPerMonth),
+    // Trimmed, not defaulted: an era nobody named is absent, and
+    // inventing one would put it into every date in the campaign.
+    ageName: (s.ageName ?? "").trim(),
+    eraAbbr: (s.eraAbbr ?? "").trim(),
   };
 }
 
@@ -226,6 +248,49 @@ export function formatDate(s: CalendarSettings, d: CalendarDate): string {
   const month = s.monthNames[d.month] ?? `Month ${d.month + 1}`;
   const weekday = s.dayNames[weekdayOf(s, d)] ?? "";
   return `${d.day} ${month}, ${d.year}${weekday ? ` (${weekday})` : ""}`;
+}
+
+/**
+ * "1st", "2nd", "3rd", "11th", "21st".
+ *
+ * The teens are the whole reason this is a function: 11, 12 and 13 end
+ * in 1, 2 and 3 and take "th" anyway, so the last digit alone gets
+ * three days a century wrong. A fantasy month can be a hundred days
+ * long, which is exactly where 111th would show up.
+ */
+export function ordinal(n: number): string {
+  const abs = Math.abs(Math.trunc(n));
+  const lastTwo = abs % 100;
+  const suffix =
+    lastTwo >= 11 && lastTwo <= 13
+      ? "th"
+      : ["th", "st", "nd", "rd"][abs % 10] ?? "th";
+  return `${n}${suffix}`;
+}
+
+/** "AE 744", or just "744" where no era is named. */
+export function formatYear(s: CalendarSettings, year: number): string {
+  const era = (s.eraAbbr ?? "").trim();
+  return era ? `${era} ${year}` : String(year);
+}
+
+/** "Autumn, AE 744" — the month heading above the grid. */
+export function formatMonthYear(
+  s: CalendarSettings,
+  year: number,
+  month: number
+): string {
+  const name = s.monthNames[month] ?? `Month ${month + 1}`;
+  return `${name}, ${formatYear(s, year)}`;
+}
+
+/** "The 10th of Autumn, AE 744" — the campaign's date, said in full. */
+export function formatLongDate(
+  s: CalendarSettings,
+  d: CalendarDate
+): string {
+  const month = s.monthNames[d.month] ?? `Month ${d.month + 1}`;
+  return `The ${ordinal(d.day)} of ${month}, ${formatYear(s, d.year)}`;
 }
 
 // ---------------------------------------------------------------------

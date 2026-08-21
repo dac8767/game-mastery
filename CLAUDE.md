@@ -34,6 +34,27 @@ of scope here.
 - Keep costs at free-tier: Convex free tier, Vercel Hobby, Cloudflare
   free plan. Don't introduce paid services without asking.
 
+## "feedback"
+
+The word on its own is the whole instruction. It means:
+
+1. Run `npm run feedback` for the incomplete Game Mastery reports.
+2. **Download the attachments and look at them.** A report that says
+   "like the attached screenshot" is unreadable without the image, and
+   guessing at it wastes a round trip. They are in the
+   `feedback-shots` bucket; the row's `attachments` column is the
+   filename.
+3. Anything filed by Derek (`dm@curiousarcana.com`) — start work
+   immediately. No asking which ones, no waiting for a go-ahead.
+4. When the work is done and the guards are green, close it:
+   `npm run feedback -- --complete <id> <id>`.
+
+Only close what is actually finished. `--complete` names ids
+explicitly and prints each row before writing, because "close
+everything in the list I just printed" is how a report nobody read
+gets marked done. Status was Derek's alone until he asked for this;
+reopening one in the dashboard is still his.
+
 ## Re-importing the Lookup library
 
 Anything that changes what `scripts/import-foundry.mjs` writes — a new

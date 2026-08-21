@@ -492,6 +492,10 @@ export default defineSchema({
     currentMonth: v.number(),
     /** 1-based, the way a person says a date. */
     currentDay: v.number(),
+    /** The era in words — "The Age of Embers". Absent where unnamed. */
+    ageName: v.optional(v.string()),
+    /** The era inside a date — the "AE" of "AE 744". */
+    eraAbbr: v.optional(v.string()),
   }).index("by_campaign", ["campaignId"]),
 
   /**

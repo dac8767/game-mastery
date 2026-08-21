@@ -52,6 +52,8 @@ export const getCalendar = query({
         currentYear: row.currentYear,
         currentMonth: row.currentMonth,
         currentDay: row.currentDay,
+        ageName: row.ageName,
+        eraAbbr: row.eraAbbr,
       }),
       exists: true,
     };
@@ -69,6 +71,8 @@ export const saveCalendar = mutation({
     currentYear: v.number(),
     currentMonth: v.number(),
     currentDay: v.number(),
+    ageName: v.optional(v.string()),
+    eraAbbr: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await requireDm(ctx, args.campaignId);
@@ -82,6 +86,8 @@ export const saveCalendar = mutation({
       ...clean,
       dayNames: clean.dayNames.map((n) => n.slice(0, 40)),
       monthNames: clean.monthNames.map((n) => n.slice(0, 40)),
+      ageName: (clean.ageName ?? "").slice(0, 60),
+      eraAbbr: (clean.eraAbbr ?? "").slice(0, 12),
     };
 
     const existing = await ctx.db
@@ -128,6 +134,8 @@ export const setCurrentDate = mutation({
           daysPerMonth: existing.daysPerMonth,
           monthsPerYear: existing.monthsPerYear,
           monthNames: existing.monthNames,
+          ageName: existing.ageName,
+          eraAbbr: existing.eraAbbr,
           currentYear: args.year,
           currentMonth: args.month,
           currentDay: args.day,

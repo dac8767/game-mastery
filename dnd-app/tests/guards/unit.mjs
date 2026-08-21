@@ -607,6 +607,62 @@ export const unit = {
       )
     );
 
+    // ---- how a date reads ------------------------------------------
+    // The teens are the whole reason `ordinal` is a function: 11, 12
+    // and 13 end in 1, 2 and 3 and take "th" anyway. A fantasy month
+    // can be a hundred days long, so 111th is reachable here in a way
+    // it is not on a Gregorian calendar.
+    check(
+      "ordinal: the ones that follow the last digit",
+      ["1st", "2nd", "3rd", "4th", "21st", "22nd", "23rd"].join() ===
+        [1, 2, 3, 4, 21, 22, 23].map(cal.ordinal).join()
+    );
+    check(
+      "ordinal: the teens are all th",
+      ["11th", "12th", "13th"].join() === [11, 12, 13].map(cal.ordinal).join()
+    );
+    check(
+      "ordinal: and so are the teens of every hundred",
+      ["111th", "112th", "113th"].join() ===
+        [111, 112, 113].map(cal.ordinal).join()
+    );
+    check(
+      "ordinal: 101st, not 101th",
+      cal.ordinal(101) === "101st" && cal.ordinal(100) === "100th"
+    );
+
+    const aged = cal.reconcile({
+      ...D,
+      ageName: "The Age of Embers",
+      eraAbbr: "AE",
+    });
+    check(
+      "the era goes inside the date",
+      cal.formatLongDate(aged, { year: 744, month: 0, day: 10 }) ===
+        "The 10th of Hammer, AE 744"
+    );
+    check(
+      "and into the month heading",
+      cal.formatMonthYear(aged, 744, 0) === "Hammer, AE 744"
+    );
+    // A campaign that never names an era must read as if the feature
+    // did not exist — no stray comma, no empty prefix.
+    check(
+      "no era means no era in the date",
+      cal.formatLongDate(D, { year: 1491, month: 0, day: 2 }) ===
+        "The 2nd of Hammer, 1491" &&
+        cal.formatMonthYear(D, 1491, 0) === "Hammer, 1491"
+    );
+    check(
+      "whitespace is not an era",
+      cal.formatYear(cal.reconcile({ ...D, eraAbbr: "   " }), 744) === "744"
+    );
+    check(
+      "reconcile trims the age rather than storing the spaces",
+      cal.reconcile({ ...D, ageName: "  The Age of Embers  " }).ageName ===
+        "The Age of Embers"
+    );
+
     // ---- recurring events ------------------------------------------
     // occursOn runs once per rendered cell, so it is asked the question
     // a few hundred times a page and never gets to explain itself. The
