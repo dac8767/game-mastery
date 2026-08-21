@@ -103,3 +103,38 @@ export const NAV_DESTINATIONS: NavItem[] = [
 export function navHref(item: NavItem, base: string): string {
   return item.slug ? `${base}/${item.slug}` : base;
 }
+
+/**
+ * The shipped grouping, as the sidebar designer's starting point.
+ *
+ * Every navigable item appears exactly once, so a layout built from
+ * this can never be missing one. Settings is included because it is
+ * an item of the sidebar like any other — it simply cannot be hidden,
+ * which components/sidebarLayout.ts enforces rather than this.
+ */
+export const SIDEBAR_GROUPS = [
+  {
+    id: "campaign",
+    title: "",
+    itemIds: CAMPAIGN_ITEMS.map((i) => i.id),
+  },
+  { id: "tools", title: "Tools", itemIds: TOOL_ITEMS.map((i) => i.id) },
+  { id: "lookup", title: "Lookup", itemIds: LOOKUP_ITEMS.map((i) => i.id) },
+  {
+    id: "assets",
+    title: "Asset Library",
+    itemIds: ASSET_ITEMS.map((i) => i.id),
+  },
+  { id: "settings", title: "", itemIds: [SETTINGS_ITEM.id] },
+];
+
+/** Every item the sidebar can place, by id. */
+export const ALL_NAV_ITEMS: NavItem[] = [
+  ...CAMPAIGN_ITEMS,
+  ...TOOL_ITEMS,
+  ...LOOKUP_ITEMS,
+  ...ASSET_ITEMS,
+  SETTINGS_ITEM,
+];
+
+export const NAV_ITEM_BY_ID = new Map(ALL_NAV_ITEMS.map((i) => [i.id, i]));

@@ -1044,6 +1044,210 @@ export const unit = {
         .join() === "job"
     );
 
+    // ---- the sidebar, as its owner arranged it ---------------------
+    // Two ways this loses a screen, and both are silent. An item the
+    // layout does not mention is not hidden but ABSENT — no entry, and
+    // no hint that there is one to un-hide. And hiding Settings would
+    // remove the only way back to the page that un-hides things.
+    const sbOut = compile("components/sidebarLayout.ts");
+    const sb = await import(
+      pathToFileURL(join(sbOut, "sidebarLayout.js")).href
+    );
+
+    const GROUPS = [
+      { id: "campaign", title: "", itemIds: ["table", "npcs"] },
+      { id: "tools", title: "Tools", itemIds: ["chat", "dice"] },
+      { id: "settings", title: "", itemIds: ["settings"] },
+    ];
+    const IDS = ["table", "npcs", "chat", "dice", "settings"];
+    const sbBase = sb.defaultSidebar(GROUPS);
+
+    check(
+      "defaultSidebar places every item, visible",
+      sb.sidebarIds(sbBase).join() === IDS.join() &&
+        sbBase.sections.every((s) => s.items.every((i) => !i.hidden))
+    );
+    check(
+      "reconcile is idempotent",
+      eq(
+        sb.reconcileSidebar(sb.reconcileSidebar(sbBase, IDS), IDS),
+        sb.reconcileSidebar(sbBase, IDS)
+      )
+    );
+    check(
+      "a screen the layout never heard of is added, not lost",
+      sb
+        .sidebarIds(sb.reconcileSidebar(sbBase, [...IDS, "scheduler"]))
+        .includes("scheduler")
+    );
+    check(
+      "and it arrives visible",
+      sb
+        .reconcileSidebar(sbBase, [...IDS, "scheduler"])
+        .sections.flatMap((s) => s.items)
+        .find((i) => i.id === "scheduler").hidden === false
+    );
+    check(
+      "an item that is no longer a screen is dropped",
+      !sb.sidebarIds(sb.reconcileSidebar(sbBase, ["table", "settings"]))
+        .includes("npcs")
+    );
+    check(
+      "an item cannot be in two sections",
+      sb
+        .sidebarIds(
+          sb.reconcileSidebar(
+            {
+              sections: [
+                { id: "a", title: "A", items: [{ id: "npcs", hidden: false }] },
+                { id: "b", title: "B", items: [{ id: "npcs", hidden: true }] },
+              ],
+            },
+            ["npcs"]
+          )
+        )
+        .join() === "npcs"
+    );
+    check(
+      "an empty layout still places everything",
+      sb.sidebarIds(sb.reconcileSidebar({ sections: [] }, IDS)).sort().join() ===
+        IDS.slice().sort().join()
+    );
+    check(
+      "sections cannot share an id",
+      (() => {
+        const r = sb.reconcileSidebar(
+          {
+            sections: [
+              { id: "same", title: "A", items: [] },
+              { id: "same", title: "B", items: [{ id: "npcs", hidden: false }] },
+            ],
+          },
+          ["npcs"]
+        );
+        return new Set(r.sections.map((s) => s.id)).size === r.sections.length;
+      })()
+    );
+
+    // The door that would lock from the inside.
+    check(
+      "Settings cannot be hidden by toggling it",
+      sb
+        .toggleHidden(sbBase, "settings")
+        .sections.flatMap((s) => s.items)
+        .find((i) => i.id === "settings").hidden === false
+    );
+    check(
+      "nor by storing it hidden",
+      sb
+        .reconcileSidebar(
+          {
+            sections: [
+              { id: "x", title: "X", items: [{ id: "settings", hidden: true }] },
+            ],
+          },
+          ["settings"]
+        )
+        .sections[0].items[0].hidden === false
+    );
+    check(
+      "an ordinary item still hides",
+      sb
+        .toggleHidden(sbBase, "npcs")
+        .sections.flatMap((s) => s.items)
+        .find((i) => i.id === "npcs").hidden === true
+    );
+
+    // ---- what the sidebar actually renders -------------------------
+    check(
+      "visibleSidebar drops what was hidden",
+      !sb
+        .visibleSidebar(sb.toggleHidden(sbBase, "npcs"), IDS)
+        .flatMap((s) => s.items)
+        .some((i) => i.id === "npcs")
+    );
+    check(
+      "and drops a section left with nothing",
+      sb.visibleSidebar(sb.toggleHidden(sbBase, "settings"), ["table", "npcs"])
+        .length === 1
+    );
+    check(
+      "a screen this person may not see is not rendered either",
+      !sb
+        .visibleSidebar(sbBase, ["table", "npcs", "settings"])
+        .flatMap((s) => s.items)
+        .some((i) => i.id === "dice")
+    );
+    check(
+      "visibleSidebar does not mutate the layout",
+      sb.sidebarIds(sbBase).join() === IDS.join()
+    );
+
+    // ---- moving things ---------------------------------------------
+    check(
+      "moveItem takes it out of the section it was in",
+      !sb
+        .moveItem(sbBase, "npcs", "tools", 0)
+        .sections[0].items.some((i) => i.id === "npcs")
+    );
+    check(
+      "moveItem keeps every item",
+      sb.sidebarIds(sb.moveItem(sbBase, "npcs", "tools", 0)).sort().join() ===
+        IDS.slice().sort().join()
+    );
+    check(
+      "moveItem carries the hidden flag with it",
+      sb
+        .moveItem(sb.toggleHidden(sbBase, "npcs"), "npcs", "tools", 0)
+        .sections.flatMap((s) => s.items)
+        .find((i) => i.id === "npcs").hidden === true
+    );
+    check(
+      "shiftItem reorders within a section",
+      sb
+        .shiftItem(sbBase, "npcs", -1)
+        .sections[0].items.map((i) => i.id)
+        .join() === "npcs,table"
+    );
+    check(
+      "shiftItem at the edge does nothing rather than wrapping",
+      eq(sb.shiftItem(sbBase, "table", -1), sbBase)
+    );
+
+    check(
+      "removeSection keeps its items",
+      sb.sidebarIds(sb.removeSection(sbBase, "tools")).sort().join() ===
+        IDS.slice().sort().join()
+    );
+    check(
+      "the last section cannot be removed",
+      sb.removeSection({ sections: [sbBase.sections[0]] }, "campaign")
+        .sections.length === 1
+    );
+    check(
+      "addSection appends an empty one",
+      sb.addSection(sbBase, "Mine").sections.at(-1).items.length === 0
+    );
+    check(
+      "addSection stops at the limit",
+      (() => {
+        let l = sbBase;
+        for (let i = 0; i < 50; i++) l = sb.addSection(l, `S${i}`);
+        return l.sections.length === sb.SIDEBAR_LIMITS.sections;
+      })()
+    );
+    check(
+      "renameSection allows an empty heading",
+      sb.renameSection(sbBase, "tools", "").sections[1].title === ""
+    );
+    check(
+      "shiftSection reorders the sidebar",
+      sb
+        .shiftSection(sbBase, "tools", -1)
+        .sections.map((s) => s.id)
+        .join() === "tools,campaign,settings"
+    );
+
     // ---- the Scheduler ---------------------------------------------
     // Real dates and clock times, which is a different set of traps
     // from the campaign calendar: noon and midnight are both "12", and

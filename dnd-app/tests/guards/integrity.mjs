@@ -496,19 +496,51 @@ export const integrity = {
       throw new Error("found no slugged nav ids — parser out of date?");
     }
 
-    // Every nav GROUP must be rendered, or adding one to navItems.ts and
-    // forgetting the sidebar leaves a section that exists in the data and
-    // nowhere on screen.
+    // Every nav GROUP must reach the sidebar, or adding one to
+    // navItems.ts leaves a section that exists in the data and nowhere
+    // on screen.
+    //
+    // The sidebar is arranged per person now, so the route is no longer
+    // "AppShell mentions the group" — AppShell renders whatever the
+    // saved layout says. What has to hold instead is that every group
+    // is in SIDEBAR_GROUPS, which is what a layout is built from and
+    // reconciled against. A group missing from there is missing from
+    // everyone's sidebar, including people who never customised it.
     const shellSrc = read("components", "AppShell.tsx");
+    const groupsBlock = navSrc.slice(navSrc.indexOf("SIDEBAR_GROUPS"));
+    if (!groupsBlock) throw new Error("no SIDEBAR_GROUPS in navItems.ts");
+
     for (const [, group] of navSrc.matchAll(
       /export const (\w+): NavItem\[\]/g
     )) {
-      if (group === "NAV_DESTINATIONS") continue; // the ribbon's registry
-      if (!shellSrc.includes(group)) {
+      // The ribbon's registry and the designer's flat list are not
+      // sidebar sections; both are built FROM the groups.
+      if (group === "NAV_DESTINATIONS" || group === "ALL_NAV_ITEMS") continue;
+      if (!groupsBlock.includes(group)) {
         problems.push(
-          `navItems exports the ${group} group but AppShell never renders it`
+          `navItems exports the ${group} group but SIDEBAR_GROUPS never ` +
+            "names it, so it is in nobody's sidebar"
         );
       }
+    }
+
+    // And the sidebar has to be built from the person's layout rather
+    // than from the groups directly, or arranging it does nothing.
+    if (!/visibleSidebar\(/.test(shellSrc)) {
+      problems.push(
+        "AppShell no longer renders through visibleSidebar — the saved " +
+          "sidebar layout would be stored and ignored"
+      );
+    }
+    // ALL_NAV_ITEMS is what reconcile is given as the full set. If the
+    // sidebar were reconciled against a narrower list, an item missing
+    // from it would be dropped rather than appended, which is the one
+    // way a screen becomes unreachable with no way to notice.
+    if (!/reconcileSidebar\([\s\S]{0,200}ALL_NAV_ITEMS/.test(shellSrc)) {
+      problems.push(
+        "AppShell does not reconcile the sidebar against ALL_NAV_ITEMS — " +
+          "an item outside whatever list it uses would be silently dropped"
+      );
     }
 
     // A builtin is drawn by a switch arm keyed on its string. Add one to

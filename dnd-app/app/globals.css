@@ -5339,3 +5339,10 @@ button.cal-day:hover {
   background: var(--bg-inset);
   font-size: 0.82rem;
 }
+
+/* A hidden item still shows in the designer — greyed, so the list
+   stays a complete inventory of what exists rather than only what is
+   currently on. */
+.tpl-fields li.off .tpl-field-name {
+  opacity: 0.45;
+}

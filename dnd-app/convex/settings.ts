@@ -54,8 +54,12 @@ export async function getSettings(ctx: QueryCtx, userId: Id<"users">) {
         // stand in for "never arranged one".
         toolbarSet: doc.toolbarSet ?? false,
         dateFormat: doc.dateFormat ?? DEFAULTS.dateFormat,
+        // Null rather than a default: absent means "never arranged
+        // one", which the client needs to tell apart from an arranged
+        // layout that happens to match the shipped grouping.
+        sidebar: doc.sidebar ?? null,
       }
-    : DEFAULTS;
+    : { ...DEFAULTS, sidebar: null };
 }
 
 export const mySettings = query({
@@ -84,6 +88,17 @@ export const dateFormatValidator = v.union(
   v.literal("iso")
 );
 
+/** Mirrors SidebarLayout in components/sidebarLayout.ts. */
+export const sidebarValidator = v.object({
+  sections: v.array(
+    v.object({
+      id: v.string(),
+      title: v.string(),
+      items: v.array(v.object({ id: v.string(), hidden: v.boolean() })),
+    })
+  ),
+});
+
 export const saveMySettings = mutation({
   args: {
     theme: v.optional(themeValidator),
@@ -91,6 +106,7 @@ export const saveMySettings = mutation({
     adminOverride: v.optional(v.boolean()),
     toolbarTokens: v.optional(v.array(v.string())),
     dateFormat: v.optional(dateFormatValidator),
+    sidebar: v.optional(v.union(sidebarValidator, v.null())),
   },
   handler: async (ctx, args) => {
     const userId = await requireUser(ctx);
@@ -117,6 +133,12 @@ export const saveMySettings = mutation({
         toolbarSet:
           args.toolbarTokens !== undefined || (existing.toolbarSet ?? false),
         dateFormat: args.dateFormat ?? existing.dateFormat,
+        // An explicit null is "put it back to the default", which is a
+        // different request from not mentioning it at all.
+        sidebar:
+          args.sidebar === null
+            ? undefined
+            : (args.sidebar ?? existing.sidebar),
       });
       return;
     }
@@ -129,6 +151,7 @@ export const saveMySettings = mutation({
       toolbarTokens: args.toolbarTokens,
       toolbarSet: args.toolbarTokens !== undefined,
       dateFormat: args.dateFormat,
+      sidebar: args.sidebar ?? undefined,
     });
   },
 });

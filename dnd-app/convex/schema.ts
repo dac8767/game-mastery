@@ -292,6 +292,29 @@ export default defineSchema({
         v.literal("iso")
       )
     ),
+    /**
+     * The sidebar as this person arranged it: their sections, their
+     * order, and what they hid. Personal, like the toolbar — it is a
+     * view of the app rather than a fact about the campaign.
+     *
+     * Absent means "never touched it", which is not the same as an
+     * empty one and is why this is optional rather than defaulted.
+     * components/sidebarLayout.ts reconciles it against what the app
+     * actually has, so a tool shipped since cannot be unreachable.
+     */
+    sidebar: v.optional(
+      v.object({
+        sections: v.array(
+          v.object({
+            id: v.string(),
+            title: v.string(),
+            items: v.array(
+              v.object({ id: v.string(), hidden: v.boolean() })
+            ),
+          })
+        ),
+      })
+    ),
   }).index("by_user", ["userId"]),
 
   /**

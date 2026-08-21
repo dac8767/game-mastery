@@ -1,0 +1,289 @@
+/**
+ * The sidebar, as its owner arranged it.
+ *
+ * navItems.ts says what exists and where each thing points. This says
+ * what YOU see and in what order: items hidden, sections renamed, your
+ * own sections made, everything reordered. Per person, not per
+ * campaign — it is a view of the app, not a fact about the game.
+ *
+ * Free of React, Convex, and sibling imports so the unit guard can
+ * compile it alone. The nav groups are passed IN when a starting layout
+ * is built, which keeps this module with no opinion of its own about
+ * whether the Calendar belongs under Campaign or Tools.
+ */
+
+export interface SidebarItem {
+  /** A NavItem id from navItems.ts. */
+  id: string;
+  hidden: boolean;
+}
+
+export interface SidebarSection {
+  id: string;
+  title: string;
+  items: SidebarItem[];
+}
+
+export interface SidebarLayout {
+  sections: SidebarSection[];
+}
+
+export const SIDEBAR_LIMITS = {
+  sections: 12,
+  titleLength: 30,
+};
+
+/**
+ * Items that cannot be hidden, whatever the layout says.
+ *
+ * Settings is where the sidebar is edited. Hiding it would remove the
+ * only way back to the screen that un-hides it — a door that locks
+ * from the inside, one click, no warning, and no route left but typing
+ * the URL from memory.
+ */
+export const ALWAYS_VISIBLE = ["settings"];
+
+export function sectionId(title: string, index: number): string {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return `${slug || "section"}-${index}`;
+}
+
+/** The app's own grouping, as an editable layout. */
+export function defaultSidebar(
+  groups: { id: string; title: string; itemIds: string[] }[]
+): SidebarLayout {
+  return {
+    sections: groups.map((g, i) => ({
+      id: g.id || sectionId(g.title, i),
+      title: g.title,
+      items: g.itemIds.map((id) => ({ id, hidden: false })),
+    })),
+  };
+}
+
+/**
+ * A layout made safe to render against what the app actually has. IDEMPOTENT.
+ *
+ * The important half is the same as everywhere else in this app: an
+ * item the layout has never heard of is APPENDED, not ignored. A tool
+ * shipped after someone last touched their sidebar would otherwise be
+ * unreachable for them — not hidden, absent — and the only hint would
+ * be that a feature everyone else is talking about does not exist.
+ *
+ * Newly appended items arrive visible. A person who has never hidden
+ * anything should not have to go looking for what they just gained.
+ */
+export function reconcileSidebar(
+  layout: SidebarLayout | null | undefined,
+  validIds: string[]
+): SidebarLayout {
+  const valid = new Set(validIds);
+  const seen = new Set<string>();
+  const sections: SidebarSection[] = [];
+
+  for (const [i, section] of (layout?.sections ?? []).entries()) {
+    const items: SidebarItem[] = [];
+    for (const it of section?.items ?? []) {
+      const id = String(it?.id ?? "");
+      if (!valid.has(id) || seen.has(id)) continue;
+      seen.add(id);
+      items.push({
+        id,
+        hidden: ALWAYS_VISIBLE.includes(id) ? false : Boolean(it?.hidden),
+      });
+    }
+    const title = String(section?.title ?? "")
+      .trim()
+      .slice(0, SIDEBAR_LIMITS.titleLength);
+    sections.push({
+      id: String(section?.id ?? "") || sectionId(title, i),
+      title,
+      items,
+    });
+    if (sections.length >= SIDEBAR_LIMITS.sections) break;
+  }
+
+  const usedIds = new Set<string>();
+  for (const [i, section] of sections.entries()) {
+    let id = section.id;
+    let n = i;
+    while (usedIds.has(id)) id = sectionId(section.title, ++n);
+    usedIds.add(id);
+    section.id = id;
+  }
+
+  if (sections.length === 0) {
+    sections.push({ id: "section-0", title: "", items: [] });
+  }
+
+  const missing = validIds.filter((id) => !seen.has(id));
+  if (missing.length > 0) {
+    sections[sections.length - 1].items.push(
+      ...missing.map((id) => ({ id, hidden: false }))
+    );
+  }
+
+  return { sections };
+}
+
+/** Every item id the layout places, in order. */
+export function sidebarIds(layout: SidebarLayout): string[] {
+  return layout.sections.flatMap((s) => s.items.map((i) => i.id));
+}
+
+/**
+ * What the sidebar renders: visible items only, empty sections dropped.
+ *
+ * `allowed` is what this person may see at all — the DM-only screens
+ * are not in it for a player. Hiding and not-being-allowed are
+ * different things that happen to look the same here, and only one of
+ * them is a preference.
+ */
+export function visibleSidebar(
+  layout: SidebarLayout,
+  allowed: string[]
+): SidebarSection[] {
+  const permitted = new Set(allowed);
+  return layout.sections
+    .map((s) => ({
+      ...s,
+      items: s.items.filter((i) => !i.hidden && permitted.has(i.id)),
+    }))
+    .filter((s) => s.items.length > 0);
+}
+
+export function toggleHidden(
+  layout: SidebarLayout,
+  id: string
+): SidebarLayout {
+  if (ALWAYS_VISIBLE.includes(id)) return layout;
+  return {
+    sections: layout.sections.map((s) => ({
+      ...s,
+      items: s.items.map((i) =>
+        i.id === id ? { ...i, hidden: !i.hidden } : i
+      ),
+    })),
+  };
+}
+
+export function moveItem(
+  layout: SidebarLayout,
+  id: string,
+  toSectionId: string,
+  toIndex: number
+): SidebarLayout {
+  const moved =
+    layout.sections.flatMap((s) => s.items).find((i) => i.id === id) ?? {
+      id,
+      hidden: false,
+    };
+
+  return {
+    sections: layout.sections.map((s) => {
+      const without = s.items.filter((i) => i.id !== id);
+      if (s.id !== toSectionId) return { ...s, items: without };
+      const at = Math.min(Math.max(0, Math.round(toIndex)), without.length);
+      return {
+        ...s,
+        items: [...without.slice(0, at), moved, ...without.slice(at)],
+      };
+    }),
+  };
+}
+
+export function shiftItem(
+  layout: SidebarLayout,
+  id: string,
+  delta: number
+): SidebarLayout {
+  return {
+    sections: layout.sections.map((s) => {
+      const at = s.items.findIndex((i) => i.id === id);
+      if (at === -1) return s;
+      const to = at + Math.round(delta);
+      if (to < 0 || to >= s.items.length) return s;
+      const items = s.items.slice();
+      const [item] = items.splice(at, 1);
+      items.splice(to, 0, item);
+      return { ...s, items };
+    }),
+  };
+}
+
+export function addSection(
+  layout: SidebarLayout,
+  title: string
+): SidebarLayout {
+  if (layout.sections.length >= SIDEBAR_LIMITS.sections) return layout;
+  const clean =
+    title.trim().slice(0, SIDEBAR_LIMITS.titleLength) ||
+    `Section ${layout.sections.length + 1}`;
+  const used = new Set(layout.sections.map((s) => s.id));
+  let id = sectionId(clean, layout.sections.length);
+  let n = layout.sections.length;
+  while (used.has(id)) id = sectionId(clean, ++n);
+  return {
+    sections: [...layout.sections, { id, title: clean, items: [] }],
+  };
+}
+
+export function renameSection(
+  layout: SidebarLayout,
+  id: string,
+  title: string
+): SidebarLayout {
+  return {
+    sections: layout.sections.map((s) =>
+      s.id === id
+        ? { ...s, title: title.slice(0, SIDEBAR_LIMITS.titleLength) }
+        : s
+    ),
+  };
+}
+
+/**
+ * Remove a section, keeping its items.
+ *
+ * They move to the section beside it rather than going with it. Same
+ * reason as the NPC record's tabs: deleting a section is a statement
+ * about the section, and taking six links out of the sidebar with it
+ * is not what anybody meant — least of all when one of them might be
+ * the only way to reach a screen.
+ */
+export function removeSection(
+  layout: SidebarLayout,
+  id: string
+): SidebarLayout {
+  if (layout.sections.length <= 1) return layout;
+  const at = layout.sections.findIndex((s) => s.id === id);
+  if (at === -1) return layout;
+
+  const orphans = layout.sections[at].items;
+  const into = at === 0 ? 1 : at - 1;
+  return {
+    sections: layout.sections
+      .map((s, i) =>
+        i === into ? { ...s, items: [...s.items, ...orphans] } : s
+      )
+      .filter((_, i) => i !== at),
+  };
+}
+
+export function shiftSection(
+  layout: SidebarLayout,
+  id: string,
+  delta: number
+): SidebarLayout {
+  const at = layout.sections.findIndex((s) => s.id === id);
+  if (at === -1) return layout;
+  const to = at + Math.round(delta);
+  if (to < 0 || to >= layout.sections.length) return layout;
+  const sections = layout.sections.slice();
+  const [s] = sections.splice(at, 1);
+  sections.splice(to, 0, s);
+  return { sections };
+}

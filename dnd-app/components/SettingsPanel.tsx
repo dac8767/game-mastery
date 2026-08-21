@@ -8,6 +8,7 @@ import { THEMES } from "@/components/themes";
 import { RULES_VERSIONS } from "@/components/lookupFilters";
 import { DATE_FORMATS, formatCardDate } from "@/components/campaignCard";
 import { NpcTemplateDesigner } from "@/components/NpcTemplateDesigner";
+import { SidebarDesigner } from "@/components/SidebarDesigner";
 import { NameField } from "@/components/NameField";
 import { TransferDm } from "@/components/TransferDm";
 import { CampaignDetails } from "@/components/CampaignDetails";
@@ -266,6 +267,8 @@ export function SettingsPanel({
 
       {tab === "interface" && (
         <>
+          <SidebarDesigner />
+
           <section className="settings-block">
             <h2>Theme</h2>
             <p className="settings-note">

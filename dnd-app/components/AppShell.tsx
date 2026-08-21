@@ -4,19 +4,23 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { ReactNode, useState } from "react";
+import { ReactNode, useMemo, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import { ThemeSync } from "@/components/ThemeSync";
 import { FeedbackForm } from "@/components/FeedbackForm";
 import { Id } from "@/convex/_generated/dataModel";
 import {
-  ASSET_ITEMS,
-  CAMPAIGN_ITEMS,
-  LOOKUP_ITEMS,
+  ALL_NAV_ITEMS,
+  NAV_ITEM_BY_ID,
   NavItem,
-  TOOL_ITEMS,
+  SIDEBAR_GROUPS,
   navHref,
 } from "@/components/navItems";
+import {
+  defaultSidebar,
+  reconcileSidebar,
+  visibleSidebar,
+} from "@/components/sidebarLayout";
 
 /**
  * The application frame: navigation on the left, the selected thing on
@@ -89,12 +93,39 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const campaigns = useQuery(api.campaigns.myCampaigns);
+  const settings = useQuery(api.settings.mySettings);
   const { signOut } = useAuthActions();
 
   const campaign = campaigns?.find((c) => c._id === campaignId) ?? null;
   const base = `/campaign/${campaignId}`;
   const isDm = campaign?.isDm ?? false;
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+
+  /**
+   * The sidebar this person arranged, or the shipped grouping.
+   *
+   * Reconciled against what the app actually has either way: a layout
+   * saved before a tool shipped has no opinion about it, and an item
+   * the layout does not mention would be unreachable rather than
+   * hidden — no menu entry, and no hint that there is one to un-hide.
+   */
+  const sections = useMemo(() => {
+    const allowed = ALL_NAV_ITEMS.filter((i) => isDm || !i.dmOnly).map(
+      (i) => i.id
+    );
+    const layout = reconcileSidebar(
+      settings?.sidebar ?? defaultSidebar(SIDEBAR_GROUPS),
+      ALL_NAV_ITEMS.map((i) => i.id)
+    );
+    return visibleSidebar(layout, allowed);
+  }, [settings?.sidebar, isDm]);
+
+  // The first section sits under the campaign name rather than under a
+  // heading of its own — the campaign IS its heading.
+  const firstSection = (sections[0]?.items ?? [])
+    .map((i) => NAV_ITEM_BY_ID.get(i.id))
+    .filter((i): i is NavItem => Boolean(i));
+  const restSections = sections.slice(1);
 
   return (
     <div className="shell">
@@ -116,42 +147,31 @@ export function AppShell({
             {campaign?.viaAdmin && <span className="badge admin">Admin</span>}
           </Link>
           <NavList
-            items={CAMPAIGN_ITEMS}
+            items={firstSection}
             base={base}
             pathname={pathname}
             isDm={isDm}
           />
         </div>
 
-        <div className="nav-group">
-          <div className="nav-group-title">Tools</div>
-          <NavList
-            items={TOOL_ITEMS}
-            base={base}
-            pathname={pathname}
-            isDm={isDm}
-          />
-        </div>
-
-        <div className="nav-group">
-          <div className="nav-group-title">Lookup</div>
-          <NavList
-            items={LOOKUP_ITEMS}
-            base={base}
-            pathname={pathname}
-            isDm={isDm}
-          />
-        </div>
-
-        <div className="nav-group">
-          <div className="nav-group-title">Asset Library</div>
-          <NavList
-            items={ASSET_ITEMS}
-            base={base}
-            pathname={pathname}
-            isDm={isDm}
-          />
-        </div>
+        {/* The rest of the sidebar, as this person arranged it. The
+            campaign block above stays put because the campaign name is
+            the header of the whole thing, not an item in a list. */}
+        {restSections.map((section) => (
+          <div className="nav-group" key={section.id}>
+            {section.title && (
+              <div className="nav-group-title">{section.title}</div>
+            )}
+            <NavList
+              items={section.items
+                .map((i) => NAV_ITEM_BY_ID.get(i.id))
+                .filter((i): i is NavItem => Boolean(i))}
+              base={base}
+              pathname={pathname}
+              isDm={isDm}
+            />
+          </div>
+        ))}
 
         <div className="sidebar-footer">
           <Link
