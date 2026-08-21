@@ -421,6 +421,31 @@ function RecordField({
     .filter(Boolean)
     .join(" ");
 
+  // A checkbox says its own state; a label above it saying the same
+  // thing twice, and a "Yes" beside it saying it a third time, is three
+  // readings of one tick. The label goes beside the box and the rest
+  // goes away.
+  if (col.kind === "boolean") {
+    return (
+      <div className={className}>
+        <label className="detail-check">
+          <input
+            type="checkbox"
+            checked={draft === "true"}
+            disabled={!editable}
+            onChange={(e) => {
+              const next = e.target.checked ? "true" : "false";
+              setDraft(next);
+              onCommit(next);
+            }}
+          />
+          <span>{col.label}</span>
+          {dmOnly && <span className="dm-tag">DM only</span>}
+        </label>
+      </div>
+    );
+  }
+
   if (!editable) {
     return (
       <div className={className}>
@@ -445,20 +470,7 @@ function RecordField({
         </div>
       )}
 
-      {col.kind === "boolean" ? (
-        <label className="detail-check">
-          <input
-            type="checkbox"
-            checked={draft === "true"}
-            onChange={(e) => {
-              const next = e.target.checked ? "true" : "false";
-              setDraft(next);
-              onCommit(next);
-            }}
-          />
-          <span>{draft === "true" ? "Yes" : "No"}</span>
-        </label>
-      ) : col.kind === "longtext" ? (
+      {col.kind === "longtext" ? (
         <textarea
           className="detail-input"
           rows={4}

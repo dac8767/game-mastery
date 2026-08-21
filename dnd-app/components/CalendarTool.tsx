@@ -315,6 +315,31 @@ export function CalendarTool({
                           ))}
                         </span>
                       </button>
+
+                      {/* On the day you picked, in the day you picked.
+                          A button below the grid meant looking away
+                          from the date to add something to it. Nested
+                          beside the cell button rather than inside it,
+                          because a button inside a button is not
+                          valid HTML and the click would not reach it. */}
+                      {isDm && isPicked && (
+                        <button
+                          type="button"
+                          className="cal-add"
+                          title={`Add an event on ${formatDate(settings, cell)}`}
+                          aria-label={`Add an event on ${formatDate(
+                            settings,
+                            cell
+                          )}`}
+                          onClick={() => {
+                            setSelected(cell);
+                            setEditingEvent(null);
+                            setComposing(true);
+                          }}
+                        >
+                          +
+                        </button>
+                      )}
                     </td>
                   );
                 })}
@@ -378,17 +403,12 @@ function DayPanel({
 
   return (
     <section className="cal-panel">
+      {/* No Add button here: the + on the day itself is how an event
+          is added, so that adding one never means looking away from
+          the date you are adding it to. This panel is what is ON the
+          day, and how to change it. */}
       <header className="cal-panel-head">
         <h2>{formatDate(settings, date)}</h2>
-        {isDm && !composing && !being && (
-          <button
-            type="button"
-            className="npc-btn"
-            onClick={() => setComposing(true)}
-          >
-            Add event
-          </button>
-        )}
         <button type="button" className="text-button" onClick={onClose}>
           Close
         </button>
@@ -405,7 +425,9 @@ function DayPanel({
           }}
         />
       ) : events.length === 0 ? (
-        <p className="settings-note">Nothing on this day.</p>
+        <p className="settings-note">
+          Nothing on this day.{isDm ? " Use the + on the day to add something." : ""}
+        </p>
       ) : (
         <ul className="cal-events">
           {events.map((e) => (

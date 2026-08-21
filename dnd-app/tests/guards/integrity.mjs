@@ -603,6 +603,33 @@ export const integrity = {
       }
     }
 
+    // The way out of a preview must not be gated on not being in one.
+    //
+    // View as Player turns isDm off so the DM-only screens go away —
+    // which is the point. But the switch that turns it back off lives
+    // in the same sidebar, and hanging it off the same isDm would make
+    // it a one-way door: the button disappears the instant it works,
+    // and the only way back is Settings, which is also filtered.
+    //
+    // So the switch reads the STRUCTURAL fact (you run this campaign),
+    // and only the nav filter reads the previewing-adjusted one.
+    if (/viewAsPlayer/.test(shellSrc)) {
+      if (!/runsThis && \(/.test(shellSrc)) {
+        problems.push(
+          "the View as Player switch is not gated on the structural DM " +
+            "check — if it hangs off the previewing-adjusted isDm it " +
+            "vanishes the moment it is used, with no way back"
+        );
+      }
+      if (!/const isDm = runsThis && !previewing/.test(shellSrc)) {
+        problems.push(
+          "AppShell does not fold viewAsPlayer into the isDm it filters " +
+            "the sidebar with, so previewing would leave the DM-only " +
+            "screens on screen"
+        );
+      }
+    }
+
     // And the sidebar has to be built from the person's layout rather
     // than from the groups directly, or arranging it does nothing.
     if (!/visibleSidebar\(/.test(shellSrc)) {

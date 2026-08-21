@@ -5733,3 +5733,32 @@ button.cal-day:hover {
 .tpl-grid {
   grid-auto-rows: 4.4rem;
 }
+
+/* The + on the day you picked. Sits over the cell rather than in it:
+   a button inside a button is not valid HTML, so it is a sibling
+   positioned on top. */
+.cal-grid td {
+  position: relative;
+}
+
+.cal-add {
+  position: absolute;
+  right: 0.25rem;
+  bottom: 0.25rem;
+  width: 1.4rem;
+  height: 1.4rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: var(--bg-raised);
+  color: var(--accent);
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0;
+}
+
+.cal-add:hover {
+  background: var(--accent);
+  color: var(--bg);
+}

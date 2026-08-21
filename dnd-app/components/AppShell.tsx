@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { ReactNode, useMemo, useState } from "react";
 import { api } from "@/convex/_generated/api";
@@ -94,11 +94,26 @@ export function AppShell({
   const pathname = usePathname();
   const campaigns = useQuery(api.campaigns.myCampaigns);
   const settings = useQuery(api.settings.mySettings);
+  const saveSettings = useMutation(api.settings.saveMySettings);
   const { signOut } = useAuthActions();
 
   const campaign = campaigns?.find((c) => c._id === campaignId) ?? null;
   const base = `/campaign/${campaignId}`;
-  const isDm = campaign?.isDm ?? false;
+  /**
+   * Two different questions, and conflating them is a trap.
+   *
+   * runsThis is structural — you are the DM of this campaign — and is
+   * what decides whether the View as Player switch is offered at all.
+   * isDm is what the sidebar filters on, and the preview turns it off
+   * so the DM-only screens go away like they would for a player.
+   *
+   * The switch must hang off the first, never the second. Gate the way
+   * OUT of a preview on not being in one and it becomes a one-way
+   * door: the button disappears the moment it works.
+   */
+  const runsThis = campaign?.isDm ?? false;
+  const previewing = Boolean(settings?.viewAsPlayer);
+  const isDm = runsThis && !previewing;
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   /**
@@ -178,6 +193,17 @@ export function AppShell({
             sidebarLayout — so a second hard-coded link here rendered it
             twice. */}
         <div className="sidebar-footer">
+          {runsThis && (
+            <button
+              type="button"
+              className={`nav-item as-button${previewing ? " active" : ""}`}
+              title="See the app as a player in this campaign sees it"
+              onClick={() => void saveSettings({ viewAsPlayer: !previewing })}
+            >
+              <span className="nav-icon">{previewing ? "◉" : "◎"}</span>
+              {previewing ? "Viewing as player" : "View as Player"}
+            </button>
+          )}
           <Link href="/" className="nav-item subtle">
             <span className="nav-icon">⇤</span>
             All campaigns
