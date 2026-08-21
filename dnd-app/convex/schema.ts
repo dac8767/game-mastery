@@ -481,6 +481,47 @@ export default defineSchema({
    * its columns.
    */
   /**
+   * The days and hours the DM has offered for the next session.
+   *
+   * One row per campaign: this is "when are we playing next", not a
+   * calendar of proposals, and a second open poll would only ever
+   * split the answers between them.
+   *
+   * The days are REAL dates, unlike everything else in the campaign —
+   * nobody schedules a game for the 10th of Autumn. Times are minutes
+   * from midnight so they sort and compare as numbers.
+   */
+  schedules: defineTable({
+    campaignId: v.id("campaigns"),
+    /** ISO "YYYY-MM-DD". */
+    days: v.array(v.string()),
+    startMinute: v.number(),
+    endMinute: v.number(),
+    slotMinutes: v.number(),
+  }).index("by_campaign", ["campaignId"]),
+
+  /**
+   * One person's answer: the cells they marked.
+   *
+   * Stored as slot keys ("2026-08-25T540") rather than a row per cell,
+   * because a person's availability is edited as a whole — dragging
+   * across an afternoon is one save, not sixteen inserts — and is only
+   * ever read alongside everyone else's.
+   *
+   * A row that exists with an empty list is a person who answered
+   * "none of these", which is a different fact from not having
+   * answered. The Scheduler reports both, so the distinction has to
+   * survive: never delete a row to mean "cleared".
+   */
+  availability: defineTable({
+    campaignId: v.id("campaigns"),
+    userId: v.id("users"),
+    slots: v.array(v.string()),
+  })
+    .index("by_campaign", ["campaignId"])
+    .index("by_campaign_user", ["campaignId", "userId"]),
+
+  /**
    * How an opened NPC is laid out, for the whole campaign.
    *
    * One row per campaign, written by the DM, read by everyone: the

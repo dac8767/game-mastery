@@ -372,6 +372,70 @@ export const integrity = {
       }
     }
 
+    // ---- the Scheduler's two authorities ---------------------------
+    // Different from the rest of the app, and worth stating: the DM
+    // decides the DAYS, but availability is each person's own. The
+    // failure is not a leak — everyone is meant to see everyone's
+    // times — it is one member marking another's evening free and the
+    // group booking a night somebody cannot make.
+    // Read locally: the calendar section further down binds its own
+    // copy, and this check runs before it.
+    const schedSrc = read("convex", "calendar.ts");
+    const setAvailAt = schedSrc.indexOf("export const setAvailability");
+    if (setAvailAt === -1) {
+      throw new Error("no setAvailability in convex/calendar.ts");
+    }
+    const setAvailArgs = blockAfter(
+      schedSrc.slice(setAvailAt),
+      /args:/,
+      "setAvailability args"
+    );
+    if (/userId/.test(setAvailArgs)) {
+      problems.push(
+        "setAvailability takes a userId as an ARGUMENT — availability is " +
+          "each person's own, and the id has to come from the session or " +
+          "any member can mark anyone else's evening free"
+      );
+    }
+    const setAvailBody = blockAfter(
+      schedSrc.slice(setAvailAt),
+      /handler:/,
+      "setAvailability handler"
+    );
+    if (!/requireMember\(/.test(setAvailBody)) {
+      problems.push(
+        "setAvailability does not go through requireMember — a stranger " +
+          "could answer a campaign's poll"
+      );
+    }
+    if (!/const \{\s*userId\s*\}\s*=\s*await requireMember/.test(setAvailBody)) {
+      problems.push(
+        "setAvailability does not take its userId from requireMember, so " +
+          "there is nothing tying the row it writes to the caller"
+      );
+    }
+
+    // The DM's half. Offering days is not something a player may do.
+    for (const fn of ["setWindow", "clearAllAvailability"]) {
+      const at = schedSrc.indexOf(`export const ${fn}`);
+      if (at === -1) throw new Error(`no ${fn} in convex/calendar.ts`);
+      const body = blockAfter(schedSrc.slice(at), /handler:/, `${fn} handler`);
+      if (!/requireDm\(/.test(body)) {
+        problems.push(`calendar.${fn} does not go through requireDm`);
+      }
+    }
+
+    // Slots are filtered to the window on the way IN as well as out. A
+    // day the DM withdrew leaves everyone's marks on it behind, and
+    // counting them would report agreement on a date nobody is being
+    // offered any more.
+    if (!/live\.has\(/.test(setAvailBody)) {
+      problems.push(
+        "setAvailability stores whatever slots it is sent — a hand-made " +
+          "call could fill the table with keys no grid will ever render"
+      );
+    }
+
     // ---- nav slugs must have pages behind them ---------------------
     // The sidebar renders these and the ribbon's `t:` tokens address the
     // same list by id, so a renamed folder is a dead link in two places

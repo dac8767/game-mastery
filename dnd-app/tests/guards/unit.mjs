@@ -1044,6 +1044,281 @@ export const unit = {
         .join() === "job"
     );
 
+    // ---- the Scheduler ---------------------------------------------
+    // Real dates and clock times, which is a different set of traps
+    // from the campaign calendar: noon and midnight are both "12", and
+    // an ISO date read through the local Date constructor is the day
+    // before in every timezone west of Greenwich.
+    const schOut = compile("components/scheduleModel.ts");
+    const sch = await import(
+      pathToFileURL(join(schOut, "scheduleModel.js")).href
+    );
+
+    check(
+      "formatTime: morning and afternoon",
+      [540, 570, 660].map(sch.formatTime).join() === "9:00 AM,9:30 AM,11:00 AM"
+    );
+    // The two the 12-hour clock gets wrong if you just take h % 12.
+    check("formatTime: noon is 12 PM, not 0 PM", sch.formatTime(720) === "12:00 PM");
+    check("formatTime: midnight is 12 AM, not 0 AM", sch.formatTime(0) === "12:00 AM");
+    check("formatTime: half past noon", sch.formatTime(750) === "12:30 PM");
+    check("formatTime: 11:59 PM stays PM", sch.formatTime(1439) === "11:59 PM");
+    check(
+      "formatTime pads the minutes",
+      sch.formatTime(545) === "9:05 AM"
+    );
+
+    // A date is three numbers, never a local Date. `new Date("2026-08-25")`
+    // is UTC midnight — the 24th in every US timezone — and a scheduler
+    // that names the wrong weekday is worse than none.
+    check(
+      "dayLabel reads the date it was given",
+      eq(sch.dayLabel("2026-08-25"), { date: "Aug 25", weekday: "Tue" })
+    );
+    check(
+      "dayLabel: the first of a month",
+      eq(sch.dayLabel("2026-01-01"), { date: "Jan 1", weekday: "Thu" })
+    );
+    check(
+      "dayLabel: a leap day is a real day",
+      eq(sch.dayLabel("2028-02-29"), { date: "Feb 29", weekday: "Tue" })
+    );
+    check(
+      "isIsoDate rejects a day that does not exist",
+      !sch.isIsoDate("2026-02-30") &&
+        !sch.isIsoDate("2026-13-01") &&
+        !sch.isIsoDate("2026-8-5") &&
+        !sch.isIsoDate("not a date") &&
+        sch.isIsoDate("2026-08-25")
+    );
+    check(
+      "addIsoDays crosses a month, a year, and a leap day",
+      sch.addIsoDays("2026-08-31", 1) === "2026-09-01" &&
+        sch.addIsoDays("2026-12-31", 1) === "2027-01-01" &&
+        sch.addIsoDays("2028-02-28", 1) === "2028-02-29" &&
+        sch.addIsoDays("2026-01-01", -1) === "2025-12-31"
+    );
+
+    // ---- the window -------------------------------------------------
+    const W = sch.reconcileWindow({
+      days: ["2026-08-25", "2026-08-26"],
+      startMinute: 9 * 60,
+      endMinute: 17 * 60,
+      slotMinutes: 30,
+    });
+    check("slotsOf spans the window", sch.slotsOf(W).length === 16);
+    check("slotsOf starts at the start", sch.slotsOf(W)[0] === 540);
+    check(
+      "slotsOf stops before the end rather than past it",
+      sch.slotsOf(W).at(-1) === 990
+    );
+    check(
+      "a slot that would overrun the end is not offered",
+      sch.slotsOf(
+        sch.reconcileWindow({ ...W, endMinute: 9 * 60 + 45, slotMinutes: 30 })
+      ).length === 1
+    );
+    check(
+      "reconcileWindow is idempotent",
+      eq(sch.reconcileWindow(sch.reconcileWindow(W)), sch.reconcileWindow(W))
+    );
+    check(
+      "an end before the start still leaves one row to render",
+      sch.slotsOf(
+        sch.reconcileWindow({ ...W, startMinute: 600, endMinute: 60 })
+      ).length === 1
+    );
+    check(
+      "days are sorted and deduplicated",
+      sch
+        .reconcileWindow({
+          ...W,
+          days: ["2026-08-26", "2026-08-25", "2026-08-26"],
+        })
+        .days.join() === "2026-08-25,2026-08-26"
+    );
+    check(
+      "a day that is not a date is dropped, not rendered",
+      sch.reconcileWindow({ ...W, days: ["yesterday", "2026-08-25"] }).days
+        .join() === "2026-08-25"
+    );
+    check(
+      "isHourStart reads the clock, not the row",
+      sch.isHourStart(540) && !sch.isHourStart(570) && sch.isHourStart(600)
+    );
+    // A 20-minute grid must still put its solid lines on the hours.
+    check(
+      "and does so at any cell size",
+      sch
+        .slotsOf(sch.reconcileWindow({ ...W, slotMinutes: 20 }))
+        .filter(sch.isHourStart).length === 8
+    );
+
+    // ---- slot keys --------------------------------------------------
+    check(
+      "a slot key round-trips",
+      eq(sch.parseSlotKey(sch.slotKey("2026-08-25", 540)), {
+        day: "2026-08-25",
+        minute: 540,
+      })
+    );
+    check(
+      "a malformed key is null rather than a wrong date",
+      sch.parseSlotKey("nonsense") === null &&
+        sch.parseSlotKey("2026-08-25Tlate") === null
+    );
+
+    // ---- who is free ------------------------------------------------
+    const k = (d, m) => sch.slotKey(d, m);
+    const people = [
+      { userId: "u1", name: "Derek", slots: [k("2026-08-25", 540), k("2026-08-25", 570)] },
+      { userId: "u2", name: "Ana", slots: [k("2026-08-25", 570), k("2026-08-25", 600)] },
+      { userId: "u3", name: "Bo", slots: [] },
+    ];
+    const freeAt = sch.tally(people);
+    check(
+      "tally counts one person once",
+      freeAt.get(k("2026-08-25", 540)).count === 1
+    );
+    check(
+      "tally counts an overlap",
+      freeAt.get(k("2026-08-25", 570)).count === 2
+    );
+    check(
+      "tally names who is free",
+      freeAt.get(k("2026-08-25", 570)).free.slice().sort().join() === "Ana,Derek"
+    );
+    // One person listing a slot twice must not read as two people.
+    check(
+      "a duplicated slot does not count twice",
+      sch
+        .tally([{ userId: "u", name: "Derek", slots: [k("2026-08-25", 540), k("2026-08-25", 540)] }])
+        .get(k("2026-08-25", 540)).count === 1
+    );
+    check(
+      "missing names the people who marked nothing",
+      sch.missing(people).join() === "Bo"
+    );
+
+    check(
+      "consensus finds the overlap first",
+      sch.consensus(W, people, 1)[0].minute === 570
+    );
+    check(
+      "a minimum nobody meets returns nothing rather than a best guess",
+      sch.consensus(W, people, 3).length === 0
+    );
+
+    // ---- blocks -----------------------------------------------------
+    // Consecutive slots with the SAME people merge; a run where the
+    // group changes must not, or the summary claims a three-hour
+    // window that nobody actually shares.
+    const solid = [
+      {
+        userId: "u1",
+        name: "Derek",
+        slots: [540, 570, 600].map((m) => k("2026-08-25", m)),
+      },
+      {
+        userId: "u2",
+        name: "Ana",
+        slots: [540, 570, 600].map((m) => k("2026-08-25", m)),
+      },
+    ];
+    const merged = sch.blocks(W, solid, 2);
+    check("blocks merges a run into one", merged.length === 1);
+    check(
+      "blocks spans the whole run",
+      merged[0].startMinute === 540 && merged[0].endMinute === 630
+    );
+    const shifting = [
+      { userId: "u1", name: "Derek", slots: [540, 570].map((m) => k("2026-08-25", m)) },
+      { userId: "u2", name: "Ana", slots: [570, 600].map((m) => k("2026-08-25", m)) },
+    ];
+    check(
+      "blocks does not merge across a change of who is free",
+      sch.blocks(W, shifting, 1).length === 3
+    );
+    check(
+      "a gap breaks a block",
+      sch.blocks(
+        W,
+        [{ userId: "u", name: "D", slots: [k("2026-08-25", 540), k("2026-08-25", 660)] }],
+        1
+      ).length === 2
+    );
+    check(
+      "blocks does not run across midnight into the next day",
+      sch
+        .blocks(
+          W,
+          [
+            {
+              userId: "u",
+              name: "D",
+              slots: [k("2026-08-25", 990), k("2026-08-26", 540)],
+            },
+          ],
+          1
+        )
+        .every((b) => b.endMinute <= W.endMinute)
+    );
+
+    // ---- dragging ---------------------------------------------------
+    // A drag is a RECTANGLE. Following reading order instead would
+    // select the rest of Tuesday, all of Wednesday, and Thursday up to
+    // the release — which is never what someone painting a grid means.
+    const rect = sch.dragRect(
+      W,
+      { day: "2026-08-25", minute: 540 },
+      { day: "2026-08-26", minute: 600 }
+    );
+    check("dragRect covers both days", rect.length === 6);
+    check(
+      "dragRect does not spill past the released row",
+      rect.every((key) => sch.parseSlotKey(key).minute <= 600)
+    );
+    check(
+      "dragging backwards covers the same cells",
+      sch
+        .dragRect(W, { day: "2026-08-26", minute: 600 }, { day: "2026-08-25", minute: 540 })
+        .slice()
+        .sort()
+        .join() === rect.slice().sort().join()
+    );
+    check(
+      "a drag from a day not on offer selects nothing",
+      sch.dragRect(W, { day: "2026-01-01", minute: 540 }, { day: "2026-08-25", minute: 540 })
+        .length === 0
+    );
+
+    check(
+      "applyDrag adds without disturbing what was there",
+      sch
+        .applyDrag([k("2026-08-25", 900)], rect, "add")
+        .includes(k("2026-08-25", 900))
+    );
+    check(
+      "applyDrag removes only what the drag covered",
+      (() => {
+        const before = [...rect, k("2026-08-25", 900)];
+        const after = sch.applyDrag(before, rect, "remove");
+        return after.join() === k("2026-08-25", 900);
+      })()
+    );
+    check(
+      "applyDrag does not double up a cell already marked",
+      sch.applyDrag(rect, rect, "add").length === rect.length
+    );
+    check(
+      "applyDrag does not mutate the list it was given",
+      (() => {
+        const before = [k("2026-08-25", 540)];
+        sch.applyDrag(before, rect, "add");
+        return before.length === 1;
+      })()
+    );
+
     // ---- the NPC record template -----------------------------------
     // The DM's own layout. Everything here is one property said five
     // ways: a field cannot go missing. A template outlives the column

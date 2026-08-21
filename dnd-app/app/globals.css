@@ -5159,3 +5159,183 @@ button.cal-day:hover {
 .tpl-add .detail-input {
   max-width: 16rem;
 }
+
+/* ---------- Scheduler ---------- */
+
+.sched {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+  flex: 1;
+}
+
+.sched-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.sched-title {
+  margin: 0;
+  font-size: 1.1rem;
+  flex: 1;
+}
+
+.sched-hint {
+  margin: 0;
+}
+
+.sched-grid-wrap {
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  padding: 0.75rem;
+}
+
+.sched-grid {
+  border-collapse: collapse;
+  /* The day columns are read as columns, so they have to be equal and
+     wide enough to hold "Wed" — not sized to whatever is in them. */
+  table-layout: fixed;
+}
+
+.sched-grid th {
+  font-weight: 600;
+  padding: 0 0.4rem 0.4rem;
+}
+
+.sched-grid thead th:not(.sched-time-col) {
+  min-width: 5.5rem;
+}
+
+.sched-day-date {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.sched-day-weekday {
+  display: block;
+  font-size: 1.05rem;
+}
+
+/* The time labels sit against the top of their row, so a label reads
+   as "this line is 10:00" rather than "this block is 10-ish". */
+.sched-time-col {
+  width: 6rem;
+  text-align: right;
+  vertical-align: top;
+  padding-right: 0.6rem !important;
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--text-dim);
+  white-space: nowrap;
+  transform: translateY(-0.5em);
+}
+
+/* Solid on the hour, dotted on the half — straight from the mockup,
+   and the reason isHourStart reads the clock rather than the row. */
+.sched-cell {
+  height: 1.35rem;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  border-top: 1px dotted var(--border);
+  background: var(--bg-inset);
+  cursor: cell;
+  /* Without this a drag scrolls the page on a touch screen instead of
+     drawing on the grid. */
+  touch-action: none;
+}
+
+.sched-grid tr.sched-hour .sched-cell {
+  border-top: 1px solid var(--text-dim);
+}
+
+.sched-grid tbody tr:last-child .sched-cell {
+  border-bottom: 1px solid var(--text-dim);
+}
+
+/* How many people are free, as depth of colour. --free is 0–1. */
+.sched-cell[style*="--free"] {
+  background: color-mix(
+    in srgb,
+    var(--accent) calc(var(--free) * 55%),
+    var(--bg-inset)
+  );
+}
+
+/* Your own marks are an outline rather than a fill: the fill already
+   means "how many people", and one cell cannot say two things in the
+   same channel. */
+.sched-cell.mine {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.sched-cell.all {
+  background: var(--healthy);
+}
+
+.sched-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.sched-blocks,
+.sched-people {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.sched-people li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+}
+
+.sched-person {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.sched-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--down);
+  flex: none;
+}
+
+.sched-dot.in {
+  background: var(--healthy);
+}
+
+.sched-daylist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+
+.sched-daychip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  font-size: 0.82rem;
+}

@@ -58,7 +58,7 @@ export const TOOL_ITEMS: NavItem[] = [
     slug: "dm-screen",
     dmOnly: true,
   },
-  { id: "scheduler", label: "Scheduler", icon: "⏱" },
+  { id: "scheduler", label: "Scheduler", icon: "⏱", slug: "scheduler" },
 ];
 
 /**
