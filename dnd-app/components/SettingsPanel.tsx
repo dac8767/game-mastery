@@ -7,6 +7,7 @@ import { THEMES } from "@/components/themes";
 import { RULES_VERSIONS } from "@/components/lookupFilters";
 import { DATE_FORMATS, formatCardDate } from "@/components/campaignCard";
 import { NameField } from "@/components/NameField";
+import { TransferDm } from "@/components/TransferDm";
 import { CampaignDetails } from "@/components/CampaignDetails";
 import { CampaignRoster } from "@/components/CampaignRoster";
 
@@ -145,6 +146,7 @@ export function SettingsPanel({
         <>
           <CampaignDetails campaignId={campaignId} />
           <CampaignRoster campaignId={campaignId} />
+          <TransferDm campaignId={campaignId} campaignName={current.name} />
         </>
       )}
 

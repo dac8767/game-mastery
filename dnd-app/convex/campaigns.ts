@@ -444,6 +444,63 @@ export const purgeCampaign = internalMutation({
   },
 });
 
+/**
+ * DM: hand the campaign to someone else.
+ *
+ * Authority in this app is structural — you are the DM of a campaign
+ * because `dmId` is you — so handing it over is a one-field change and
+ * every check in the app follows immediately. There is no role table to
+ * fall out of step with.
+ *
+ * The outgoing DM is kept as a MEMBER rather than dropped. Someone who
+ * built a campaign and handed it to a friend should not lose the ability
+ * to open it in the same click; leaving is a separate, deliberate act.
+ * The incoming DM keeps their membership row too — harmless, and it
+ * means transferring back does not have to reinstate one.
+ *
+ * Only a member can receive it. Handing a campaign to a stranger would
+ * be a way to lose one permanently, and the DM is by definition someone
+ * at the table.
+ */
+export const transferDm = mutation({
+  args: { campaignId: v.id("campaigns"), toUserId: v.id("users") },
+  handler: async (ctx, args) => {
+    await requireDm(ctx, args.campaignId);
+    const campaign = await ctx.db.get(args.campaignId);
+    if (!campaign) throw new Error("Campaign not found");
+    if (campaign.dmId === args.toUserId) return;
+
+    const membership = await ctx.db
+      .query("campaignMembers")
+      .withIndex("by_campaign_user", (q) =>
+        q.eq("campaignId", args.campaignId).eq("userId", args.toUserId)
+      )
+      .unique();
+    if (!membership) {
+      throw new Error(
+        "Only someone already in the campaign can be made DM — add them first"
+      );
+    }
+
+    const outgoing = campaign.dmId;
+    await ctx.db.patch(args.campaignId, { dmId: args.toUserId });
+
+    // Keep the outgoing DM in the game unless they choose otherwise.
+    const existing = await ctx.db
+      .query("campaignMembers")
+      .withIndex("by_campaign_user", (q) =>
+        q.eq("campaignId", args.campaignId).eq("userId", outgoing)
+      )
+      .unique();
+    if (!existing) {
+      await ctx.db.insert("campaignMembers", {
+        campaignId: args.campaignId,
+        userId: outgoing,
+      });
+    }
+  },
+});
+
 /** DM: add a player to the campaign by the email they signed up with. */
 export const addMemberByEmail = mutation({
   args: { campaignId: v.id("campaigns"), email: v.string() },

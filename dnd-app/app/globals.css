@@ -4545,3 +4545,11 @@ button.cal-day:hover {
 .name-field input {
   min-width: 14rem;
 }
+
+.transfer-dm {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.9rem;
+  margin: 0.75rem 0;
+  flex-wrap: wrap;
+}

@@ -473,6 +473,36 @@ export const integrity = {
       }
     }
 
+    // ---- handing over the DM role -----------------------------------
+    // The one mutation that changes WHO the DM is. Authority here is
+    // structural — every other check in the app reads campaign.dmId — so
+    // this single patch reassigns all of it at once, and the two things
+    // guarding it are worth holding in place.
+    // Read locally: campaignsSrc is declared further down, and reaching
+    // it from here is a temporal-dead-zone error rather than a value.
+    const transferSrc = read("convex", "campaigns.ts");
+    const transferFn = transferSrc.slice(
+      transferSrc.indexOf("export const transferDm")
+    );
+    if (!transferFn.startsWith("export const transferDm")) {
+      throw new Error("no transferDm in convex/campaigns.ts");
+    }
+    const transferBody = transferFn.slice(0, transferFn.indexOf("\n});"));
+
+    if (!/requireDm\(/.test(transferBody)) {
+      problems.push(
+        "campaigns.transferDm does not go through requireDm — anyone could " +
+          "make themselves the DM of any campaign they can see"
+      );
+    }
+    if (!/by_campaign_user/.test(transferBody)) {
+      problems.push(
+        "campaigns.transferDm does not check the recipient is a member — a " +
+          "campaign handed to someone outside it is lost, since only its DM " +
+          "can hand it back"
+      );
+    }
+
     // ---- date formats are a literal union in three places -----------
     // Same shape of problem as the rules edition: the schema validates
     // them, settings.ts re-declares them for the mutation, and
