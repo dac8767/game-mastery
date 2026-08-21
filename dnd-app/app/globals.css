@@ -5268,15 +5268,29 @@ button.cal-day:hover {
   );
 }
 
-/* Your own marks are an outline rather than a fill: the fill already
-   means "how many people", and one cell cannot say two things in the
-   same channel. */
+/* Your own marks are FILLED. An outline was the wrong call: the cells
+   are 1.35rem tall, so a 2px border round one is most of what you see
+   of it, and when nobody else has answered the density tint underneath
+   is nearly nothing — a grid you had just painted looked empty.
+
+   The fill wins over the density tint on your own cells because you
+   already know you are free then; what the tint is for is reading
+   everyone ELSE at a glance. */
 .sched-cell.mine {
-  box-shadow: inset 0 0 0 2px var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--bg-raised);
 }
 
+/* Everyone who has answered is free here — the answer the tool exists
+   to surface, so it gets its own colour rather than a darker shade of
+   the same one. */
 .sched-cell.all {
   background: var(--healthy);
+}
+
+.sched-cell.mine.all {
+  background: var(--healthy);
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 
 .sched-summary {
@@ -5518,4 +5532,58 @@ button.cal-day:hover {
   grid-column: 1 / -1;
   margin: 1.5rem 0;
   text-align: center;
+}
+
+/* ---------- The sidebar designer: Shown | Hidden ---------- */
+
+.sbd-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+  margin: 0.75rem 0;
+}
+
+@media (max-width: 900px) {
+  .sbd-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.sbd-col {
+  min-width: 0;
+  padding: 0.6rem 0.75rem 0.75rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.sbd-col-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.sbd-col-head h3 {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* The Hidden column has no sections, so its rows sit directly in it. */
+.sbd-hidden li {
+  background: var(--bg);
+}
+
+/* Inside the Shown column the section cards need no second background. */
+.sbd-col .tpl-tabs {
+  margin: 0;
+}
+
+.sbd-col .tpl-tab {
+  background: var(--bg);
 }

@@ -391,3 +391,81 @@ export function applyDrag(
   }
   return [...set];
 }
+
+// ---------------------------------------------------------------------
+// A real-world month, for picking days off
+// ---------------------------------------------------------------------
+
+export const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/** "Sun" … "Sat", the day-of-week headings. */
+export const WEEKDAY_NAMES = WEEKDAYS;
+
+/** The parts of an ISO date, as numbers. */
+export function isoParts(iso: string): { year: number; month: number; day: number } {
+  const [year, month, day] = iso.split("-").map(Number);
+  return { year, month: month - 1, day };
+}
+
+export function toIso(year: number, month: number, day: number): string {
+  const at = new Date(Date.UTC(year, month, day));
+  const pad = (v: number) => String(v).padStart(2, "0");
+  return `${at.getUTCFullYear()}-${pad(at.getUTCMonth() + 1)}-${pad(
+    at.getUTCDate()
+  )}`;
+}
+
+/** Step whole months, rolling the year in either direction. */
+export function addIsoMonths(iso: string, n: number): string {
+  const { year, month } = isoParts(iso);
+  // Anchored on the 1st: stepping from the 31st would otherwise skip a
+  // month whenever the next one is shorter, which is exactly the bug a
+  // month-picker cannot afford.
+  return toIso(year, month + Math.round(n), 1);
+}
+
+/**
+ * A real month as rows of weeks, Sunday first.
+ *
+ * Nulls pad the lead so the 1st sits under its own weekday. Same shape
+ * as the campaign calendar's grid, and for the same reason — but this
+ * one has to know that February is short and that some are leap years,
+ * which is the whole difference between a real calendar and an
+ * invented one.
+ */
+export function realMonthGrid(
+  year: number,
+  month: number
+): (string | null)[][] {
+  const first = new Date(Date.UTC(year, month, 1));
+  const lead = first.getUTCDay();
+  // Day 0 of the NEXT month is the last day of this one — the standard
+  // way to get a month's length without a table of lengths and a leap
+  // year rule.
+  const length = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+
+  const cells: (string | null)[] = Array(lead).fill(null);
+  for (let d = 1; d <= length; d++) cells.push(toIso(year, month, d));
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const weeks: (string | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  return weeks;
+}
+
+/** "September 2026", the month picker's heading. */
+export function monthTitle(iso: string): string {
+  const { year, month } = isoParts(iso);
+  return `${MONTH_NAMES[month]} ${year}`;
+}
+
+/** A day added if absent, removed if present. Sorted, and bounded. */
+export function toggleDay(days: string[], iso: string): string[] {
+  if (!isIsoDate(iso)) return days;
+  if (days.includes(iso)) return days.filter((d) => d !== iso);
+  if (days.length >= SCHEDULE_LIMITS.days) return days;
+  return [...days, iso].sort();
+}

@@ -81,8 +81,11 @@ export function FeedbackForm({ onClose }: { onClose: () => void }) {
   if (state === "sent") {
     return (
       <FeedbackShell onClose={onClose} title="Thanks">
+        {/* Says what happened and nothing about where it goes. The old
+            wording named Derek and the queue it lands in, which reads
+            oddly to a player who has never heard of either. */}
         <p className="settings-note">
-          Sent. It lands in Derek&apos;s queue tagged <strong>Game Mastery</strong>.
+          Your feedback has been sent. Thank you!
         </p>
         <button type="button" className="npc-btn primary" onClick={onClose}>
           Close

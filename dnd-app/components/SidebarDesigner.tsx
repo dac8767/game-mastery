@@ -14,12 +14,16 @@ import {
   SidebarLayout,
   addSection,
   defaultSidebar,
+  hiddenItems,
+  hideAll,
   moveItem,
   reconcileSidebar,
   removeSection,
   renameSection,
   shiftItem,
   shiftSection,
+  showAll,
+  shownItems,
   toggleHidden,
 } from "@/components/sidebarLayout";
 
@@ -59,6 +63,8 @@ export function SidebarDesigner() {
       ALL_NAV_ITEMS.map((i) => i.id)
     );
   const dirty = draft !== null;
+  const hidden = hiddenItems(layout);
+  const shown = shownItems;
 
   const edit = (next: SidebarLayout) => {
     setDraft(next);
@@ -85,11 +91,25 @@ export function SidebarDesigner() {
       <p className="settings-note">
         Your own sidebar: hide what you do not use, group things your way,
         and put them in whatever order suits you. Nobody else sees any of
-        it. Screens that are not built yet show greyed and cannot be
-        opened; hiding one is a way to stop looking at it.
+        it. Anything you hide moves to the right and can be put back from
+        there — nothing is ever removed, because a screen with no way to
+        reach it is worse than one you have to scroll past.
       </p>
 
       {error && <p className="form-error">{error}</p>}
+
+      <div className="sbd-columns">
+      <div className="sbd-col">
+        <header className="sbd-col-head">
+          <h3>Shown</h3>
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => edit(hideAll(layout))}
+          >
+            Hide all
+          </button>
+        </header>
 
       <div className="tpl-tabs">
         {layout.sections.map((section, si) => (
@@ -134,13 +154,13 @@ export function SidebarDesigner() {
               </button>
             </header>
 
-            {section.items.length === 0 ? (
+            {shown(section).length === 0 ? (
               <p className="settings-note">
                 Empty. Move something here from another section.
               </p>
             ) : (
               <ul className="tpl-fields">
-                {section.items.map((item, ii) => {
+                {shown(section).map((item, ii) => {
                   const nav = NAV_ITEM_BY_ID.get(item.id);
                   if (!nav) return null;
                   const pinned = ALWAYS_VISIBLE.includes(item.id);
@@ -155,20 +175,19 @@ export function SidebarDesigner() {
                         {nav.dmOnly && <span className="badge">DM</span>}
                       </span>
 
-                      <label className="detail-check">
-                        <input
-                          type="checkbox"
-                          checked={!item.hidden}
-                          disabled={pinned}
-                          title={
-                            pinned
-                              ? "Settings cannot be hidden — it is the way back to this page"
-                              : undefined
-                          }
-                          onChange={() => edit(toggleHidden(layout, item.id))}
-                        />
-                        <span>Show</span>
-                      </label>
+                      <button
+                        type="button"
+                        className="text-button"
+                        disabled={pinned}
+                        title={
+                          pinned
+                            ? "Settings cannot be hidden — it is the way back to this page"
+                            : "Move this to Hidden"
+                        }
+                        onClick={() => edit(toggleHidden(layout, item.id))}
+                      >
+                        Hide
+                      </button>
 
                       <select
                         aria-label={`Section for ${nav.label}`}
@@ -203,7 +222,7 @@ export function SidebarDesigner() {
                       <button
                         type="button"
                         className="text-button"
-                        disabled={ii === section.items.length - 1}
+                        disabled={ii === shown(section).length - 1}
                         title="Move down"
                         onClick={() => edit(shiftItem(layout, item.id, 1))}
                       >
@@ -241,6 +260,58 @@ export function SidebarDesigner() {
         >
           Add section
         </button>
+      </div>
+      </div>
+
+      {/* Everything switched off, flat. Which section a hidden thing is
+          filed under is not a question anyone has — it is off, and the
+          only thing you want to do with it is put it back. */}
+      <div className="sbd-col">
+        <header className="sbd-col-head">
+          <h3>Hidden</h3>
+          <button
+            type="button"
+            className="text-button"
+            disabled={hidden.length === 0}
+            onClick={() => edit(showAll(layout))}
+          >
+            Show all
+          </button>
+        </header>
+
+        {hidden.length === 0 ? (
+          <p className="settings-note">
+            Nothing hidden. Everything in the app is in your sidebar.
+          </p>
+        ) : (
+          <ul className="tpl-fields sbd-hidden">
+            {hidden.map((item) => {
+              const nav = NAV_ITEM_BY_ID.get(item.id);
+              if (!nav) return null;
+              return (
+                <li key={item.id}>
+                  <span className="tpl-field-name">
+                    <span className="nav-icon">{nav.icon}</span>
+                    {nav.label}
+                    {nav.slug === undefined && (
+                      <span className="soon">soon</span>
+                    )}
+                    {nav.dmOnly && <span className="badge">DM</span>}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-button"
+                    title="Put this back in the sidebar"
+                    onClick={() => edit(toggleHidden(layout, item.id))}
+                  >
+                    Show
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
       </div>
 
       <div className="cal-actions">

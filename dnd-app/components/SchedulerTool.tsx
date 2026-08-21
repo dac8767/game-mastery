@@ -7,18 +7,25 @@ import { Id } from "@/convex/_generated/dataModel";
 import {
   ScheduleWindow,
   addIsoDays,
+  addIsoMonths,
   applyDrag,
   blocks,
   dayLabel,
   dragRect,
   formatTime,
   isHourStart,
-  isIsoDate,
   missing,
+  monthTitle,
   reconcileWindow,
+  realMonthGrid,
   slotKey,
   slotsOf,
   tally,
+  toggleDay,
+  isoParts,
+  toIso,
+  WEEKDAY_NAMES,
+  SCHEDULE_LIMITS,
 } from "@/components/scheduleModel";
 
 /**
@@ -378,13 +385,7 @@ function WindowForm({
   const [startMinute, setStart] = useState(w.startMinute);
   const [endMinute, setEnd] = useState(w.endMinute);
   const [slotMinutes, setSlot] = useState(w.slotMinutes);
-  const [adding, setAdding] = useState("");
   const [error, setError] = useState<string | null>(null);
-
-  const addDay = (iso: string) => {
-    if (!isIsoDate(iso) || days.includes(iso)) return;
-    setDays([...days, iso].sort());
-  };
 
   return (
     <div className="settings-block">
@@ -395,6 +396,12 @@ function WindowForm({
       </p>
 
       {error && <p className="form-error">{error}</p>}
+
+      {/* A month you click days off, rather than a date field you
+          type into one at a time. Picking four Saturdays was four
+          separate typed dates before, and nothing showed you they
+          were Saturdays until afterwards. */}
+      <DayPicker days={days} onToggle={(d) => setDays(toggleDay(days, d))} />
 
       <div className="sched-daylist">
         {days.map((d) => {
@@ -419,18 +426,6 @@ function WindowForm({
       </div>
 
       <div className="cal-date-row">
-        <label className="cal-field">
-          Add a day
-          <input
-            type="date"
-            className="detail-input"
-            value={adding}
-            onChange={(e) => {
-              setAdding(e.target.value);
-              addDay(e.target.value);
-            }}
-          />
-        </label>
         <label className="cal-field">
           From
           <input
@@ -511,3 +506,104 @@ function fromTimeInput(value: string): number {
 
 /** Exported for the nav page; keeps addIsoDays reachable for tests. */
 export { addIsoDays };
+
+/**
+ * A month you click days off.
+ *
+ * A bare date field meant typing four separate dates to offer four
+ * Saturdays, and nothing told you they were Saturdays until you had
+ * finished. A month shows the shape of what you are offering while you
+ * are choosing it: the weekend column, the gap, the week after.
+ *
+ * The viewed month is local state and starts on the first day already
+ * offered, so reopening the form lands where the answer is rather than
+ * on today.
+ */
+function DayPicker({
+  days,
+  onToggle,
+}: {
+  days: string[];
+  onToggle: (iso: string) => void;
+}) {
+  const [cursor, setCursor] = useState(() => {
+    if (days.length > 0) return days[0];
+    const now = new Date();
+    return toIso(now.getFullYear(), now.getMonth(), 1);
+  });
+
+  const { year, month } = isoParts(cursor);
+  const weeks = realMonthGrid(year, month);
+  const chosen = new Set(days);
+  const full = days.length >= SCHEDULE_LIMITS.days;
+
+  return (
+    <div className="daypick">
+      <div className="daypick-bar">
+        <button
+          type="button"
+          className="npc-btn cal-step"
+          aria-label="Previous month"
+          onClick={() => setCursor(addIsoMonths(cursor, -1))}
+        >
+          ‹
+        </button>
+        <div className="daypick-title">{monthTitle(cursor)}</div>
+        <button
+          type="button"
+          className="npc-btn cal-step"
+          aria-label="Next month"
+          onClick={() => setCursor(addIsoMonths(cursor, 1))}
+        >
+          ›
+        </button>
+      </div>
+
+      <table className="daypick-grid">
+        <thead>
+          <tr>
+            {WEEKDAY_NAMES.map((d) => (
+              <th key={d}>{d}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {weeks.map((week, wi) => (
+            <tr key={wi}>
+              {week.map((iso, di) =>
+                iso === null ? (
+                  <td key={di} className="daypick-blank" />
+                ) : (
+                  <td key={di}>
+                    <button
+                      type="button"
+                      className={`daypick-day${
+                        chosen.has(iso) ? " on" : ""
+                      }`}
+                      // A full list must not silently ignore a click;
+                      // the button says why it cannot take another.
+                      disabled={full && !chosen.has(iso)}
+                      title={
+                        full && !chosen.has(iso)
+                          ? `${SCHEDULE_LIMITS.days} days is the limit`
+                          : iso
+                      }
+                      onClick={() => onToggle(iso)}
+                    >
+                      {isoParts(iso).day}
+                    </button>
+                  </td>
+                )
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <p className="settings-note">
+        {days.length} day{days.length === 1 ? "" : "s"} offered
+        {full ? ` — ${SCHEDULE_LIMITS.days} is the limit` : ""}
+      </p>
+    </div>
+  );
+}

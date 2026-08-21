@@ -195,22 +195,76 @@ export function moveItem(
   };
 }
 
+/**
+ * Move an item one place among its VISIBLE siblings.
+ *
+ * Hidden items stay in the section they belong to, so that showing one
+ * again puts it back where it was rather than at the end. But they are
+ * not on screen, so stepping over one would look like the arrow did
+ * nothing — press it twice and the item finally jumps two places. The
+ * hop is measured in what you can see.
+ */
 export function shiftItem(
   layout: SidebarLayout,
   id: string,
   delta: number
 ): SidebarLayout {
+  const step = Math.sign(Math.round(delta));
+  if (step === 0) return layout;
+
   return {
     sections: layout.sections.map((s) => {
       const at = s.items.findIndex((i) => i.id === id);
-      if (at === -1) return s;
-      const to = at + Math.round(delta);
+      if (at === -1 || s.items[at].hidden) return s;
+
+      let to = at + step;
+      while (to >= 0 && to < s.items.length && s.items[to].hidden) to += step;
       if (to < 0 || to >= s.items.length) return s;
+
       const items = s.items.slice();
       const [item] = items.splice(at, 1);
       items.splice(to, 0, item);
       return { ...s, items };
     }),
+  };
+}
+
+/** A section's items that are actually on screen, in order. */
+export function shownItems(section: SidebarSection): SidebarItem[] {
+  return section.items.filter((i) => !i.hidden);
+}
+
+/**
+ * Everything hidden, across every section — the Hidden column.
+ *
+ * Flat, because "which section is this hidden thing filed under" is not
+ * a question anyone has: it is off, and the only thing you want to do
+ * with it is put it back.
+ */
+export function hiddenItems(layout: SidebarLayout): SidebarItem[] {
+  return layout.sections.flatMap((s) => s.items.filter((i) => i.hidden));
+}
+
+/** Hide everything that can be hidden. */
+export function hideAll(layout: SidebarLayout): SidebarLayout {
+  return {
+    sections: layout.sections.map((s) => ({
+      ...s,
+      items: s.items.map((i) => ({
+        ...i,
+        hidden: !ALWAYS_VISIBLE.includes(i.id),
+      })),
+    })),
+  };
+}
+
+/** Show everything again. */
+export function showAll(layout: SidebarLayout): SidebarLayout {
+  return {
+    sections: layout.sections.map((s) => ({
+      ...s,
+      items: s.items.map((i) => ({ ...i, hidden: false })),
+    })),
   };
 }
 

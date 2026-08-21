@@ -1218,6 +1218,81 @@ export const unit = {
       eq(sb.shiftItem(sbBase, "table", -1), sbBase)
     );
 
+    // ---- Shown and Hidden as two columns ---------------------------
+    // Hidden items keep their place in the section so that showing one
+    // puts it back where it was. But they are off screen, so stepping
+    // over one would look like the arrow did nothing.
+    const withHidden = {
+      sections: [
+        {
+          id: "tools",
+          title: "Tools",
+          items: [
+            { id: "chat", hidden: false },
+            { id: "dice", hidden: true },
+            { id: "npcs", hidden: false },
+          ],
+        },
+      ],
+    };
+    check(
+      "shownItems skips what is hidden",
+      sb.shownItems(withHidden.sections[0]).map((i) => i.id).join() ===
+        "chat,npcs"
+    );
+    check(
+      "shiftItem hops over a hidden neighbour in one press",
+      sb
+        .shiftItem(withHidden, "chat", 1)
+        .sections[0].items.map((i) => i.id)
+        .join() === "dice,npcs,chat"
+    );
+    check(
+      "and the item it swapped with really moved",
+      sb
+        .shiftItem(withHidden, "npcs", -1)
+        .sections[0].items.map((i) => i.id)
+        .join() === "npcs,chat,dice"
+    );
+    check(
+      "shiftItem at the last VISIBLE position does nothing",
+      eq(sb.shiftItem(withHidden, "npcs", 1), withHidden)
+    );
+    check(
+      "a hidden item is not shifted at all",
+      eq(sb.shiftItem(withHidden, "dice", 1), withHidden)
+    );
+
+    check(
+      "hiddenItems collects across every section, flat",
+      sb.hiddenItems(withHidden).map((i) => i.id).join() === "dice"
+    );
+    check(
+      "hiddenItems is empty when nothing is hidden",
+      sb.hiddenItems(sbBase).length === 0
+    );
+
+    check(
+      "hideAll hides everything it may",
+      sb
+        .hiddenItems(sb.hideAll(sbBase))
+        .map((i) => i.id)
+        .sort()
+        .join() === "chat,dice,npcs,table"
+    );
+    check(
+      "hideAll still cannot hide Settings",
+      !sb.hiddenItems(sb.hideAll(sbBase)).some((i) => i.id === "settings")
+    );
+    check(
+      "showAll brings everything back",
+      sb.hiddenItems(sb.showAll(sb.hideAll(sbBase))).length === 0
+    );
+    check(
+      "hideAll keeps every item, just switched off",
+      sb.sidebarIds(sb.hideAll(sbBase)).join() === IDS.join()
+    );
+
     check(
       "removeSection keeps its items",
       sb.sidebarIds(sb.removeSection(sbBase, "tools")).sort().join() ===
@@ -1305,6 +1380,85 @@ export const unit = {
         sch.addIsoDays("2026-12-31", 1) === "2027-01-01" &&
         sch.addIsoDays("2028-02-28", 1) === "2028-02-29" &&
         sch.addIsoDays("2026-01-01", -1) === "2025-12-31"
+    );
+
+    // ---- the day picker's real month -------------------------------
+    // A real calendar, unlike the campaign's, has to know that
+    // February is short and that some years it is not.
+    check(
+      "a 30-day month has 30 days",
+      sch.realMonthGrid(2026, 8).flat().filter(Boolean).length === 30
+    );
+    check(
+      "February is 28 in a common year and 29 in a leap year",
+      sch.realMonthGrid(2026, 1).flat().filter(Boolean).length === 28 &&
+        sch.realMonthGrid(2028, 1).flat().filter(Boolean).length === 29
+    );
+    check(
+      "every row is a full week",
+      sch.realMonthGrid(2026, 8).every((w) => w.length === 7)
+    );
+    check(
+      "the 1st sits under its own weekday",
+      sch.realMonthGrid(2026, 8).flat().indexOf("2026-09-01") === 2
+    );
+    check(
+      "the days are in order with no gaps",
+      (() => {
+        const days = sch.realMonthGrid(2026, 8).flat().filter(Boolean);
+        return days.every(
+          (d, i) => i === 0 || d === sch.addIsoDays(days[i - 1], 1)
+        );
+      })()
+    );
+
+    // Anchored on the 1st, so stepping from the 31st cannot skip a
+    // month whenever the next one is shorter.
+    check(
+      "addIsoMonths does not skip a short month",
+      sch.addIsoMonths("2026-01-31", 1) === "2026-02-01" &&
+        sch.addIsoMonths("2026-03-31", -1) === "2026-02-01"
+    );
+    check(
+      "addIsoMonths rolls the year",
+      sch.addIsoMonths("2026-12-05", 1) === "2027-01-01" &&
+        sch.addIsoMonths("2026-01-05", -1) === "2025-12-01"
+    );
+    check(
+      "monthTitle names the month and year",
+      sch.monthTitle("2026-09-05") === "September 2026"
+    );
+
+    check(
+      "toggleDay adds, removes, and keeps the list sorted",
+      sch.toggleDay(["2026-09-05"], "2026-09-01").join() ===
+        "2026-09-01,2026-09-05" &&
+        sch.toggleDay(["2026-09-01", "2026-09-05"], "2026-09-01").join() ===
+          "2026-09-05"
+    );
+    check(
+      "toggleDay refuses a day that is not a date",
+      sch.toggleDay(["2026-09-05"], "someday").join() === "2026-09-05"
+    );
+    check(
+      "toggleDay stops at the limit rather than growing forever",
+      (() => {
+        let days = [];
+        for (let i = 0; i < 60; i++) {
+          days = sch.toggleDay(days, sch.addIsoDays("2026-01-01", i));
+        }
+        return days.length === sch.SCHEDULE_LIMITS.days;
+      })()
+    );
+    check(
+      "but a day already chosen can still be removed at the limit",
+      (() => {
+        let days = [];
+        for (let i = 0; i < 60; i++) {
+          days = sch.toggleDay(days, sch.addIsoDays("2026-01-01", i));
+        }
+        return sch.toggleDay(days, days[0]).length === days.length - 1;
+      })()
     );
 
     // ---- the window -------------------------------------------------
