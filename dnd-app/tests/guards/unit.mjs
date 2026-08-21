@@ -1593,7 +1593,13 @@ export const unit = {
           weight: { value: 0, units: "lb" },
           type: { value: "martialM" },
           source: { rules: "2024" },
-          description: { value: "<p>An axe.</p>" },
+          // An item carries the same enricher a monster's weapon does,
+          // with nobody to compute it against. Without this line the
+          // "no invented attack line" check below passes vacuously —
+          // it did, until a mutation test found nothing to break.
+          description: {
+            value: "<p>[[/attack extended]]. An axe.</p>",
+          },
         },
       },
       {
