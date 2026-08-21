@@ -895,6 +895,99 @@ export const unit = {
         cc.untilSession(undefined).overdue === false
     );
 
+    // ---- the NPC record's arrangement ------------------------------
+    // arrange decides what an opened NPC looks like. The property that
+    // matters is that it never LOSES a field: a column added to
+    // npcColumns and not filed into a section must still be editable,
+    // or it silently stops existing for every NPC in the campaign.
+    const secOut = compile("components/npcSections.ts");
+    const sec = await import(
+      pathToFileURL(join(secOut, "npcSections.js")).href
+    );
+
+    const allSectionKeys = sec.NPC_SECTIONS.flatMap((s) => s.keys);
+
+    check(
+      "every section has an id, a title, and at least one field",
+      sec.NPC_SECTIONS.every(
+        (s) => s.id && s.title && Array.isArray(s.keys) && s.keys.length > 0
+      )
+    );
+    check(
+      "section ids are unique",
+      new Set(sec.NPC_SECTIONS.map((s) => s.id)).size ===
+        sec.NPC_SECTIONS.length
+    );
+    check(
+      "no field is filed in two sections",
+      new Set(allSectionKeys).size === allSectionKeys.length
+    );
+    check(
+      "the header's fields are not repeated in a section",
+      sec.HEADER_KEYS.every((k) => !allSectionKeys.includes(k))
+    );
+
+    const arranged = sec.arrange(allSectionKeys);
+    check(
+      "arrange keeps every field it is given",
+      arranged.flatMap((s) => s.keys).sort().join() ===
+        allSectionKeys.slice().sort().join()
+    );
+    check(
+      "arrange holds the written order, not the caller's",
+      arranged.map((s) => s.id).join() ===
+        sec.NPC_SECTIONS.map((s) => s.id).join()
+    );
+    check(
+      "arrange is unmoved by the order it is asked in",
+      sec
+        .arrange(allSectionKeys.slice().reverse())
+        .flatMap((s) => s.keys)
+        .join() === arranged.flatMap((s) => s.keys).join()
+    );
+
+    // The one that earns the function: an unfiled field still shows up.
+    const withStranger = sec.arrange([...allSectionKeys, "zzzNewField"]);
+    check(
+      "an unplaced field lands in More rather than disappearing",
+      withStranger[withStranger.length - 1].id === sec.MORE_SECTION.id &&
+        withStranger[withStranger.length - 1].keys.includes("zzzNewField")
+    );
+    check(
+      "More is not offered when everything is filed",
+      !arranged.some((s) => s.id === sec.MORE_SECTION.id)
+    );
+
+    // A player is handed fewer keys, and must not be shown the outline
+    // of what was withheld.
+    const dmSection = sec.NPC_SECTIONS.find((s) => s.id === "dm");
+    const playerKeys = allSectionKeys.filter(
+      (k) => !dmSection.keys.includes(k)
+    );
+    const forPlayer = sec.arrange(playerKeys);
+    check(
+      "a player gets no DM-only section at all",
+      !forPlayer.some((s) => s.id === "dm")
+    );
+    check(
+      "a player's DM-only fields are not smuggled into More",
+      !forPlayer.flatMap((s) => s.keys).some((k) => dmSection.keys.includes(k))
+    );
+    check(
+      "a player keeps everything else",
+      forPlayer.flatMap((s) => s.keys).sort().join() ===
+        playerKeys.slice().sort().join()
+    );
+
+    check("arrange on nothing is nothing", sec.arrange([]).length === 0);
+    check(
+      "arrange ignores a key it was not given",
+      sec
+        .arrange(["job"])
+        .flatMap((s) => s.keys)
+        .join() === "job"
+    );
+
     // ---- the locations tree ----------------------------------------
     // Everything here is about not losing a place: a player's list has
     // the hidden locations filtered out of it, so their children

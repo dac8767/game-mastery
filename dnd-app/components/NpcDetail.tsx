@@ -4,10 +4,25 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
-import { COLUMNS, ColumnDef, portraitSrc } from "@/components/npcColumns";
+import { COLUMNS, COLUMN_BY_KEY, ColumnDef, portraitSrc } from "@/components/npcColumns";
+import {
+  HEADER_KEYS,
+  SUMMARY_KEYS,
+  arrange,
+} from "@/components/npcSections";
 
 /**
  * The expanded record: every field, editable in place.
+ *
+ * It fills the list area rather than sliding over it as a drawer. A
+ * drawer is right for a glance and wrong for this: thirty-odd fields in
+ * a 30rem column is a very long scroll, and the table it covered was
+ * still there underneath, greyed out and useless. Taking the whole
+ * space lets the fields sit in columns and lets the sections read as
+ * sections.
+ *
+ * The toolbar above stays put, so it is clear you are still inside the
+ * NPC list and one Escape from being back in it.
  *
  * Who may write what is decided on the server (updateNpc is DM-gated;
  * setPlayerNotes is the only field a player can reach). This component
@@ -55,6 +70,9 @@ export function fromInput(col: ColumnDef, text: string): unknown {
   }
 }
 
+/** Prose gets a row to itself; a name or a number does not need one. */
+const isWide = (col: ColumnDef) => col.kind === "longtext";
+
 export function NpcDetail({
   npc,
   isDm,
@@ -68,6 +86,21 @@ export function NpcDetail({
   const setPlayerNotes = useMutation(api.npcs.setPlayerNotes);
   const mapServer = process.env.NEXT_PUBLIC_MAP_SERVER ?? "";
   const [error, setError] = useState<string | null>(null);
+
+  // Escape closes it. Ignored while a field has focus, where Escape
+  // already means "put that value back" — losing an edit and the whole
+  // record to one keystroke is not what anybody meant by it.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const el = document.activeElement;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   const canEdit = (col: ColumnDef) =>
     isDm ? Boolean(col.editable) : Boolean(col.playerEditable);
@@ -91,59 +124,87 @@ export function NpcDetail({
     }
   }
 
-  const fields = COLUMNS.filter((c) => isDm || !c.dmOnly);
+  // What the server is willing to show this caller, arranged. The
+  // header shows its own fields, so they are held back from the
+  // sections rather than repeated in one.
+  const allowed = COLUMNS.filter((c) => isDm || !c.dmOnly).map((c) => c.key);
+  const sections = arrange(allowed.filter((k) => !HEADER_KEYS.includes(k)));
+
+  const summary = SUMMARY_KEYS.map((key) => {
+    const col = COLUMN_BY_KEY.get(key);
+    const text = col ? toInput(npc, col) : "";
+    return text ? { key, text } : null;
+  }).filter((x): x is { key: string; text: string } => x !== null);
 
   return (
-    <>
-      <div className="drawer-scrim" onClick={onClose} />
-      <aside className="npc-drawer">
-        <header className="drawer-header">
-          <div>
-            <h2>{npc.name}</h2>
-            {npc.nickname && <p className="muted">“{npc.nickname}”</p>}
-          </div>
-          <button type="button" className="text-button" onClick={onClose}>
-            Close
-          </button>
-        </header>
+    <section className="npc-record" aria-label={`${npc.name} — full record`}>
+      <header className="record-head">
+        <PortraitField npc={npc} editable={isDm} />
 
-        {portraitSrc(npc.portraitUrl, npc.portraitPath, mapServer) && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            className="drawer-portrait"
-            src={portraitSrc(npc.portraitUrl, npc.portraitPath, mapServer)!}
-            alt={npc.name}
-          />
-        )}
+        <div className="record-titles">
+          <h2>{npc.name}</h2>
+          {npc.nickname && <p className="record-nickname">“{npc.nickname}”</p>}
+          {summary.length > 0 && (
+            <p className="record-summary">
+              {summary.map((s) => (
+                <span className="record-chip" key={s.key}>
+                  {s.text}
+                </span>
+              ))}
+            </p>
+          )}
+          {!isDm && (
+            <p className="settings-note">
+              You can edit Player Notes. Everything else is the DM&apos;s.
+            </p>
+          )}
+        </div>
 
-        {error && <p className="form-error">{error}</p>}
+        <button type="button" className="npc-btn" onClick={onClose}>
+          Back to the list
+        </button>
+      </header>
 
-        {!isDm && (
-          <p className="drawer-hint muted">
-            You can edit Player Notes. Everything else is the DM&apos;s.
-          </p>
-        )}
+      {error && <p className="form-error">{error}</p>}
 
-        {fields.map((col) =>
-          col.kind === "picture" ? (
-            <PortraitField key={col.key} npc={npc} editable={isDm} />
-          ) : (
-            <DrawerField
-              key={col.key}
-              col={col}
-              value={toInput(npc, col)}
-              editable={canEdit(col)}
-              dmOnly={Boolean(col.dmOnly)}
-              onCommit={(text) => commit(col, text)}
-            />
-          ),
-        )}
-      </aside>
-    </>
+      <div className="record-body">
+        {sections.map((section) => {
+          const cols = section.keys
+            .map((k) => COLUMN_BY_KEY.get(k))
+            .filter((c): c is ColumnDef => Boolean(c))
+            // A read-only field with nothing in it is a label and a
+            // blank — noise on a record a player cannot change.
+            .filter((c) => canEdit(c) || toInput(npc, c));
+
+          if (cols.length === 0) return null;
+
+          return (
+            <section className="record-section" key={section.id}>
+              <h3>{section.title}</h3>
+              {section.blurb && (
+                <p className="settings-note">{section.blurb}</p>
+              )}
+              <div className="record-fields">
+                {cols.map((col) => (
+                  <RecordField
+                    key={col.key}
+                    col={col}
+                    value={toInput(npc, col)}
+                    editable={canEdit(col)}
+                    dmOnly={Boolean(col.dmOnly)}
+                    onCommit={(text) => commit(col, text)}
+                  />
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
-function DrawerField({
+function RecordField({
   col,
   value,
   editable,
@@ -161,10 +222,13 @@ function DrawerField({
   // Follow the live query when someone else edits the same record.
   useEffect(() => setDraft(value), [value]);
 
+  const className = `detail-field${dmOnly ? " dm-field" : ""}${
+    isWide(col) ? " wide" : ""
+  }`;
+
   if (!editable) {
-    if (!value) return null;
     return (
-      <div className={`detail-field${dmOnly ? " dm-field" : ""}`}>
+      <div className={className}>
         <div className="detail-label">{col.label}</div>
         <div className="detail-value">{value}</div>
       </div>
@@ -176,7 +240,7 @@ function DrawerField({
   };
 
   return (
-    <div className={`detail-field${dmOnly ? " dm-field" : ""}`}>
+    <div className={className}>
       <div className="detail-label">
         {col.label}
         {dmOnly && <span className="dm-tag">DM only</span>}
@@ -225,7 +289,7 @@ function DrawerField({
 const MAX_PORTRAIT_BYTES = 8 * 1024 * 1024;
 
 /**
- * The Picture field: a real image, uploaded.
+ * The portrait, at the top of the record.
  *
  * The file goes straight to Convex storage via a short-lived URL rather
  * than through a mutation, so a large portrait can't hit the argument
@@ -272,9 +336,7 @@ function PortraitField({ npc, editable }: { npc: Npc; editable: boolean }) {
   }
 
   return (
-    <div className="portrait-field">
-      <div className="detail-label">Picture</div>
-
+    <div className="record-portrait">
       {src ? (
         /* eslint-disable-next-line @next/next/no-img-element */
         <img className="portrait-preview" src={src} alt={npc.name} />
@@ -287,7 +349,7 @@ function PortraitField({ npc, editable }: { npc: Npc; editable: boolean }) {
           <div className="portrait-actions">
             <button
               type="button"
-              className="npc-btn"
+              className="text-button"
               disabled={busy}
               onClick={() => input.current?.click()}
             >

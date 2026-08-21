@@ -182,6 +182,104 @@ export const integrity = {
       }
     }
 
+    // ---- every NPC field has a place in the record -----------------
+    // The record arranges the fields into sections by string key, and
+    // the arrangement is editorial — nothing derives it from the column
+    // list, so nothing keeps the two in step but this.
+    //
+    // Both directions matter, and they fail differently. A section
+    // naming a key that is no longer a column is a heading with nothing
+    // under it. A column no section names still renders — `arrange`
+    // sweeps the leftovers into "More" precisely so a new field cannot
+    // vanish from every record in the campaign — but landing there is a
+    // reminder to file it, not a resting place.
+    const sectionsSrc = read("components", "npcSections.ts");
+    const sectionKeys = [];
+    const sectionsAt = sectionsSrc.indexOf("export const NPC_SECTIONS");
+    if (sectionsAt === -1) {
+      throw new Error("no NPC_SECTIONS in npcSections.ts");
+    }
+    for (const m of sectionsSrc
+      .slice(sectionsAt)
+      .matchAll(/keys:\s*\[([^\]]*)\]/g)) {
+      for (const k of m[1].matchAll(/"([^"]+)"/g)) sectionKeys.push(k[1]);
+    }
+    if (sectionKeys.length === 0) {
+      throw new Error("NPC_SECTIONS names no fields — parser out of date?");
+    }
+
+    const headerKeys = constArrayStrings(
+      sectionsSrc,
+      "HEADER_KEYS",
+      "npcSections"
+    );
+    const summaryKeys = constArrayStrings(
+      sectionsSrc,
+      "SUMMARY_KEYS",
+      "npcSections"
+    );
+
+    const placed = new Set([...sectionKeys, ...headerKeys]);
+    for (const key of columnKeys) {
+      if (!placed.has(key)) {
+        problems.push(
+          `npcSections gives \`${key}\` no section, so it falls into "More" ` +
+            "at the end of every record"
+        );
+      }
+    }
+    for (const key of [...sectionKeys, ...headerKeys, ...summaryKeys]) {
+      if (!columnKeySet.has(key)) {
+        problems.push(
+          `npcSections places \`${key}\`, which is not a column — the record ` +
+            "would render a heading with nothing under it"
+        );
+      }
+    }
+    // A field cannot be in two sections: whichever renders second wins,
+    // and editing the loser writes to a control the eye has already
+    // scrolled past.
+    const seenKey = new Set();
+    for (const key of sectionKeys) {
+      if (seenKey.has(key)) {
+        problems.push(`npcSections places \`${key}\` in more than one section`);
+      }
+      seenKey.add(key);
+    }
+    // DM-only fields must be behind a section a player never receives.
+    // The server withholds them regardless, so this is about the record
+    // not rendering an empty labelled box where a secret used to be.
+    const dmKeys = columnsBlock
+      .split(/\},\s*\n/)
+      .filter((e) => /dmOnly:\s*true/.test(e))
+      .map((e) => e.match(/key:\s*"([^"]+)"/)?.[1])
+      .filter(Boolean);
+    if (dmKeys.length === 0) {
+      throw new Error("no dmOnly columns found — parser out of date?");
+    }
+    const dmSection = sectionsSrc.slice(sectionsSrc.indexOf('id: "dm"'));
+    const dmSectionKeys = [
+      ...(dmSection.match(/keys:\s*\[([^\]]*)\]/)?.[1] ?? "").matchAll(
+        /"([^"]+)"/g
+      ),
+    ].map((m) => m[1]);
+    for (const key of dmKeys) {
+      if (!dmSectionKeys.includes(key)) {
+        problems.push(
+          `\`${key}\` is dmOnly but is not in the record's "DM only" section — ` +
+            "a player would see its heading with a permanently empty field"
+        );
+      }
+    }
+    for (const key of dmSectionKeys) {
+      if (!dmKeys.includes(key)) {
+        problems.push(
+          `the record's "DM only" section holds \`${key}\`, which is not ` +
+            "dmOnly — it is labelled as a secret and is not one"
+        );
+      }
+    }
+
     // ---- nav slugs must have pages behind them ---------------------
     // The sidebar renders these and the ribbon's `t:` tokens address the
     // same list by id, so a renamed folder is a dead link in two places

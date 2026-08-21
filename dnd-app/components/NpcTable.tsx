@@ -738,7 +738,17 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
         />
       )}
 
-      {prefs.viewMode === "tiles" ? (
+      {/* An open record takes the list's place in the layout rather than
+          covering it: same flex slot, so it gets the whole area the
+          table had. The toolbar above stays, which is what makes it
+          read as "inside the list" rather than as a separate page. */}
+      {selectedNpc ? (
+        <NpcDetail
+          npc={selectedNpc}
+          isDm={isDm}
+          onClose={() => setSelected(null)}
+        />
+      ) : prefs.viewMode === "tiles" ? (
         <TileGrid
           groups={groups}
           rows={sorted}
@@ -861,13 +871,6 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
         </div>
       )}
 
-      {selectedNpc && (
-        <NpcDetail
-          npc={selectedNpc}
-          isDm={isDm}
-          onClose={() => setSelected(null)}
-        />
-      )}
     </div>
   );
 }

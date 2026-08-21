@@ -1024,7 +1024,7 @@ body.col-resizing {
   margin-left: 0.5rem;
 }
 
-/* Detail drawer */
+/* Modals and the NPC record */
 
 .drawer-scrim {
   position: fixed;
@@ -1033,17 +1033,105 @@ body.col-resizing {
   z-index: 10;
 }
 
-.npc-drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(30rem, 100vw);
-  z-index: 11;
-  overflow-y: auto;
-  padding: 1.25rem;
+/* The open NPC, in the list's own slot: same flex child the table is,
+   so it inherits the whole area rather than floating over it. */
+.npc-record {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 1.1rem 1.25rem 1.5rem;
   background: var(--bg-raised);
-  border-left: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+/* Portrait left, who-they-are middle, the way out right. */
+.record-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.record-portrait {
+  display: grid;
+  gap: 0.4rem;
+  width: 12rem;
+  flex: none;
+}
+
+.record-titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.record-titles h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 1.2;
+}
+
+.record-nickname {
+  margin: 0.2rem 0 0;
+  font-size: 1rem;
+  color: var(--text-dim);
+}
+
+.record-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.6rem 0 0;
+}
+
+.record-chip {
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.record-body {
+  display: grid;
+  gap: 1.4rem;
+  margin-top: 1.1rem;
+}
+
+.record-section h3 {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.record-section .settings-note {
+  margin: 0.2rem 0 0;
+}
+
+/* Fields flow into as many columns as fit; prose takes a row of its
+   own, because a four-line textarea in a 14rem column is a slot. */
+.record-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.75rem 1rem;
+  margin-top: 0.6rem;
+}
+
+.record-fields .detail-field.wide {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 700px) {
+  .record-head {
+    flex-wrap: wrap;
+  }
+  .record-portrait {
+    width: 100%;
+  }
 }
 
 .drawer-header {
@@ -1064,23 +1152,10 @@ body.col-resizing {
   font-size: 0.9rem;
 }
 
-.drawer-portrait {
-  display: block;
-  width: 100%;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  margin-bottom: 0.9rem;
-}
 
-.drawer-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-  margin-bottom: 1rem;
-}
 
 .detail-field {
-  margin-bottom: 0.85rem;
+  min-width: 0;
 }
 
 .detail-label {
@@ -1489,10 +1564,6 @@ body.col-resizing {
 
 /* ---------- Drawer editing ---------- */
 
-.drawer-hint {
-  font-size: 0.85rem;
-  margin: 0 0 1rem;
-}
 
 .detail-input {
   width: 100%;
@@ -2488,12 +2559,6 @@ body.col-resizing {
 }
 
 /* ---------- Portrait field ---------- */
-
-.portrait-field {
-  display: grid;
-  gap: 0.5rem;
-  margin-bottom: 0.85rem;
-}
 
 .portrait-preview {
   width: 100%;
