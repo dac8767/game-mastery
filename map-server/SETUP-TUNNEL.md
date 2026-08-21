@@ -66,9 +66,47 @@ survives container rebuilds; the server only needs the token.
    - Include → Emails: your email, your wife's, and your 11 players'
 5. Session duration: set to something long like 1 month so players aren't
    re-authenticating every session night
+6. **Additional settings → Cookie settings → Same Site Attribute → `None`.**
+   Not optional — see below.
 
 Now nothing behind `maps.yourdomain.com` is reachable without passing that
 email check — the library is not crawlable or publicly enumerable.
+
+### Same Site Attribute: None, or no images load
+
+Access issues its session as a cookie on `maps.yourdomain.com`. Typing
+that address into the bar is a top-level navigation, so the browser sends
+the cookie and everything looks perfect. An `<img>` in the app is a
+CROSS-SITE SUBRESOURCE — the page is on `localhost:3000` or on Vercel, the
+image is on `maps.yourdomain.com` — and browsers withhold a `SameSite=Lax`
+cookie on those. Access sees an unauthenticated request and redirects it
+to the login page.
+
+The failure has no error anywhere and does not look like auth. In the
+Network tab it reads:
+
+    maps.yourdomain.com?kid=782f00…%2Ficons%2Fweapons%2F…   302  text/html
+    (everything else)                            (failed) net::ERR_BLOCKED_BY_ORB
+
+The `?kid=` URL with the path encoded into a query parameter is Access's
+login redirect. `ERR_BLOCKED_BY_ORB` is Chrome refusing to hand an `<img>`
+a response that came back as HTML. On screen it is a picture that flashes
+for an instant and vanishes — which is the app's own onError hiding a
+broken image, not a rendering bug.
+
+Setting Same Site Attribute to `None` lets the cookie ride on those
+requests. **Then log out and back in** — the attribute is stamped on the
+cookie when it is issued, so an existing session keeps the old behaviour
+and the change appears to have done nothing:
+
+    https://maps.yourdomain.com/cdn-cgi/access/logout
+
+If a browser blocks third-party cookies outright and `None` is not enough,
+the better answer for the Foundry artwork specifically is to stop
+requiring a login for it: a second Access application scoped to the path
+`/web/foundry/` with a **Bypass** policy leaves the map library protected
+while letting generic system icons load for anyone. They are Foundry's
+shipped art, not your maps.
 
 ## 3. Deploy
 
