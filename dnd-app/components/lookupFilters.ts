@@ -26,6 +26,83 @@ export type LookupKind = "spells" | "items" | "monsters";
 
 export type Row = Record<string, unknown>;
 
+// ---------------------------------------------------------------------
+// Which edition a campaign plays
+// ---------------------------------------------------------------------
+
+/** "2014" is 5e; "2024" is 5.5e. Mirrors campaigns.rulesVersion. */
+export type RulesVersion = "2014" | "2024";
+
+/** What the setting is called where a person has to read it. */
+export const RULES_VERSIONS: { value: RulesVersion; label: string; note: string }[] =
+  [
+    {
+      value: "2014",
+      label: "5e (2014)",
+      note: "Player's Handbook, Monster Manual and Dungeon Master's Guide as first published, plus Tasha's, Xanathar's and the rest.",
+    },
+    {
+      value: "2024",
+      label: "5.5e (2024)",
+      note: "The 2024 revision of the three core books. Everything with no 2024 counterpart still shows.",
+    },
+  ];
+
+/**
+ * Which edition a row's book belongs to.
+ *
+ * The import writes `source` as the book's short name, and the 2024
+ * core books carry the year in theirs — "PHB 2024", "MM 2024", "DMG
+ * 2024", "SRD 2024" — while their predecessors are bare: "PHB", "MM",
+ * "DMG", "SRD 5.1". Everything else, from Tasha's to an adventure, is
+ * 2014-era by default, which is what it is.
+ *
+ * Anchored to the END of the string on purpose. A loose search for
+ * "2024" anywhere would catch an adventure with the year in its title
+ * and quietly reclassify it.
+ */
+export function editionOf(source: unknown): RulesVersion {
+  const s = typeof source === "string" ? source.trim() : "";
+  return /(?:^|\s)2024$/.test(s) ? "2024" : "2014";
+}
+
+/**
+ * Keep one edition's version of anything that exists in both.
+ *
+ * This is a DEDUPLICATION, not a filter by book. A name that appears
+ * once — Tasha's items, an adventure's monsters, a 2024 monster with no
+ * predecessor — has nothing to choose between, so it survives whichever
+ * edition it belongs to. Filtering by book instead would empty a 5.5e
+ * table of everything outside the three core books, which is not what
+ * "we play 2024" means.
+ *
+ * Matching is by name, case- and space-insensitively, because that is
+ * the only thing the two printings of a longsword reliably share.
+ *
+ * Input order is preserved: the caller sorts afterwards, and a stable
+ * order here keeps that sort's tiebreaks predictable.
+ */
+export function applyEdition<T extends Row>(
+  rows: T[],
+  edition: RulesVersion
+): T[] {
+  const byName = new Map<string, T[]>();
+  for (const row of rows) {
+    const key = String(row.name ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+    const group = byName.get(key);
+    if (group) group.push(row);
+    else byName.set(key, [row]);
+  }
+
+  const keep = new Set<T>();
+  for (const group of byName.values()) {
+    const wanted = group.filter((r) => editionOf(r.source) === edition);
+    for (const r of wanted.length > 0 ? wanted : group) keep.add(r);
+  }
+
+  return rows.filter((r) => keep.has(r));
+}
+
 /** What a control looks like. */
 export type FilterControl =
   | { type: "text" }

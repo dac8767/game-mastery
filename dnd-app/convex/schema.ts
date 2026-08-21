@@ -62,6 +62,23 @@ export default defineSchema({
     name: v.string(), // e.g. "Episode X — Valenar"
     dmId: v.id("users"),
     description: v.optional(v.string()),
+    /**
+     * Which edition this table plays: "2014" is 5e, "2024" is 5.5e.
+     *
+     * The Lookup library holds both — a DDB import carries PHB and PHB
+     * 2024, MM and MM 2024 — so most core entries appear twice under one
+     * name. This decides which of the pair a campaign sees. It does NOT
+     * filter by book: Tasha's, Xanathar's and every adventure have no
+     * counterpart in the other edition, so they show either way.
+     *
+     * Absent reads as "2014", so a campaign nobody has set behaves like
+     * the edition its content was written for. The Lookup screen names
+     * the active edition and counts what it folded away, so this is
+     * never a silently shorter list.
+     */
+    rulesVersion: v.optional(
+      v.union(v.literal("2014"), v.literal("2024"))
+    ),
   }).index("by_dm", ["dmId"]),
 
   campaignMembers: defineTable({

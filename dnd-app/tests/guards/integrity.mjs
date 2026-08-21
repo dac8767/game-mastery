@@ -472,6 +472,76 @@ export const integrity = {
       }
     }
 
+    // ---- the rules edition is a literal union in three places -------
+    // The schema validates it, the mutation re-declares it, and
+    // lookupFilters offers it as buttons. Add a third edition to one and
+    // the others accept a value they cannot store, or offer one nobody
+    // can pick — neither of which TypeScript sees, because the schema
+    // and the component never meet.
+    // A bounded window rather than a lazy match: `v.union(v.literal("a"),
+    // v.literal("b"))` has a `)` after the first literal, and anything
+    // non-greedy stops there and reports one edition where there are two.
+    const editionLiterals = (src, label) => {
+      const at = src.indexOf("rulesVersion");
+      if (at === -1) throw new Error(`no rulesVersion in ${label}`);
+      const window = src.slice(at, at + 200);
+      if (!/v\.union\(/.test(window)) {
+        throw new Error(`rulesVersion in ${label} is not a union of literals`);
+      }
+      const found = [...window.matchAll(/v\.literal\("([^"]+)"\)/g)].map(
+        (x) => x[1]
+      );
+      if (found.length === 0) {
+        throw new Error(`extracted no literals from ${label}`);
+      }
+      return found.sort();
+    };
+
+    const schemaEditions = editionLiterals(schemaSrc, "schema.ts");
+    const mutationEditions = editionLiterals(
+      read("convex", "campaigns.ts"),
+      "campaigns.ts"
+    );
+    // Bounded to the array's own literal. Every filter's options use
+    // `value: "..."` too, so reading to the end of the file collects the
+    // whole vocabulary of the screen instead of the two editions.
+    const filtersFile = read("components", "lookupFilters.ts");
+    const listAt = filtersFile.indexOf("RULES_VERSIONS");
+    if (listAt === -1) throw new Error("no RULES_VERSIONS in lookupFilters.ts");
+    const listEnd = filtersFile.indexOf("];", listAt);
+    if (listEnd === -1) throw new Error("RULES_VERSIONS is not a closed array");
+    const offered = [
+      ...filtersFile.slice(listAt, listEnd).matchAll(/value:\s*"([^"]+)"/g),
+    ]
+      .map((m) => m[1])
+      .sort();
+
+    if (offered.length === 0) {
+      throw new Error("RULES_VERSIONS offers no editions");
+    }
+    for (const [label, list] of [
+      ["convex/campaigns.ts", mutationEditions],
+      ["RULES_VERSIONS", offered],
+    ]) {
+      if (list.join() !== schemaEditions.join()) {
+        problems.push(
+          `rules editions disagree: schema has [${schemaEditions}], ` +
+            `${label} has [${list}]`
+        );
+      }
+    }
+
+    // Setting it is a change to the whole table's game, so it belongs to
+    // the DM by the same structural rule as every other game-state
+    // mutation — not to whoever has the Settings page open.
+    if (!/setRulesVersion[\s\S]{0,400}?requireDm\(/.test(read("convex", "campaigns.ts"))) {
+      problems.push(
+        "campaigns.setRulesVersion does not go through requireDm — the " +
+          "edition is campaign-wide, so a player could change what the " +
+          "whole table sees"
+      );
+    }
+
     // ---- the header and the rows must share one grid template -------
     // They are two separate grids that line up only because both are
     // handed the same value. Nothing in CSS or TypeScript connects them:

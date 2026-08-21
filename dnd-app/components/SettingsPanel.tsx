@@ -4,11 +4,16 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { THEMES } from "@/components/themes";
+import { RULES_VERSIONS } from "@/components/lookupFilters";
 
 /**
- * Personal settings. Everything here affects only the person changing
- * it — theme, preview mode, break-glass admin — and nothing here grants
- * a role.
+ * Settings.
+ *
+ * Almost everything here is PERSONAL — theme, preview mode, break-glass
+ * admin — and affects only the person changing it. The rules edition is
+ * the exception: it belongs to the campaign, so it is DM-only, labelled
+ * as shared, and kept in its own section rather than mixed in with the
+ * choices that stop at your own browser.
  *
  * The theme list is shared with the ribbon's theme control rather than
  * repeated here: a theme offered in one place and not the other is a
@@ -23,6 +28,7 @@ export function SettingsPanel({
   const settings = useQuery(api.settings.mySettings);
   const campaigns = useQuery(api.campaigns.myCampaigns);
   const save = useMutation(api.settings.saveMySettings);
+  const setRulesVersion = useMutation(api.campaigns.setRulesVersion);
 
   if (settings === undefined || campaigns === undefined) {
     return <p className="centered-note">Loading settings…</p>;
@@ -121,6 +127,44 @@ export function SettingsPanel({
         </section>
       )}
 
+      {current?.isDm && (
+        <section className="settings-block">
+          <h2>Rules edition</h2>
+          <p className="settings-note">
+            <strong>Campaign-wide, and yours to set as DM</strong> — unlike
+            everything else on this page, this one changes what your players
+            see too.
+          </p>
+          <p className="settings-note">
+            A D&amp;D Beyond import carries both printings of the core books,
+            so most spells, items and monsters exist twice under one name.
+            This picks which of the pair Lookup shows. It does not filter by
+            book: Tasha&apos;s, Xanathar&apos;s and every adventure have no
+            counterpart in the other edition and show either way.
+          </p>
+          <div className="theme-options">
+            {RULES_VERSIONS.map((r) => (
+              <button
+                type="button"
+                key={r.value}
+                className={`theme-option${
+                  (current.rulesVersion ?? "2014") === r.value ? " on" : ""
+                }`}
+                onClick={() =>
+                  void setRulesVersion({
+                    campaignId,
+                    rulesVersion: r.value,
+                  })
+                }
+              >
+                <span className="theme-name">{r.label}</span>
+                <span className="settings-note">{r.note}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="settings-block">
         <h2>Theme</h2>
         <p className="settings-note">
@@ -149,7 +193,8 @@ export function SettingsPanel({
         <p className="settings-note">
           Dice-roll defaults, notification preferences, portrait style for AI
           generation, and per-table density. Anything personal belongs on this
-          page; anything campaign-wide belongs to the DM.
+          page; anything campaign-wide belongs to the DM and is labelled as
+          such, the way the rules edition above is.
         </p>
       </section>
     </div>

@@ -76,6 +76,24 @@ export const myCampaigns = query({
   },
 });
 
+/**
+ * DM: choose which edition this table plays.
+ *
+ * Campaign-wide rather than personal — an edition is a property of the
+ * game everyone at the table is in, not of one person's browser — so it
+ * goes through requireDm like every other game-state change.
+ */
+export const setRulesVersion = mutation({
+  args: {
+    campaignId: v.id("campaigns"),
+    rulesVersion: v.union(v.literal("2014"), v.literal("2024")),
+  },
+  handler: async (ctx, args) => {
+    await requireDm(ctx, args.campaignId);
+    await ctx.db.patch(args.campaignId, { rulesVersion: args.rulesVersion });
+  },
+});
+
 /** DM: add a player to the campaign by the email they signed up with. */
 export const addMemberByEmail = mutation({
   args: { campaignId: v.id("campaigns"), email: v.string() },

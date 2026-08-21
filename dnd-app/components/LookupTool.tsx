@@ -22,7 +22,12 @@ import {
   sortByColumn,
   spellCells,
 } from "@/components/lookupFields";
-import { FilterState, applyFilters } from "@/components/lookupFilters";
+import {
+  FilterState,
+  RulesVersion,
+  applyEdition,
+  applyFilters,
+} from "@/components/lookupFilters";
 import { LookupFilters } from "@/components/LookupFilters";
 import { useLookupLayout } from "@/components/useLookupLayout";
 
@@ -79,9 +84,27 @@ export function LookupTool({
     [index]
   );
 
+  // The campaign's edition. myCampaigns is already loaded by AppShell,
+  // so this is the same subscription rather than a second one.
+  const campaigns = useQuery(api.campaigns.myCampaigns);
+  const edition: RulesVersion =
+    campaigns?.find((c) => c._id === campaignId)?.rulesVersion ?? "2014";
+
+  // Applied BEFORE the filters, so the counts in the bar describe the
+  // library this campaign actually plays with rather than both editions
+  // stacked on top of each other.
+  const library = useMemo(() => applyEdition(all, edition), [all, edition]);
+  const folded = all.length - library.length;
+
   const matched = useMemo(
-    () => sortByColumn(kind, applyFilters(kind, all, filters), sort.key, sort.desc),
-    [kind, all, filters, sort]
+    () =>
+      sortByColumn(
+        kind,
+        applyFilters(kind, library, filters),
+        sort.key,
+        sort.desc
+      ),
+    [kind, library, filters, sort]
   );
   const shown = matched.slice(0, MAX_ROWS);
 
@@ -163,8 +186,19 @@ export function LookupTool({
             state={filters}
             setState={setFilters}
             matched={matched.length}
-            total={all.length}
+            total={library.length}
           />
+
+          {/* Never a silently shorter list: the edition is a campaign
+              setting made somewhere else, so the screen it changes has
+              to say which one is in force and what it cost. */}
+          {folded > 0 && (
+            <p className="muted lk-edition">
+              {edition === "2024" ? "5.5e (2024)" : "5e (2014)"} — {folded}{" "}
+              {folded === 1 ? "entry" : "entries"} from the other edition
+              folded away. Change it in Settings.
+            </p>
+          )}
 
           {capped && (
             <p className="form-error lk-capped">

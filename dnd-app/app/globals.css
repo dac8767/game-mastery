@@ -4189,3 +4189,10 @@ button.cal-day:hover {
   border-radius: 8px;
   background: var(--bg-inset);
 }
+
+/* The active rules edition, said out loud on the screen it shortens. */
+.lk-edition {
+  margin: 0;
+  padding: 0 0.2rem;
+  font-size: 0.78rem;
+}

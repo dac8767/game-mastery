@@ -1054,6 +1054,130 @@ export const unit = {
       pathToFileURL(join(filtOut, "lookupFilters.js")).href
     );
 
+    // ---- editions --------------------------------------------------
+    // A DDB import carries both printings of the core books, so most
+    // core entries exist twice under one name. Getting this wrong makes
+    // rows VANISH with no error — the worst failure this screen has.
+    check("2024 core book", filt.editionOf("PHB 2024") === "2024");
+    check("2024 monster manual", filt.editionOf("MM 2024") === "2024");
+    check("2024 SRD", filt.editionOf("SRD 2024") === "2024");
+    check("2014 core book", filt.editionOf("PHB") === "2014");
+    check("the 2014 SRD is not 2024", filt.editionOf("SRD 5.1") === "2014");
+    check("a supplement is 2014-era", filt.editionOf("TCoE") === "2014");
+    check("an adventure is 2014-era", filt.editionOf("IDRotF") === "2014");
+    check("a missing source is 2014-era", filt.editionOf(undefined) === "2014");
+    check("a non-string source", filt.editionOf(2024) === "2014");
+    // The year is anchored to the END. A loose search would reclassify
+    // a book that merely has 2024 somewhere in its name.
+    check(
+      "a year inside the title does not make it 2024",
+      filt.editionOf("Best of 2024 Adventures") === "2014"
+    );
+    check("no false match on 12024", filt.editionOf("Vault 12024") === "2014");
+
+    const library = [
+      { name: "Longsword", source: "PHB" },
+      { name: "Longsword", source: "PHB 2024" },
+      { name: "Aboleth", source: "MM" },
+      { name: "Aboleth", source: "MM 2024" },
+      { name: "Rod of Absorption", source: "DMG 2024" },
+      { name: "Amulet of the Devout", source: "TCoE" },
+      { name: "Dragon of Icespire Peak", source: "DIP" },
+    ];
+    const names = (ed) =>
+      filt.applyEdition(library, ed).map((r) => `${r.name}/${r.source}`);
+
+    check(
+      "5.5e keeps the 2024 half of every duplicate",
+      eq(names("2024"), [
+        "Longsword/PHB 2024",
+        "Aboleth/MM 2024",
+        "Rod of Absorption/DMG 2024",
+        "Amulet of the Devout/TCoE",
+        "Dragon of Icespire Peak/DIP",
+      ])
+    );
+    check(
+      "5e keeps the older half of every duplicate",
+      eq(names("2014"), [
+        "Longsword/PHB",
+        "Aboleth/MM",
+        "Rod of Absorption/DMG 2024",
+        "Amulet of the Devout/TCoE",
+        "Dragon of Icespire Peak/DIP",
+      ])
+    );
+    // The two properties that make this a dedupe rather than a filter.
+    check(
+      "a 2024-only entry survives a 5e campaign",
+      names("2014").includes("Rod of Absorption/DMG 2024")
+    );
+    check(
+      "a supplement survives a 5.5e campaign",
+      names("2024").includes("Amulet of the Devout/TCoE")
+    );
+    check(
+      "neither edition loses a name entirely",
+      new Set(filt.applyEdition(library, "2014").map((r) => r.name)).size ===
+        new Set(library.map((r) => r.name)).size &&
+        new Set(filt.applyEdition(library, "2024").map((r) => r.name)).size ===
+          new Set(library.map((r) => r.name)).size
+    );
+    check(
+      "input order is preserved",
+      eq(
+        filt.applyEdition(
+          [
+            { name: "Zed", source: "PHB" },
+            { name: "Amy", source: "PHB" },
+          ],
+          "2014"
+        ).map((r) => r.name),
+        ["Zed", "Amy"]
+      )
+    );
+    check(
+      "names match regardless of case and spacing",
+      filt.applyEdition(
+        [
+          { name: "Bag of  Holding", source: "DMG" },
+          { name: "bag of holding", source: "DMG 2024" },
+        ],
+        "2024"
+      ).length === 1
+    );
+    check("an empty library stays empty", filt.applyEdition([], "2024").length === 0);
+    check(
+      "three printings of one name still collapse to the wanted ones",
+      filt.applyEdition(
+        [
+          { name: "Fireball", source: "PHB" },
+          { name: "Fireball", source: "SRD 5.1" },
+          { name: "Fireball", source: "PHB 2024" },
+        ],
+        "2024"
+      ).length === 1
+    );
+    check(
+      "and a 5e campaign keeps both of its own printings",
+      filt.applyEdition(
+        [
+          { name: "Fireball", source: "PHB" },
+          { name: "Fireball", source: "SRD 5.1" },
+          { name: "Fireball", source: "PHB 2024" },
+        ],
+        "2014"
+      ).length === 2
+    );
+
+    check(
+      "both editions are offered where someone has to choose",
+      eq(
+        filt.RULES_VERSIONS.map((r) => r.value),
+        ["2014", "2024"]
+      ) && filt.RULES_VERSIONS.every((r) => r.label && r.note)
+    );
+
     // An empty value is not a filter, and must never match-fail.
     check("empty: undefined", filt.isEmptyValue(undefined));
     check("empty: blank string", filt.isEmptyValue("   "));
