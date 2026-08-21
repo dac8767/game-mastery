@@ -527,10 +527,18 @@ export const integrity = {
       campaignsSrc.indexOf("export const deleteCampaign"),
       campaignsSrc.indexOf("export const purgeCampaign")
     );
-    if (!/confirmName/.test(deleteFn) || !/campaign\.name/.test(deleteFn)) {
+    // Both names have to be COMPARED, not merely mentioned. The
+    // campaign's name appears in the error message either way, so a
+    // check that only looked for the two strings would keep passing
+    // after the comparison itself was gutted.
+    const compactDelete = deleteFn.replace(/\s+/g, "");
+    const comparesNames =
+      /confirmName[^;{]{0,40}!==[^;{]{0,40}campaign\.name/.test(compactDelete) ||
+      /campaign\.name[^;{]{0,40}!==[^;{]{0,40}confirmName/.test(compactDelete);
+    if (!comparesNames) {
       problems.push(
-        "campaigns.deleteCampaign does not check a typed name against the " +
-          "campaign's own — the confirmation would be advisory, and a " +
+        "campaigns.deleteCampaign does not compare the typed name against " +
+          "the campaign's own — the confirmation would be advisory, and a " +
           "misfired call would delete a campaign outright"
       );
     }
