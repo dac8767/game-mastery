@@ -17,8 +17,49 @@ of scope here.
 - **After completing an update, end the reply with the terminal commands
   to run** — exact and paste-ready, in order, including whether a running
   dev server needs restarting. Not a description of what to do.
+- **When a change needs a re-import, give the WHOLE sequence in one
+  block, ending with `npm run dev`.** Never the import commands on their
+  own: the point is one paste that leaves the app running, not three
+  fragments to assemble. The canonical block is in "Re-importing the
+  Lookup library" below.
+- No `#` comments inside a command block. macOS zsh does not treat `#`
+  as a comment at an interactive prompt, and an apostrophe inside one
+  opens a quote that swallows every command after it — this has cost a
+  round trip more than once.
 - Keep costs at free-tier: Convex free tier, Vercel Hobby, Cloudflare
   free plan. Don't introduce paid services without asking.
+
+## Re-importing the Lookup library
+
+Anything that changes what `scripts/import-foundry.mjs` writes — a new
+field, a different shape, a fix to how a description is read — needs the
+converter re-run and the tables replaced. Give this whole block, adjusted
+only where the change requires it:
+
+```bash
+git pull origin claude/game-mastery-db-setup-jaeuln
+pkill -f "next dev"
+npx convex dev --once
+node scripts/import-foundry.mjs ~/Downloads/foundry-everything.json k17ezhmgzwdzfb0pr0ctahsgrx8cqn8a -o foundry-import
+npx convex import --table spells foundry-import/spells.jsonl --replace --yes
+npx convex import --table items foundry-import/items.jsonl --replace --yes
+npx convex import --table monsters foundry-import/monsters.jsonl --replace --yes
+npm run dev
+```
+
+Why each line is there:
+
+- `pkill -f "next dev"` — a stale dev server holds port 3000 and keeps
+  serving an older build with older `NEXT_PUBLIC_` values baked in. The
+  new one quietly moves to 3001 and you carry on looking at the old one.
+- `npx convex dev --once` pushes the schema and RETURNS. `npm run dev`
+  also pushes it but then stays running, so nothing after it would ever
+  execute. A schema change has to land before the import, or the import
+  is validated against the old one.
+- `--yes` so the whole block runs unattended. These three tables are
+  derived reference data with no write path — `--replace` is what they
+  are for.
+- Drop the tables that did not change; keep the shape of the block.
 
 ## Layout
 
