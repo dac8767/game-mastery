@@ -42,7 +42,8 @@ export const SETTINGS_TABS: SettingsTabDef[] = [
   {
     id: "general",
     label: "General",
-    blurb: "You and your account — your name, and the campaigns you are in.",
+    blurb:
+      "You and your account — your name, how dates read, and the campaigns you are in.",
   },
   {
     id: "campaign",
@@ -65,7 +66,7 @@ export const SETTINGS_TABS: SettingsTabDef[] = [
   {
     id: "interface",
     label: "Interface",
-    blurb: "How the app looks and reads. Yours alone.",
+    blurb: "How the app looks. Yours alone.",
   },
 ];
 

@@ -90,6 +90,32 @@ export function SettingsPanel({
           </section>
 
           <section className="settings-block">
+            <h2>Dates</h2>
+            <p className="settings-note">
+              Only about how dates are written — not what they mean. In-world
+              dates use the campaign calendar under Tools, which has its own
+              months.
+            </p>
+            <div className="theme-options">
+              {DATE_FORMATS.map((f) => (
+                <button
+                  type="button"
+                  key={f.value}
+                  className={`theme-option${
+                    (settings.dateFormat ?? "dmy") === f.value ? " on" : ""
+                  }`}
+                  onClick={() => void save({ dateFormat: f.value })}
+                >
+                  <span className="theme-name">{f.label}</span>
+                  <span className="settings-note">
+                    {formatCardDate("2026-09-05", f.value)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="settings-block">
             <h2>Roles</h2>
             <p className="settings-note">
               Roles are per campaign, so you hold several at once: DM of the
@@ -256,32 +282,6 @@ export function SettingsPanel({
                   <span className={`theme-swatch theme-${t.value}`} />
                   <span className="theme-name">{t.label}</span>
                   <span className="settings-note">{t.note}</span>
-                </button>
-              ))}
-            </div>
-          </section>
-
-          <section className="settings-block">
-            <h2>Dates</h2>
-            <p className="settings-note">
-              Only about how dates are written — not what they mean. In-world
-              dates use the campaign calendar under Tools, which has its own
-              months.
-            </p>
-            <div className="theme-options">
-              {DATE_FORMATS.map((f) => (
-                <button
-                  type="button"
-                  key={f.value}
-                  className={`theme-option${
-                    (settings.dateFormat ?? "dmy") === f.value ? " on" : ""
-                  }`}
-                  onClick={() => void save({ dateFormat: f.value })}
-                >
-                  <span className="theme-name">{f.label}</span>
-                  <span className="settings-note">
-                    {formatCardDate("2026-09-05", f.value)}
-                  </span>
                 </button>
               ))}
             </div>
