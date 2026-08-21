@@ -382,11 +382,10 @@ function LookupDetail({
 
   return (
     <article className={`lk lk-${kind}`}>
-      {/* Two columns, top-aligned: everything you read as rules on the
-          left, the picture beside it rather than wrapped into it. The
-          description then runs the full width underneath, because it is
-          prose and prose in a narrow column beside an image is worse
-          than prose across the page. */}
+      {/* Two columns, top-aligned, and the picture's column is ITS OWN:
+          nothing flows under it, not the stat block and not the prose.
+          A description that ran full width beneath would put text under
+          the image again, which is the thing being avoided. */}
       <div className="lk-columns">
         <div className="lk-main">
           <h2 className="lk-name">{String(row.name)}</h2>
@@ -394,19 +393,20 @@ function LookupDetail({
           {kind === "items" && <ItemHead row={row} />}
           {kind === "spells" && <SpellHead row={row} />}
           {kind === "monsters" && <MonsterBlock row={row} />}
+
+          {body.length > 0 && (
+            <section className="lk-body">
+              {/* On a monster this is a section of its own, under the
+                  block: the stat block is reference, the description is
+                  story. */}
+              {kind === "monsters" && <h3 className="lk-h">Description</h3>}
+              <Blocks blocks={body} />
+            </section>
+          )}
         </div>
 
         <BigArt row={row} />
       </div>
-
-      {body.length > 0 && (
-        <section className="lk-body">
-          {/* On a monster this is a section of its own, under the block:
-              the stat block is reference, the description is story. */}
-          {kind === "monsters" && <h3 className="lk-h">Description</h3>}
-          <Blocks blocks={body} />
-        </section>
-      )}
 
       {kind === "spells" && typeof row.materials === "string" && row.materials && (
         <p className="lk-footnote">* — ({row.materials})</p>
