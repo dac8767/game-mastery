@@ -4187,14 +4187,83 @@ button.cal-day:hover {
   min-width: 0;
 }
 
-.lk-art-big {
-  float: right;
-  width: 6rem;
-  height: 6rem;
-  object-fit: contain;
-  margin: 0 0 0.5rem 0.75rem;
-  border-radius: 8px;
+/* Rules on the left, picture beside them, both starting at the top —
+   the stat block and the art are read together, so they align rather
+   than one wrapping around the other. */
+.lk-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.lk-main {
+  min-width: 0;
+}
+
+.lk-art-frame {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
   background: var(--bg-inset);
+  overflow: hidden;
+  line-height: 0;
+  cursor: zoom-in;
+}
+
+.lk-art-frame:hover {
+  border-color: var(--accent);
+}
+
+.lk-art-big {
+  display: block;
+  width: 17rem;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+/* The picture is usually bigger than the column it sits in; this is the
+   whole file, on top of everything. */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  background: rgba(0, 0, 0, 0.8);
+  cursor: zoom-out;
+}
+
+.lightbox img {
+  max-width: min(90vw, 60rem);
+  max-height: 85vh;
+  object-fit: contain;
+  border-radius: 10px;
+  background: var(--bg-raised);
+}
+
+.lightbox-hint {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 800px) {
+  /* Below this the two columns are both too narrow to read, so the
+     picture goes above the block rather than beside it. */
+  .lk-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lk-art-frame {
+    order: -1;
+    justify-self: start;
+  }
 }
 
 /* The active rules edition, said out loud on the screen it shortens. */

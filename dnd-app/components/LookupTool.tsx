@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -382,12 +382,22 @@ function LookupDetail({
 
   return (
     <article className={`lk lk-${kind}`}>
-      <Art row={row} className="lk-art-big" />
-      <h2 className="lk-name">{String(row.name)}</h2>
+      {/* Two columns, top-aligned: everything you read as rules on the
+          left, the picture beside it rather than wrapped into it. The
+          description then runs the full width underneath, because it is
+          prose and prose in a narrow column beside an image is worse
+          than prose across the page. */}
+      <div className="lk-columns">
+        <div className="lk-main">
+          <h2 className="lk-name">{String(row.name)}</h2>
 
-      {kind === "items" && <ItemHead row={row} />}
-      {kind === "spells" && <SpellHead row={row} />}
-      {kind === "monsters" && <MonsterBlock row={row} />}
+          {kind === "items" && <ItemHead row={row} />}
+          {kind === "spells" && <SpellHead row={row} />}
+          {kind === "monsters" && <MonsterBlock row={row} />}
+        </div>
+
+        <BigArt row={row} />
+      </div>
 
       {body.length > 0 && (
         <section className="lk-body">
@@ -434,6 +444,76 @@ function Art({ row, className }: { row: Record<string, unknown>; className: stri
         e.currentTarget.style.display = "none";
       }}
     />
+  );
+}
+
+/**
+ * The panel's artwork: big, beside the stat block, and enlargeable.
+ *
+ * Clicking it opens the full-size file. Monster art is often much
+ * larger than the column it sits in, and the column is sized for the
+ * stat block rather than for the picture — so the small copy is a
+ * thumbnail of something worth actually looking at.
+ */
+function BigArt({ row }: { row: Record<string, unknown> }) {
+  const src = artSrc(row.image, process.env.NEXT_PUBLIC_MAP_SERVER);
+  const [zoomed, setZoomed] = useState(false);
+  const [broken, setBroken] = useState(false);
+
+  // Escape closes it, which is what every full-screen thing in a browser
+  // has taught people to expect.
+  useEffect(() => {
+    if (!zoomed) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setZoomed(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [zoomed]);
+
+  if (!src || broken) return null;
+  const name = typeof row.name === "string" ? row.name : "";
+
+  return (
+    <>
+      <button
+        type="button"
+        className="lk-art-frame"
+        title={`${name} — click to enlarge`}
+        onClick={(e) => {
+          // The row header toggles open/closed on click; this sits inside
+          // the panel it opened, and must not close it again.
+          e.stopPropagation();
+          setZoomed(true);
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          className="lk-art-big"
+          src={src}
+          alt={name}
+          loading="lazy"
+          onError={() => setBroken(true)}
+        />
+      </button>
+
+      {zoomed && (
+        <div
+          className="lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label={name}
+          onClick={(e) => {
+            e.stopPropagation();
+            setZoomed(false);
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={src} alt={name} />
+          <p className="lightbox-hint">Click anywhere, or press Esc, to close</p>
+        </div>
+      )}
+    </>
   );
 }
 
