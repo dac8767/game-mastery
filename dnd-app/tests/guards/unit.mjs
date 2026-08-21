@@ -643,6 +643,13 @@ export const unit = {
 
     check("weekly: seven days on, in a seven-day week", on("weekly", after(7)));
     check("weekly: not six days on", !on("weekly", after(6)));
+    // A whole week BEFORE the start is the day the general backward
+    // cases miss: it is a clean multiple, so the modulo says yes and
+    // only the on-or-after rule says no.
+    check(
+      "weekly: not a whole week before its start",
+      !on("weekly", after(-7)) && !on("weekly", after(-70))
+    );
     check("weekly: still on a hundred weeks later", on("weekly", after(700)));
     check(
       "weekly: lands on the same weekday name",
@@ -689,6 +696,10 @@ export const unit = {
     check(
       "everyNDays: off the interval",
       !on("everyNDays", after(4), { intervalDays: 3 })
+    );
+    check(
+      "everyNDays: not a whole interval before its start",
+      !on("everyNDays", after(-3), { intervalDays: 3 })
     );
     check(
       "everyNDays: an interval of one is every day",

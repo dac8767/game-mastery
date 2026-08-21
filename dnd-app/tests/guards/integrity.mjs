@@ -1040,14 +1040,38 @@ export const integrity = {
       }
     }
 
-    // The rule that reads an interval must be the rule the mutation
-    // normalises one for. Renaming "everyNDays" on one side leaves the
-    // other storing an interval nobody reads, or reading one nobody set.
-    if (offeredRepeats.includes("everyNDays") && !/everyNDays/.test(calSrc)) {
-      problems.push(
-        "convex/calendar.ts never mentions everyNDays, so saveEvent does not " +
-          "normalise its interval — an interval of 0 divides by nothing"
-      );
+    // The rule that reads an interval must be the rule saveEvent
+    // normalises one for. Scoped to the HANDLER, not the file: the
+    // validator a few lines above lists every rule by name, so reading
+    // the whole of calendar.ts finds "everyNDays" whether or not
+    // anything acts on it — a check that can only pass.
+    const saveEventAt = calSrc.indexOf("export const saveEvent");
+    if (saveEventAt === -1) {
+      throw new Error("no saveEvent in convex/calendar.ts");
+    }
+    const saveEventBody = blockAfter(
+      calSrc.slice(saveEventAt),
+      /handler:/,
+      "saveEvent handler"
+    );
+    for (const rule of offeredRepeats) {
+      // Only the rules that carry a number need normalising, and
+      // everyNDays is the only one that does. Named rather than derived:
+      // a rule with its own field would need its own clamp anyway.
+      if (rule !== "everyNDays") continue;
+      if (!saveEventBody.includes(rule)) {
+        problems.push(
+          `saveEvent never branches on "${rule}", so the interval it stores ` +
+            "is whatever the form sent — a 0 divides by nothing and the " +
+            "event silently never recurs"
+        );
+      }
+      if (!/Math\.max\(\s*1\s*,/.test(saveEventBody)) {
+        problems.push(
+          "saveEvent does not floor the repeat interval at 1 — a 0 or a " +
+            "negative interval is a modulo by nothing"
+        );
+      }
     }
 
     // ---- Lookup: the kind union is stated twice --------------------
