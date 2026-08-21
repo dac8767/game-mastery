@@ -976,6 +976,80 @@ export const integrity = {
       }
     }
 
+    // ---- the repeat rules are stated in four places -----------------
+    // The schema validates them, calendar.ts re-declares them for the
+    // mutation, REPEATS offers them in the event form, and occursOn
+    // decides what they mean. The fourth is the one that cannot be
+    // caught by anything else: its switch ends in a `default` that
+    // treats an unrecognised rule as happening once, which is the right
+    // answer for a row written by a newer client and the wrong one for a
+    // rule this build was supposed to know. A rule added everywhere but
+    // the switch just quietly stops recurring — the form offers it, the
+    // mutation stores it, and the calendar shows it a single time.
+    const schemaRepeats = literalUnionAfter(
+      schemaSrc,
+      /repeat:\s*v\.union/,
+      "schema.ts calendarEvents.repeat"
+    ).sort();
+    const validatorRepeats = literalUnionAfter(
+      calSrc,
+      /repeatValidator\s*=\s*v\./,
+      "calendar.ts repeatValidator"
+    ).sort();
+
+    // Bounded to the array's own literal, for the same reason as
+    // RULES_VERSIONS: `value: "..."` is the shape of every option list
+    // in the file.
+    const modelSrc = read("components", "calendarModel.ts");
+    const repeatsAt = modelSrc.indexOf("REPEATS");
+    if (repeatsAt === -1) throw new Error("no REPEATS in calendarModel.ts");
+    const repeatsEnd = modelSrc.indexOf("];", repeatsAt);
+    if (repeatsEnd === -1) throw new Error("REPEATS is not a closed array");
+    const offeredRepeats = [
+      ...modelSrc
+        .slice(repeatsAt, repeatsEnd)
+        .matchAll(/value:\s*"([^"]+)"/g),
+    ]
+      .map((m) => m[1])
+      .sort();
+    if (offeredRepeats.length === 0) {
+      throw new Error("REPEATS offers no rules");
+    }
+
+    const occursAt = modelSrc.indexOf("export function occursOn");
+    if (occursAt === -1) throw new Error("no occursOn in calendarModel.ts");
+    const handledRepeats = [
+      ...modelSrc.slice(occursAt).matchAll(/case\s+"([^"]+)":/g),
+    ]
+      .map((m) => m[1])
+      .sort();
+    if (handledRepeats.length === 0) {
+      throw new Error("occursOn handles no rules by name — parser out of date?");
+    }
+
+    for (const [label, list] of [
+      ["convex/calendar.ts", validatorRepeats],
+      ["REPEATS", offeredRepeats],
+      ["occursOn", handledRepeats],
+    ]) {
+      if (list.join() !== schemaRepeats.join()) {
+        problems.push(
+          `event repeat rules disagree: schema has [${schemaRepeats}], ` +
+            `${label} has [${list}]`
+        );
+      }
+    }
+
+    // The rule that reads an interval must be the rule the mutation
+    // normalises one for. Renaming "everyNDays" on one side leaves the
+    // other storing an interval nobody reads, or reading one nobody set.
+    if (offeredRepeats.includes("everyNDays") && !/everyNDays/.test(calSrc)) {
+      problems.push(
+        "convex/calendar.ts never mentions everyNDays, so saveEvent does not " +
+          "normalise its interval — an interval of 0 divides by nothing"
+      );
+    }
+
     // ---- Lookup: the kind union is stated twice --------------------
     // lookupFilters.ts cannot import it: the unit guard compiles pure
     // modules in isolation and TypeScript's path mapping is

@@ -1,6 +1,9 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireDm, requireMember } from "./auth";
+
+/** A campaign with more scheduled events than this has a different problem. */
+const MAX_EVENTS = 500;
 import {
   CalendarSettings,
   DEFAULT_CALENDAR,
@@ -148,5 +151,88 @@ export const setCurrentDate = mutation({
       return;
     }
     await ctx.db.insert("calendars", { campaignId: args.campaignId, ...clean });
+  },
+});
+
+// ---------------------------------------------------------------------
+// Events
+// ---------------------------------------------------------------------
+
+const repeatValidator = v.union(
+  v.literal("once"),
+  v.literal("weekly"),
+  v.literal("monthly"),
+  v.literal("yearly"),
+  v.literal("everyNDays")
+);
+
+/**
+ * Every event in the campaign, unexpanded.
+ *
+ * A repeating event is one row plus a rule, so the browser decides what
+ * lands on a given day — see components/calendarModel.ts. Sending the
+ * rules rather than the occurrences is also what makes flicking through
+ * months free: no query per month, and no way for the grid to disagree
+ * with itself about a year it has not fetched.
+ */
+export const listEvents = query({
+  args: { campaignId: v.id("campaigns") },
+  handler: async (ctx, args) => {
+    await requireMember(ctx, args.campaignId);
+    return await ctx.db
+      .query("calendarEvents")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
+      .take(MAX_EVENTS);
+  },
+});
+
+/** DM: put something on a day, or change it. */
+export const saveEvent = mutation({
+  args: {
+    eventId: v.optional(v.id("calendarEvents")),
+    campaignId: v.id("campaigns"),
+    title: v.string(),
+    notes: v.optional(v.string()),
+    year: v.number(),
+    month: v.number(),
+    day: v.number(),
+    repeat: repeatValidator,
+    intervalDays: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireDm(ctx, args.campaignId);
+    const { eventId, ...fields } = args;
+
+    const title = fields.title.trim();
+    if (!title) throw new Error("An event needs a name");
+
+    // An interval is only meaningful for the rule that reads it, and a
+    // zero would either repeat every day or divide by nothing.
+    const intervalDays =
+      fields.repeat === "everyNDays"
+        ? Math.max(1, Math.round(Number(fields.intervalDays) || 1))
+        : undefined;
+
+    const doc = { ...fields, title, intervalDays };
+
+    if (eventId) {
+      const existing = await ctx.db.get(eventId);
+      if (!existing || existing.campaignId !== args.campaignId) {
+        throw new Error("Event not found in this campaign");
+      }
+      await ctx.db.replace(eventId, doc);
+      return eventId;
+    }
+    return await ctx.db.insert("calendarEvents", doc);
+  },
+});
+
+export const deleteEvent = mutation({
+  args: { eventId: v.id("calendarEvents") },
+  handler: async (ctx, args) => {
+    const event = await ctx.db.get(args.eventId);
+    if (!event) return;
+    await requireDm(ctx, event.campaignId);
+    await ctx.db.delete(args.eventId);
   },
 });

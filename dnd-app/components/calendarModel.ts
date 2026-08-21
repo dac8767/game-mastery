@@ -227,3 +227,88 @@ export function formatDate(s: CalendarSettings, d: CalendarDate): string {
   const weekday = s.dayNames[weekdayOf(s, d)] ?? "";
   return `${d.day} ${month}, ${d.year}${weekday ? ` (${weekday})` : ""}`;
 }
+
+// ---------------------------------------------------------------------
+// Events
+// ---------------------------------------------------------------------
+
+/**
+ * How an event repeats from the day it was put on.
+ *
+ * "Weekly" is the one that needs saying out loud: a campaign week is
+ * whatever `daysPerWeek` says, so weekly means every `daysPerWeek` days
+ * rather than every seven. In a calendar with a five-day week, a weekly
+ * market lands on the same weekday name — which is what a person means
+ * by weekly — and would be wrong on any fixed number.
+ */
+export type RepeatRule =
+  | "once"
+  | "weekly"
+  | "monthly"
+  | "yearly"
+  | "everyNDays";
+
+export const REPEATS: { value: RepeatRule; label: string }[] = [
+  { value: "once", label: "Once" },
+  { value: "weekly", label: "Every week" },
+  { value: "monthly", label: "Every month" },
+  { value: "yearly", label: "Every year" },
+  { value: "everyNDays", label: "Every N days" },
+];
+
+export interface CalendarEvent {
+  title: string;
+  year: number;
+  month: number;
+  day: number;
+  repeat: RepeatRule;
+  /** Only meaningful for "everyNDays". */
+  intervalDays?: number;
+}
+
+/**
+ * Does this event land on this day?
+ *
+ * Nothing recurs BEFORE it starts. An annual festival added in 1491
+ * should not retroactively appear in 1489 — the calendar is a record of
+ * a world, and putting events into its past is a different act from
+ * scheduling them.
+ *
+ * Monthly means the same day NUMBER, which in a calendar with a fixed
+ * month length is unambiguous — every month here has `daysPerMonth`
+ * days, so there is no 31st-of-February problem to solve.
+ */
+export function occursOn(
+  s: CalendarSettings,
+  event: CalendarEvent,
+  date: CalendarDate
+): boolean {
+  const start: CalendarDate = {
+    year: event.year,
+    month: event.month,
+    day: event.day,
+  };
+  const from = dayIndex(s, start);
+  const on = dayIndex(s, date);
+  if (on < from) return false;
+
+  switch (event.repeat) {
+    case "once":
+      return on === from;
+    case "weekly":
+      return (on - from) % Math.max(1, s.daysPerWeek) === 0;
+    case "monthly":
+      return date.day === event.day;
+    case "yearly":
+      return date.day === event.day && date.month === event.month;
+    case "everyNDays": {
+      const every = Math.trunc(Number(event.intervalDays));
+      // A zero or negative interval would repeat every day or divide by
+      // nothing; an event whose rule cannot be read happens once.
+      if (!Number.isFinite(every) || every < 1) return on === from;
+      return (on - from) % every === 0;
+    }
+    default:
+      return on === from;
+  }
+}

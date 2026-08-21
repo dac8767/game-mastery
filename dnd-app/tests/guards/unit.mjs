@@ -607,6 +607,112 @@ export const unit = {
       )
     );
 
+    // ---- recurring events ------------------------------------------
+    // occursOn runs once per rendered cell, so it is asked the question
+    // a few hundred times a page and never gets to explain itself. The
+    // rules that are easy to get wrong are the two that are not plain
+    // arithmetic: weekly follows daysPerWeek rather than seven, and
+    // nothing recurs before the day it was put on.
+    const ev = (repeat, extra = {}) => ({
+      title: "Market day",
+      year: 1491,
+      month: 2,
+      day: 10,
+      repeat,
+      ...extra,
+    });
+    const start = { year: 1491, month: 2, day: 10 };
+    const on = (rule, date, extra) => cal.occursOn(D, ev(rule, extra), date);
+    const after = (n) => cal.addDays(D, start, n);
+
+    for (const rule of cal.REPEATS.map((r) => r.value)) {
+      check(
+        `${rule}: happens on the day it was put on`,
+        on(rule, start, { intervalDays: 3 })
+      );
+      check(
+        `${rule}: does not reach back before its start`,
+        !on(rule, after(-1), { intervalDays: 3 }) &&
+          !on(rule, after(-30), { intervalDays: 3 }) &&
+          !on(rule, { year: 1489, month: 2, day: 10 }, { intervalDays: 3 })
+      );
+    }
+
+    check("once: not the next day", !on("once", after(1)));
+    check("once: not a year later", !on("once", { ...start, year: 1492 }));
+
+    check("weekly: seven days on, in a seven-day week", on("weekly", after(7)));
+    check("weekly: not six days on", !on("weekly", after(6)));
+    check("weekly: still on a hundred weeks later", on("weekly", after(700)));
+    check(
+      "weekly: lands on the same weekday name",
+      cal.weekdayOf(D, after(7)) === cal.weekdayOf(D, start)
+    );
+
+    // The one a fixed seven would get wrong: a five-day week.
+    const five = cal.reconcile({ ...D, daysPerWeek: 5 });
+    const weekly5 = ev("weekly");
+    check(
+      "weekly: follows daysPerWeek, not seven",
+      cal.occursOn(five, weekly5, cal.addDays(five, start, 5)) &&
+        !cal.occursOn(five, weekly5, cal.addDays(five, start, 7))
+    );
+
+    check("monthly: same day number next month", on("monthly", after(30)));
+    check(
+      "monthly: same day number in a later year",
+      on("monthly", { year: 1493, month: 7, day: 10 })
+    );
+    check(
+      "monthly: not on a different day number",
+      !on("monthly", { year: 1491, month: 3, day: 11 })
+    );
+
+    check(
+      "yearly: same day and month, next year",
+      on("yearly", { year: 1492, month: 2, day: 10 })
+    );
+    check(
+      "yearly: not the same day in a different month",
+      !on("yearly", { year: 1492, month: 3, day: 10 })
+    );
+    check(
+      "yearly: not a different day in the same month",
+      !on("yearly", { year: 1492, month: 2, day: 11 })
+    );
+
+    check(
+      "everyNDays: on the interval",
+      on("everyNDays", after(3), { intervalDays: 3 }) &&
+        on("everyNDays", after(9), { intervalDays: 3 })
+    );
+    check(
+      "everyNDays: off the interval",
+      !on("everyNDays", after(4), { intervalDays: 3 })
+    );
+    check(
+      "everyNDays: an interval of one is every day",
+      on("everyNDays", after(1), { intervalDays: 1 })
+    );
+    // A zero interval would be a modulo by zero, and a missing one a
+    // modulo by NaN — both would return NaN === 0, which is false, so
+    // the event would silently never appear again. It happens once.
+    for (const bad of [0, -5, undefined, Number.NaN, "soon"]) {
+      check(
+        `everyNDays: an unreadable interval (${String(bad)}) happens once`,
+        on("everyNDays", start, { intervalDays: bad }) &&
+          !on("everyNDays", after(1), { intervalDays: bad }) &&
+          !on("everyNDays", after(7), { intervalDays: bad })
+      );
+    }
+
+    // A rule from a future version of the app, read by an older client.
+    check(
+      "an unknown rule degrades to happening once",
+      cal.occursOn(D, { ...ev("once"), repeat: "fortnightly" }, start) &&
+        !cal.occursOn(D, { ...ev("once"), repeat: "fortnightly" }, after(14))
+    );
+
     // ---- the settings tabs -----------------------------------------
     // resolveTab is what stops the page going blank underneath someone:
     // handing over a campaign on the Game Master tab removes that tab

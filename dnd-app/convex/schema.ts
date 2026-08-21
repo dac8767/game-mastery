@@ -495,6 +495,40 @@ export default defineSchema({
   }).index("by_campaign", ["campaignId"]),
 
   /**
+   * Things that happen on a day of the campaign calendar.
+   *
+   * The date is stored as the campaign's OWN year/month/day rather than
+   * a timestamp: these are in-world dates in a calendar with invented
+   * months and a week that is not seven days long, and there is no
+   * real-world instant they correspond to.
+   *
+   * A repeating event is one row plus a rule, not a row per occurrence.
+   * A yearly festival in a campaign that runs for centuries would
+   * otherwise be thousands of rows nobody ever reads, and moving it
+   * would mean rewriting all of them. components/calendarModel.ts
+   * decides what lands on a given day.
+   */
+  calendarEvents: defineTable({
+    campaignId: v.id("campaigns"),
+    title: v.string(),
+    notes: v.optional(v.string()),
+    year: v.number(),
+    /** 0-based, indexing monthNames, as the calendar stores months. */
+    month: v.number(),
+    /** 1-based, the way a person says a date. */
+    day: v.number(),
+    repeat: v.union(
+      v.literal("once"),
+      v.literal("weekly"),
+      v.literal("monthly"),
+      v.literal("yearly"),
+      v.literal("everyNDays")
+    ),
+    /** Only read when repeat is "everyNDays". */
+    intervalDays: v.optional(v.number()),
+  }).index("by_campaign", ["campaignId"]),
+
+  /**
    * Per-person table layout. One document per (user, campaign, view).
    *
    * Everyone shapes a table to their own taste — which columns show, in

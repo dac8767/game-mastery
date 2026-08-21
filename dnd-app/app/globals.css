@@ -2992,11 +2992,14 @@ body.col-resizing {
 
 /* ---------- Calendar ---------- */
 
+/* The tool is the page: the grid takes whatever height is left below the
+   bar, rather than sitting at a fixed size with dead space under it. */
 .cal {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
   min-height: 0;
+  flex: 1;
 }
 
 .cal-bar {
@@ -3027,6 +3030,8 @@ body.col-resizing {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
+  flex: 1;
+  min-height: 0;
 }
 
 .cal-grid th {
@@ -3043,10 +3048,12 @@ body.col-resizing {
   white-space: nowrap;
 }
 
+/* The grid takes the height it is given rather than a fixed one, so the
+   calendar fills the page and the squares grow with it. */
 .cal-grid td {
   border: 1px solid var(--border);
   background: var(--bg-raised);
-  height: 3.6rem;
+  height: 5.5rem;
   vertical-align: top;
   padding: 0;
 }
@@ -3061,16 +3068,22 @@ body.col-resizing {
   background: var(--accent-soft);
 }
 
+/* A column, so the day number sits above whatever is on that day and the
+   chips stack rather than running along one line. */
 .cal-day {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
   width: 100%;
   height: 100%;
-  padding: 0.3rem 0.4rem;
+  padding: 0.35rem 0.4rem;
   text-align: left;
   font-size: 0.82rem;
   color: var(--text-dim);
   background: none;
   border: none;
+  cursor: pointer;
 }
 
 td.cal-now .cal-day {
@@ -4660,4 +4673,129 @@ button.cal-day:hover {
   margin: 0 0 0.5rem;
   color: var(--text-dim);
   font-size: 0.84rem;
+}
+
+/* ---------- Calendar: the day panel and its events ---------- */
+
+/* The campaign's clock, with the two controls that move it. Nothing
+   else does — the grid selects a day to look at. */
+.cal-now-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+.cal-now-date {
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cal-daynum {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.cal-grid td.cal-now .cal-daynum {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* Selected is a different thing from current, and has to look it: one
+   is where you are looking, the other is what day it is. */
+.cal-grid td.cal-picked {
+  outline: 2px solid var(--text-dim);
+  outline-offset: -2px;
+}
+
+.cal-day-events {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.cal-chip {
+  display: block;
+  max-width: 100%;
+  padding: 0.05rem 0.3rem;
+  border-radius: 4px;
+  background: var(--bg-inset);
+  border-left: 2px solid var(--accent);
+  font-size: 0.68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cal-panel {
+  flex: none;
+  padding: 0.75rem 0.9rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.cal-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.cal-panel-head h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  flex: 1;
+}
+
+.cal-events {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.cal-events li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.4rem 0.5rem;
+  background: var(--bg-inset);
+  border-radius: 8px;
+}
+
+.cal-event-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.cal-event-text p {
+  margin: 0.15rem 0 0;
+}
+
+.cal-event-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex: none;
+}
+
+.cal-event-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.cal-event-form input[type="text"],
+.cal-event-form input:not([type]) {
+  flex: 1;
+  min-width: 10rem;
+}
+
+.cal-event-form input[type="number"] {
+  width: 5rem;
 }

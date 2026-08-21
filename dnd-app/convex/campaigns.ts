@@ -424,6 +424,12 @@ export const purgeCampaign = internalMutation({
       .take(left);
     if (await sweep(calendars)) return await more();
 
+    const calendarEvents = await ctx.db
+      .query("calendarEvents")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
+      .take(left);
+    if (await sweep(calendarEvents)) return await more();
+
     const prefs = await ctx.db
       .query("viewPrefs")
       .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
