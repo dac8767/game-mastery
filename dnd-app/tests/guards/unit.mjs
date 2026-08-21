@@ -1627,6 +1627,80 @@ export const unit = {
         ],
       },
       {
+        // Verbatim from Derek's export, and the case that showed the
+        // attack line and the damage numbers are NOT in the file: Foundry
+        // computes both from the activity and the actor at display time.
+        // Stripped as text this read "Talons. extended. Hit: 1d4 +
+        // damage" — no bonus, no reach, no average, no damage type.
+        _id: "m3",
+        name: "Aarakocra Skirmisher",
+        type: "npc",
+        prototypeToken: {},
+        system: {
+          details: { cr: 0.25, type: { value: "elemental" } },
+          traits: { size: "med" },
+          attributes: { ac: { flat: 12, calc: "natural" }, hp: { max: 11 } },
+          abilities: {
+            str: { value: 10 },
+            dex: { value: 14 },
+            con: { value: 12 },
+          },
+        },
+        items: [
+          {
+            name: "Talons",
+            type: "weapon",
+            system: {
+              description: {
+                value:
+                  "<p> [[/attack extended]]. <em>Hit:</em> [[/damage 1d4 + " +
+                  "@abilities.dex.mod type=slashing average=true]] damage, " +
+                  "or [[/damage 3d4 + @abilities.dex.mod type=slashing " +
+                  "average=true]] damage if it moved 30+ feet.</p>",
+              },
+              activities: {
+                a1: {
+                  type: "attack",
+                  activation: { type: "action", value: 1 },
+                  range: { units: "self" },
+                  attack: {
+                    ability: "dex",
+                    bonus: "",
+                    flat: false,
+                    type: { value: "melee", classification: "weapon" },
+                  },
+                },
+              },
+            },
+          },
+          {
+            name: "Wind Javelin",
+            type: "weapon",
+            system: {
+              description: {
+                value:
+                  "<p>[[/attack extended]]. <em>Hit:</em> [[/damage 1d6 + " +
+                  "@abilities.dex.mod type=piercing average=true]] damage " +
+                  "plus [[/damage 1d4 type=thunder average=true]] damage.</p>",
+              },
+              activities: {
+                a1: {
+                  type: "attack",
+                  activation: { type: "action", value: 1 },
+                  range: { value: 30, long: 120, units: "ft" },
+                  attack: {
+                    ability: "dex",
+                    bonus: "",
+                    flat: false,
+                    type: { value: "melee", classification: "weapon" },
+                  },
+                },
+              },
+            },
+          },
+        ],
+      },
+      {
         _id: "m2",
         name: "Default AC Test",
         type: "npc",
@@ -1809,6 +1883,56 @@ export const unit = {
     check(
       "an already-hosted image is left alone rather than mirrored",
       axe.image === undefined
+    );
+
+    // ---- a stat block's attacks, computed rather than read ---------
+    const skirm = outMonsters.find((r) => r.name === "Aarakocra Skirmisher");
+    const actionText = (name) =>
+      (skirm?.actions ?? [])
+        .find((a) => a.name === name)
+        ?.blocks.map((b) => b.text)
+        .join(" ") ?? "";
+
+    // Checked against D&D Beyond's own rendering of this monster, which
+    // is the only way to know the arithmetic is right rather than merely
+    // plausible: dex 14 (+2) plus proficiency +2 from CR 1/4.
+    check(
+      "a melee attack line is composed from the activity and the actor",
+      actionText("Talons").startsWith("Melee Attack Roll: +4, reach 5 ft.")
+    );
+    check(
+      "damage carries its average, its formula and its type",
+      /\b4 \(1d4 \+ 2\) Slashing damage/.test(actionText("Talons"))
+    );
+    check(
+      "and again for the bigger die",
+      /\b9 \(3d4 \+ 2\) Slashing damage/.test(actionText("Talons"))
+    );
+    check(
+      "the switch word never reaches the page",
+      !/extended/.test(actionText("Talons"))
+    );
+    check(
+      "the enricher's full stop does not double the computed one",
+      !/ft\.\./.test(actionText("Talons"))
+    );
+    check(
+      "a thrown weapon reads as both, with both distances",
+      actionText("Wind Javelin").startsWith(
+        "Melee or Ranged Attack Roll: +4, reach 5 ft. or range 30/120 ft."
+      )
+    );
+    check(
+      "a second damage clause is computed too",
+      /2 \(1d4\) Thunder damage/.test(actionText("Wind Javelin"))
+    );
+    // An item has no actor, so there is no bonus to state. Dropping it
+    // is right; leaving "extended" behind is what used to happen.
+    check(
+      "no actor means no invented attack line",
+      ![...outItems, ...outSpells].some((r) =>
+        /Attack Roll:|extended/.test(textOf(r))
+      )
     );
 
     check("rarity is humanized", axe.rarity === "Very Rare");

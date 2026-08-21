@@ -251,8 +251,165 @@ function formatCheck(kind, inner) {
  */
 const VERB = "(?:\\s+(?:capitalize|format|lowercase|uppercase))?";
 
-/** Foundry biographies are HTML. The NPC table's fields are plain text. */
-function stripHtml(html) {
+/** "+4" / "-1" / "+0" — a bonus is already a bonus, never a score. */
+function signedNum(n) {
+  return `${n < 0 ? "-" : "+"}${Math.abs(n)}`;
+}
+
+/** The modifier for one ability, from an actor's `system.abilities`. */
+function abilityModOf(abilities, key) {
+  const score = Number(abilities?.[String(key).toLowerCase()]?.value);
+  return Number.isFinite(score) ? Math.floor((score - 10) / 2) : null;
+}
+
+/**
+ * Substitute the actor's own numbers into a roll formula.
+ *
+ * `1d4 + @abilities.dex.mod` is what the file stores; `1d4 + 2` is what
+ * it means for THIS monster. Foundry does this against a prepared actor
+ * at display time, which is why the file has neither the number nor the
+ * total.
+ */
+function resolveFormula(formula, ctx) {
+  return String(formula).replace(
+    /@abilities\.(\w+)\.mod/g,
+    (whole, ability) => {
+      const mod = abilityModOf(ctx?.abilities, ability);
+      return mod === null ? whole : String(mod);
+    }
+  );
+}
+
+/**
+ * The average of a resolved formula, the way a stat block prints it.
+ *
+ * NdF averages to N(F+1)/2 and the total is rounded DOWN — 1d4 + 2 is
+ * 4.5, printed as 4, which is what the books and D&D Beyond both show.
+ * Returns null for anything not purely dice and numbers, so an
+ * unevaluable formula prints without an average rather than with a
+ * wrong one.
+ */
+function averageOf(resolved) {
+  const terms = String(resolved).replace(/\s+/g, "").match(/[+-]?[^+-]+/g);
+  if (!terms) return null;
+
+  let total = 0;
+  for (const term of terms) {
+    const sign = term.startsWith("-") ? -1 : 1;
+    const body = term.replace(/^[+-]/, "");
+
+    const dice = body.match(/^(\d*)d(\d+)$/i);
+    if (dice) {
+      const count = Number(dice[1] || 1);
+      const faces = Number(dice[2]);
+      if (!Number.isFinite(count) || !Number.isFinite(faces)) return null;
+      total += (sign * count * (faces + 1)) / 2;
+      continue;
+    }
+    if (/^\d+$/.test(body)) {
+      total += sign * Number(body);
+      continue;
+    }
+    return null;
+  }
+  return Math.floor(total);
+}
+
+/**
+ * `[[/damage 1d4 + @abilities.dex.mod type=slashing average=true]]`
+ * -> `4 (1d4 + 2) Slashing`
+ *
+ * The trailing word "damage" is already in the prose around it, which is
+ * why it is not added here.
+ */
+function damageText(inner, ctx) {
+  const switches = {};
+  const formula = String(inner)
+    .replace(/\s*(\w+)=("[^"]*"|\S+)/g, (_, key, value) => {
+      switches[key] = value.replace(/^"|"$/g, "");
+      return "";
+    })
+    .trim();
+
+  const resolved = resolveFormula(formula, ctx).replace(/\s+/g, " ").trim();
+  const type = switches.type ? humanize(switches.type) : "";
+  const wantsAverage = switches.average !== "false";
+  const average = wantsAverage ? averageOf(resolved) : null;
+
+  const dice = average === null ? resolved : `${average} (${resolved})`;
+  return [dice, type].filter(Boolean).join(" ");
+}
+
+/**
+ * `[[/attack extended]]` -> `Melee Attack Roll: +4, reach 5 ft.`
+ *
+ * None of that is in the file. Foundry composes it from the activity's
+ * attack config and the actor: ability modifier plus proficiency, and a
+ * melee attack's reach defaults to 5 feet. Without this the enricher
+ * strips down to the bare switch word — which is how "Talons. extended."
+ * reached the screen.
+ */
+function attackLine(ctx) {
+  const activity = Object.values(ctx?.activities ?? {}).find(
+    (a) => clean(a?.type).toLowerCase() === "attack"
+  );
+  if (!activity) return null;
+
+  const atk = activity.attack ?? {};
+  const ranged = clean(atk.type?.value).toLowerCase() === "ranged";
+  const extra = Number(atk.bonus);
+
+  let bonus;
+  if (atk.flat === true) {
+    if (!Number.isFinite(extra)) return null;
+    bonus = extra;
+  } else {
+    const mod = abilityModOf(ctx?.abilities, atk.ability);
+    if (mod === null) return null;
+    bonus =
+      mod +
+      (Number.isFinite(ctx?.proficiencyBonus) ? ctx.proficiencyBonus : 0) +
+      (Number.isFinite(extra) ? extra : 0);
+  }
+
+  const range = activity.range ?? {};
+  const reach = Number(range.reach);
+  const near = Number(range.value);
+  const far = Number(range.long);
+
+  const reaches = [];
+  if (!ranged) {
+    reaches.push(`reach ${Number.isFinite(reach) && reach > 0 ? reach : 5} ft.`);
+  }
+  if (Number.isFinite(near) && near > 0) {
+    reaches.push(
+      `range ${near}${Number.isFinite(far) && far > 0 ? `/${far}` : ""} ft.`
+    );
+  }
+
+  // A melee attack that also has a range is a thrown weapon, and the
+  // book writes both halves into one line.
+  const label = ranged
+    ? "Ranged Attack Roll"
+    : reaches.length > 1
+      ? "Melee or Ranged Attack Roll"
+      : "Melee Attack Roll";
+
+  return `${label}: ${signedNum(bonus)}${
+    reaches.length ? `, ${reaches.join(" or ")}` : ""
+  }`;
+}
+
+/**
+ * Foundry biographies are HTML. The NPC table's fields are plain text.
+ *
+ * `ctx` carries the actor a monster's feature belongs to — its ability
+ * scores, its proficiency bonus, and that feature's activities. With it,
+ * the attack and damage enrichers become the numbers a stat block
+ * prints; without it they are stripped to their contents, which is right
+ * for a spell or an item, where there is no actor to compute against.
+ */
+function stripHtml(html, ctx) {
   if (typeof html !== "string" || !html) return undefined;
 
   const text = html
@@ -299,6 +456,16 @@ function stripHtml(html) {
     .replace(/\[\[\/(check|save|conc)\s+([^\]]*)\]\]/g, (_, kind, inner) =>
       formatCheck(kind === "save" || kind === "conc" ? "save" : "check", inner)
     )
+    // The two that are COMPUTED rather than written. Both must run
+    // before the generic bracket fallback below, which would otherwise
+    // reduce them to their switch words.
+    // An attack line is meaningless without someone making the attack —
+    // a longsword's bonus depends on who is holding it — so with no
+    // actor it is dropped rather than reduced to its switch word.
+    .replace(/\[\[\/attack\b[^\]]*\]\]/g, () => attackLine(ctx) ?? "")
+    .replace(/\[\[\/damage\s+([^\]]*)\]\]/g, (_, inner) =>
+      damageText(inner, ctx)
+    )
     // Anything else inline — `[[/r 1d6]]`, `[[/damage 8d6 fire average=false]]`
     // — keeps its content with the key=value switches dropped.
     .replace(/\[\[\/?[a-z]*\s*([^\]]*)\]\]/g, (_, inner) =>
@@ -312,6 +479,11 @@ function stripHtml(html) {
     // than dropped; a data path IS its English reading, so this is not
     // inventing rules text. Anything else dotted goes, along with a
     // trailing formatting verb ("capitalize").
+    // An ability modifier in loose prose, with an actor to read it off.
+    .replace(/@abilities\.(\w+)\.mod/g, (whole, ability) => {
+      const mod = abilityModOf(ctx?.abilities, ability);
+      return mod === null ? whole : signedNum(mod);
+    })
     .replace(new RegExp(`@attributes\\.spell\\.dc${VERB}`, "g"), "your spell save DC")
     .replace(new RegExp(`@item\\.level${VERB}`, "g"), "the spell's level")
     .replace(new RegExp(`@details\\.level${VERB}`, "g"), "your level")
@@ -324,6 +496,13 @@ function stripHtml(html) {
     // real: the prose around `[[/check ...]]` often already ends in the
     // word "check", which the enricher supplies too.
     .replace(/\b(check|saving throw|save)\s+\1\b/gi, "$1")
+    // A computed line ends in "ft." and the prose after the enricher
+    // starts with its own full stop. Exactly two, never three: an
+    // ellipsis is punctuation, not a mistake.
+    .replace(/(?<!\.)\.\.(?!\.)/g, ".")
+    // A dropped enricher can leave the sentence starting on its own
+    // punctuation.
+    .replace(/(^|\n)[ \t]*[.,;:]\s*/g, "$1")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/ ([.,;:!?])/g, "$1")
     .replace(/\n{3,}/g, "\n\n")
@@ -345,7 +524,7 @@ function stripHtml(html) {
  * prose around it, so an enricher inside a table cell is handled the
  * same way as one in a paragraph.
  */
-function toBlocks(html) {
+function toBlocks(html, ctx) {
   if (typeof html !== "string" || !html) return undefined;
 
   const blocks = [];
@@ -360,28 +539,28 @@ function toBlocks(html) {
     if (!part) continue;
 
     if (/^<table/i.test(part)) {
-      const table = parseTable(part);
+      const table = parseTable(part, ctx);
       if (table) blocks.push(table);
       continue;
     }
     if (/^<[uo]l/i.test(part)) {
-      const list = parseList(part);
+      const list = parseList(part, ctx);
       if (list) blocks.push(list);
       continue;
     }
 
-    const text = stripHtml(part);
+    const text = stripHtml(part, ctx);
     if (text) blocks.push({ type: "text", text });
   }
 
   return blocks.length > 0 ? blocks : undefined;
 }
 
-function parseTable(html) {
+function parseTable(html, ctx) {
   const rowsOf = (chunk) =>
     [...chunk.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) =>
       [...m[1].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)].map(
-        (c) => stripHtml(c[1]) ?? ""
+        (c) => stripHtml(c[1], ctx) ?? ""
       )
     );
 
@@ -397,9 +576,9 @@ function parseTable(html) {
   return { type: "table", headers, rows };
 }
 
-function parseList(html) {
+function parseList(html, ctx) {
   const items = [...html.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)]
-    .map((m) => stripHtml(m[1]) ?? "")
+    .map((m) => stripHtml(m[1], ctx) ?? "")
     .filter(Boolean);
   if (items.length === 0) return null;
   return { type: "list", ordered: /^<ol/i.test(html), items };
@@ -957,7 +1136,7 @@ function abilityScores(abilities) {
  * always true ("Two Heads"), an action is something taken on a turn
  * ("Multiattack"). Legendary actions declare themselves.
  */
-function monsterFeatures(doc) {
+function monsterFeatures(doc, actor) {
   const traits = [];
   const actions = [];
   const legendary = [];
@@ -974,7 +1153,17 @@ function monsterFeatures(doc) {
     const name = clean(item.name);
     if (!name) continue;
 
-    const entry = { name, blocks: toBlocks(is.description?.value) ?? [] };
+    // The actor's own numbers, plus THIS feature's activities. Both are
+    // needed to turn `[[/attack extended]]` and `[[/damage 1d4 +
+    // @abilities.dex.mod ...]]` into the line a stat block prints.
+    const entry = {
+      name,
+      blocks:
+        toBlocks(is.description?.value, {
+          ...actor,
+          activities: is.activities,
+        }) ?? [],
+    };
 
     // Legendary actions declare themselves through their ACTIVATION
     // cost rather than a subtype — Derek's export has no "legendary"
@@ -1162,7 +1351,12 @@ function actorToMonster(doc) {
       ? Number(details.xp.value)
       : xpFor(cr),
     ...(() => {
-      const f = monsterFeatures(doc);
+      const f = monsterFeatures(doc, {
+        abilities: s.abilities,
+        proficiencyBonus: Number.isFinite(Number(attrs.prof))
+          ? Number(attrs.prof)
+          : proficiencyFor(cr),
+      });
       return {
         traits: f.traits.length ? f.traits : undefined,
         actions: f.actions.length ? f.actions : undefined,
