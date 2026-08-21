@@ -1710,6 +1710,66 @@ export const unit = {
       base.tabs[1].fields.find((f) => f.key === "e").span === 4 &&
         base.tabs[0].fields[0].span === 1
     );
+    check(
+      "and gives them a second row, since prose needs the height",
+      base.tabs[1].fields.find((f) => f.key === "e").rows === 2 &&
+        base.tabs[0].fields[0].rows === 1
+    );
+
+    // ---- rows ------------------------------------------------------
+    // The point of a row span is alignment: a two-row field beside two
+    // one-row fields. That only works if rows are a fixed track, which
+    // is a CSS fact the model cannot check — what it CAN guarantee is
+    // that the number is always a usable one.
+    check(
+      "a field stored before rows existed gets one row, not NaN",
+      tpl
+        .reconcileTemplate(
+          { tabs: [{ id: "x", title: "X", fields: [{ key: "a", span: 1 }] }] },
+          ["a"]
+        )
+        .tabs[0].fields[0].rows === 1
+    );
+    check(
+      "rows outside 1-6 are clamped",
+      tpl
+        .reconcileTemplate(
+          {
+            tabs: [
+              {
+                id: "x",
+                title: "X",
+                fields: [
+                  { key: "a", span: 1, rows: 99 },
+                  { key: "b", span: 1, rows: 0 },
+                ],
+              },
+            ],
+          },
+          ["a", "b"]
+        )
+        .tabs[0].fields.map((f) => f.rows)
+        .join() === "6,1"
+    );
+    check(
+      "setRows clamps too",
+      tpl.setRows(base, "a", 99).tabs[0].fields[0].rows === tpl.MAX_ROWS &&
+        tpl.setRows(base, "a", -3).tabs[0].fields[0].rows === tpl.MIN_ROWS
+    );
+    check(
+      "setRows leaves the width alone",
+      tpl.setRows(base, "e", 3).tabs[1].fields.find((f) => f.key === "e")
+        .span === 4
+    );
+    check(
+      "setSpan leaves the height alone",
+      tpl.setSpan(base, "e", 2).tabs[1].fields.find((f) => f.key === "e")
+        .rows === 2
+    );
+    check(
+      "moveField carries the height with the field",
+      tpl.moveField(base, "e", "one", 0).tabs[0].fields[0].rows === 2
+    );
 
     // ---- reconcileTemplate -----------------------------------------
     check(

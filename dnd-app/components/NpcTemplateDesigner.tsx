@@ -7,7 +7,9 @@ import { Id } from "@/convex/_generated/dataModel";
 import { COLUMN_BY_KEY } from "@/components/npcColumns";
 import { BODY_KEYS, resolveTemplate } from "@/components/NpcDetail";
 import {
+  MAX_ROWS,
   MAX_SPAN,
+  MIN_ROWS,
   MIN_SPAN,
   NpcTemplate,
   TEMPLATE_LIMITS,
@@ -15,6 +17,7 @@ import {
   moveField,
   removeTab,
   renameTab,
+  setRows,
   setSpan,
   shiftTab,
   templateKeys,
@@ -68,13 +71,18 @@ export function NpcTemplateDesigner({
   /** Live resize: which field, and what span the pointer is asking for. */
   const resizing = useRef<{
     key: string;
+    axis: "x" | "y" | "both";
     startX: number;
+    startY: number;
     startSpan: number;
+    startRows: number;
     columnWidth: number;
+    rowHeight: number;
   } | null>(null);
-  const [resizeSpan, setResizeSpan] = useState<{
+  const [resizeTo, setResizeTo] = useState<{
     key: string;
     span: number;
+    rows: number;
   } | null>(null);
 
   const gridRef = useRef<HTMLDivElement>(null);
@@ -113,42 +121,83 @@ export function NpcTemplateDesigner({
 
   // ---- resizing ----------------------------------------------------
 
-  const beginResize = (e: React.PointerEvent, key: string, span: number) => {
+  const beginResize = (
+    e: React.PointerEvent,
+    key: string,
+    axis: "x" | "y" | "both",
+    span: number,
+    rows: number
+  ) => {
     e.preventDefault();
     e.stopPropagation();
     const grid = gridRef.current;
     if (!grid) return;
-    // Measured rather than assumed: the grid is fluid, and a span read
-    // off a guessed column width jumps by two where it should jump by
-    // one.
-    const style = getComputedStyle(grid);
-    const gap = parseFloat(style.columnGap || "0") || 0;
-    const columnWidth = (grid.clientWidth - gap * (COLUMNS - 1)) / COLUMNS;
 
-    resizing.current = { key, startX: e.clientX, startSpan: span, columnWidth };
-    setResizeSpan({ key, span });
+    // Measured rather than assumed, on both axes: the grid is fluid, so
+    // a step read off a guessed column width jumps by two where it
+    // should jump by one. The row height is a fixed track — that is what
+    // makes "two rows" mean the same height everywhere and lets a
+    // two-row field line up with two one-row fields beside it.
+    const style = getComputedStyle(grid);
+    const colGap = parseFloat(style.columnGap || "0") || 0;
+    const rowGap = parseFloat(style.rowGap || "0") || 0;
+    const columnWidth = (grid.clientWidth - colGap * (COLUMNS - 1)) / COLUMNS;
+    const rowHeight =
+      (parseFloat(style.gridAutoRows || "0") || 0) + rowGap;
+
+    resizing.current = {
+      key,
+      axis,
+      startX: e.clientX,
+      startY: e.clientY,
+      startSpan: span,
+      startRows: rows,
+      columnWidth,
+      rowHeight,
+    };
+    setResizeTo({ key, span, rows });
     (e.target as Element).setPointerCapture?.(e.pointerId);
   };
 
   const moveResize = (e: React.PointerEvent) => {
     const r = resizing.current;
-    if (!r || r.columnWidth <= 0) return;
-    const delta = Math.round((e.clientX - r.startX) / r.columnWidth);
-    const span = Math.min(
-      MAX_SPAN,
-      Math.max(MIN_SPAN, r.startSpan + delta)
-    );
-    setResizeSpan({ key: r.key, span });
+    if (!r) return;
+
+    const span =
+      r.axis === "y" || r.columnWidth <= 0
+        ? r.startSpan
+        : Math.min(
+            MAX_SPAN,
+            Math.max(
+              MIN_SPAN,
+              r.startSpan + Math.round((e.clientX - r.startX) / r.columnWidth)
+            )
+          );
+    const rows =
+      r.axis === "x" || r.rowHeight <= 0
+        ? r.startRows
+        : Math.min(
+            MAX_ROWS,
+            Math.max(
+              MIN_ROWS,
+              r.startRows + Math.round((e.clientY - r.startY) / r.rowHeight)
+            )
+          );
+
+    setResizeTo({ key: r.key, span, rows });
   };
 
   const endResize = () => {
     const r = resizing.current;
-    const asked = resizeSpan;
+    const asked = resizeTo;
     resizing.current = null;
-    setResizeSpan(null);
-    if (r && asked && asked.span !== r.startSpan) {
-      edit(setSpan(template, r.key, asked.span));
-    }
+    setResizeTo(null);
+    if (!r || !asked) return;
+
+    let next = template;
+    if (asked.span !== r.startSpan) next = setSpan(next, r.key, asked.span);
+    if (asked.rows !== r.startRows) next = setRows(next, r.key, asked.rows);
+    if (next !== template) edit(next);
   };
 
   // ---- dragging ----------------------------------------------------
@@ -168,11 +217,12 @@ export function NpcTemplateDesigner({
       <h2>NPC record layout</h2>
       <p className="settings-note">
         This is the record itself. Drag a field to move it, drag its right
-        edge to make it wider, or drop it on a tab to send it there.
-        Everyone in this campaign opens an NPC to whatever you arrange
-        here — which fields a player actually receives is still decided on
-        the server, so a DM-only field on a shared tab stays hidden from
-        them.
+        edge to widen it, its bottom edge to make it taller, or the corner
+        for both. Drop it on a tab to send it there. Everyone in this
+        campaign opens an NPC to whatever you arrange here — which fields
+        a player actually receives is still decided on the server, so a
+        DM-only field on a shared tab stays hidden from them. The notes
+        rail and the hide switch are fixed and are not arranged here.
       </p>
 
       {error && <p className="form-error">{error}</p>}
@@ -198,11 +248,19 @@ export function NpcTemplateDesigner({
               <span className="record-chip">Place</span>
             </p>
           </div>
-          <span className="settings-note tpl-head-note">
-            Fixed — every record opens on its portrait and name.
-          </span>
+          <div className="record-head-right">
+            <label className="record-hide">
+              <input type="checkbox" disabled />
+              <span>Hide NPC from players</span>
+            </label>
+            <span className="settings-note tpl-head-note">
+              Fixed — every record opens on its portrait and name.
+            </span>
+          </div>
         </div>
 
+        <div className="record-split">
+        <div className="record-left">
         <div className="record-tabbar">
           <div className="record-tabs" role="tablist">
             {template.tabs.map((tab, ti) => (
@@ -314,8 +372,9 @@ export function NpcTemplateDesigner({
           {openTab?.fields.map((f, fi) => {
             const col = COLUMN_BY_KEY.get(f.key);
             if (!col) return null;
-            const span =
-              resizeSpan?.key === f.key ? resizeSpan.span : f.span;
+            const live = resizeTo?.key === f.key ? resizeTo : null;
+            const span = live ? live.span : f.span;
+            const rows = live ? live.rows : f.rows;
             const isDropTarget =
               dropAt?.tab === openTab.id && dropAt.index === fi;
 
@@ -323,8 +382,10 @@ export function NpcTemplateDesigner({
               <div
                 key={f.key}
                 className={`detail-field tpl-field sp-${span}${
-                  col.dmOnly ? " dm-field" : ""
-                }${isDropTarget ? " over" : ""}`}
+                  rows > 1 ? ` rw-${rows}` : ""
+                }${col.dmOnly ? " dm-field" : ""}${
+                  isDropTarget ? " over" : ""
+                }`}
                 draggable
                 onDragStart={(e) => {
                   dragging.current = f.key;
@@ -374,12 +435,33 @@ export function NpcTemplateDesigner({
                   />
                 )}
 
+                {/* Three handles, because width and height are
+                    different decisions: the right edge widens, the
+                    bottom edge makes it taller, the corner does both. */}
                 <span
-                  className="tpl-resize"
+                  className="tpl-resize tpl-resize-x"
                   title="Drag to set how wide this field is"
-                  onPointerDown={(e) => beginResize(e, f.key, f.span)}
+                  onPointerDown={(e) =>
+                    beginResize(e, f.key, "x", f.span, f.rows)
+                  }
                 />
-                <span className="tpl-span">{span}/4</span>
+                <span
+                  className="tpl-resize tpl-resize-y"
+                  title="Drag to set how many rows this field takes"
+                  onPointerDown={(e) =>
+                    beginResize(e, f.key, "y", f.span, f.rows)
+                  }
+                />
+                <span
+                  className="tpl-resize tpl-resize-xy"
+                  title="Drag to set width and height"
+                  onPointerDown={(e) =>
+                    beginResize(e, f.key, "both", f.span, f.rows)
+                  }
+                />
+                <span className="tpl-span">
+                  {span}×{rows}
+                </span>
               </div>
             );
           })}
@@ -390,6 +472,26 @@ export function NpcTemplateDesigner({
             </p>
           )}
         </div>
+        </div>
+
+        {/* Drawn because it is half the record, and leaving it out
+            would make the tabs look twice as wide here as they are. */}
+        <aside className="record-notes tpl-notes">
+          <div className="detail-field">
+            <div className="detail-label">Player Notes</div>
+            <textarea className="detail-input" rows={5} disabled />
+          </div>
+          <div className="detail-field dm-field">
+            <div className="detail-label">
+              DM Notes<span className="dm-tag">DM only</span>
+            </div>
+            <textarea className="detail-input" rows={5} disabled />
+          </div>
+          <p className="settings-note">
+            Fixed — the notes are read beside every tab.
+          </p>
+        </aside>
+      </div>
       </div>
 
       <div className="cal-actions">

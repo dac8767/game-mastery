@@ -5587,3 +5587,149 @@ button.cal-day:hover {
 .sbd-col .tpl-tab {
   background: var(--bg);
 }
+
+/* ---------- The record: fields left, notes right ---------- */
+
+.record-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 1000px) {
+  .record-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.record-left {
+  min-width: 0;
+}
+
+/* The notes are read beside whatever tab is open, so they line up with
+   the tab strip rather than with the fields below it. */
+.record-notes {
+  min-width: 0;
+  display: grid;
+  gap: 0.9rem;
+  align-content: start;
+  padding: 0.75rem 0.9rem 0.9rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.record-notes .detail-field.tall .detail-input {
+  min-height: 9rem;
+}
+
+.record-head-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+  flex: none;
+}
+
+/* A switch about who may see this NPC, not a fact about them — so it
+   reads as a control beside the name rather than a field in a list. */
+.record-hide {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.record-hide:hover {
+  color: var(--text);
+}
+
+/* Fixed row tracks, so "two rows" means the same height everywhere and
+   a two-row field lines up with two one-row fields beside it. Without
+   a track size, every row would be as tall as its own tallest field
+   and a span would align with nothing. */
+.record-fields {
+  grid-auto-rows: 4.4rem;
+}
+
+.record-fields .detail-field {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Given a taller area, the control takes it rather than leaving a gap
+   under itself. */
+.record-fields .detail-input {
+  flex: 1;
+  min-height: 0;
+}
+
+.record-fields .detail-field.rw-2 { grid-row: span 2; }
+.record-fields .detail-field.rw-3 { grid-row: span 3; }
+.record-fields .detail-field.rw-4 { grid-row: span 4; }
+.record-fields .detail-field.rw-5 { grid-row: span 5; }
+.record-fields .detail-field.rw-6 { grid-row: span 6; }
+
+/* Width, height, and both. The corner sits on top of the other two. */
+.tpl-resize-x {
+  top: 0;
+  right: -3px;
+  width: 9px;
+  height: 100%;
+  cursor: ew-resize;
+}
+
+.tpl-resize-y {
+  left: 0;
+  bottom: -3px;
+  width: 100%;
+  height: 9px;
+  top: auto;
+  cursor: ns-resize;
+}
+
+.tpl-resize-xy {
+  right: -3px;
+  bottom: -3px;
+  top: auto;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  z-index: 1;
+}
+
+.tpl-resize-y::after {
+  top: auto;
+  bottom: 3px;
+  left: 20%;
+  right: 20%;
+  width: auto;
+  height: 2px;
+}
+
+.tpl-resize-xy::after {
+  inset: auto 3px 3px auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 0 0 3px 0;
+  border-right: 2px solid var(--border);
+  border-bottom: 2px solid var(--border);
+  background: none;
+  top: auto;
+  left: auto;
+}
+
+.tpl-field:hover .tpl-resize-xy::after {
+  border-color: var(--accent);
+}
+
+/* The designer's grid uses the record's row tracks, so what you size
+   here is the height it will have. */
+.tpl-grid {
+  grid-auto-rows: 4.4rem;
+}

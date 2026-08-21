@@ -219,7 +219,29 @@ export const integrity = {
       "npcSections"
     );
 
-    const placed = new Set([...sectionKeys, ...headerKeys]);
+    // Fields the record renders in a fixed place rather than in a tab:
+    // the notes rail, and the hide switch beside the name. They are
+    // "placed" as much as a section's fields are — just not by the
+    // template — so they satisfy the no-field-goes-missing rule, and
+    // they must NOT also appear in a section or they would render
+    // twice.
+    const pinnedKeys = constArrayStrings(
+      sectionsSrc,
+      "NOTES_KEYS",
+      "npcSections"
+    ).concat(
+      // PINNED_KEYS spreads NOTES_KEYS, so only its own literals are
+      // readable here; the spread is picked up by the line above.
+      [
+        ...(sectionsSrc.match(/PINNED_KEYS\s*=\s*\[([^\]]*)\]/)?.[1] ?? "")
+          .matchAll(/"([^"]+)"/g),
+      ].map((m) => m[1])
+    );
+    if (pinnedKeys.length === 0) {
+      throw new Error("no PINNED_KEYS in npcSections.ts");
+    }
+
+    const placed = new Set([...sectionKeys, ...headerKeys, ...pinnedKeys]);
     for (const key of columnKeys) {
       if (!placed.has(key)) {
         problems.push(
@@ -228,7 +250,15 @@ export const integrity = {
         );
       }
     }
-    for (const key of [...sectionKeys, ...headerKeys, ...summaryKeys]) {
+    for (const key of pinnedKeys) {
+      if (sectionKeys.includes(key) || headerKeys.includes(key)) {
+        problems.push(
+          `\`${key}\` is pinned outside the tabs AND placed in a section — ` +
+            "the record would render it twice"
+        );
+      }
+    }
+    for (const key of [...sectionKeys, ...headerKeys, ...pinnedKeys, ...summaryKeys]) {
       if (!columnKeySet.has(key)) {
         problems.push(
           `npcSections places \`${key}\`, which is not a column — the record ` +
@@ -236,6 +266,34 @@ export const integrity = {
         );
       }
     }
+    // A pinned field is out of the template's hands, so the ONLY thing
+    // that renders it is NpcDetail itself. Pinning one and forgetting
+    // to draw it is the same silent loss as leaving it out of a
+    // section, minus the "More" safety net that catches that case.
+    {
+      const src = read("components", "NpcDetail.tsx");
+      if (!/NOTES_KEYS\.map\(/.test(src)) {
+        problems.push(
+          "NpcDetail does not render NOTES_KEYS — the notes rail is pinned " +
+            "out of the tabs, so nothing else would draw it"
+        );
+      }
+      if (!/record-hide/.test(src)) {
+        problems.push(
+          "NpcDetail no longer renders the hide switch, which is pinned out " +
+            "of the tabs and drawn nowhere else"
+        );
+      }
+      // And it has to stay DM-only: the switch is about who may see the
+      // NPC, so offering it to a player is offering them the lever.
+      if (!/isDm && hiddenCol/.test(src)) {
+        problems.push(
+          "the hide switch is not gated on isDm — a player would be offered " +
+            "the control that hides NPCs from players"
+        );
+      }
+    }
+
     // Every editable field needs an editor somewhere in the record.
     // This is not hypothetical: moving `name` and `nickname` into the
     // header rendered them as a heading and a line of text, and the DM
@@ -294,6 +352,9 @@ export const integrity = {
       ),
     ].map((m) => m[1]);
     for (const key of dmKeys) {
+      // A pinned field is not in any section by design; the record
+      // renders it itself and gates it on isDm there.
+      if (pinnedKeys.includes(key)) continue;
       if (!dmSectionKeys.includes(key)) {
         problems.push(
           `\`${key}\` is dmOnly but is not in the record's "DM only" section — ` +

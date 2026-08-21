@@ -8,10 +8,13 @@ import { Id } from "@/convex/_generated/dataModel";
 import { COLUMNS, COLUMN_BY_KEY, ColumnDef, portraitSrc } from "@/components/npcColumns";
 import {
   HEADER_KEYS,
+  NOTES_KEYS,
+  PINNED_KEYS,
   SUMMARY_KEYS,
   arrange,
 } from "@/components/npcSections";
 import {
+  LooseTemplate,
   NpcTemplate,
   defaultTemplate,
   reconcileTemplate,
@@ -82,7 +85,7 @@ const isWide = (col: ColumnDef) => col.kind === "longtext";
 
 /** Everything the record lays out — the header's own fields excepted. */
 export const BODY_KEYS = COLUMNS.map((c) => c.key).filter(
-  (k) => !HEADER_KEYS.includes(k)
+  (k) => !HEADER_KEYS.includes(k) && !PINNED_KEYS.includes(k)
 );
 
 /**
@@ -94,7 +97,7 @@ export const BODY_KEYS = COLUMNS.map((c) => c.key).filter(
  * has no opinion about a field added since, and an unmentioned field
  * would otherwise be invisible in every record in the campaign.
  */
-export function resolveTemplate(stored: NpcTemplate | null): NpcTemplate {
+export function resolveTemplate(stored: LooseTemplate | null): NpcTemplate {
   const base =
     stored ??
     defaultTemplate(
@@ -174,7 +177,9 @@ export function NpcDetail({
     () =>
       templateFor(
         resolveTemplate(stored ?? null),
-        allowed.filter((k) => !HEADER_KEYS.includes(k))
+        allowed.filter(
+          (k) => !HEADER_KEYS.includes(k) && !PINNED_KEYS.includes(k)
+        )
       ),
     // `allowed` is derived from a module constant and isDm, so its
     // identity churns every render while its contents do not.
@@ -189,6 +194,15 @@ export function NpcDetail({
   // a DM with no nickname set still needs somewhere to type one.
   const headerFields = HEADER_KEYS.filter((k) => k !== "portraitPath")
     .map((k) => COLUMN_BY_KEY.get(k))
+    .filter((c): c is ColumnDef => Boolean(c))
+    .filter((c) => (isDm || !c.dmOnly) && (canEdit(c) || toInput(npc, c)));
+
+  const hiddenCol = COLUMN_BY_KEY.get("hidden") ?? null;
+
+  // The notes rail: read beside whatever tab is open, never behind
+  // one. You read the fields and write in the notes at the same time,
+  // and putting them on a tab means losing your place to check an age.
+  const noteCols = NOTES_KEYS.map((k) => COLUMN_BY_KEY.get(k))
     .filter((c): c is ColumnDef => Boolean(c))
     .filter((c) => (isDm || !c.dmOnly) && (canEdit(c) || toInput(npc, c)));
 
@@ -235,14 +249,39 @@ export function NpcDetail({
           )}
         </div>
 
-        <button type="button" className="npc-btn" onClick={onClose}>
-          Back to the list
-        </button>
+        <div className="record-head-right">
+          {/* Not a fact about the NPC the way the fields are — a switch
+              about who may see them at all — so it sits with the name
+              rather than in a list of attributes. DM-only, and the
+              server withholds a hidden NPC regardless of this. */}
+          {isDm && hiddenCol && (
+            <label className="record-hide">
+              <input
+                type="checkbox"
+                checked={toInput(npc, hiddenCol) === "true"}
+                onChange={(e) =>
+                  void commit(hiddenCol, e.target.checked ? "true" : "false")
+                }
+              />
+              <span>Hide NPC from players</span>
+            </label>
+          )}
+          <button type="button" className="npc-btn" onClick={onClose}>
+            Back to the list
+          </button>
+        </div>
       </header>
 
       {error && <p className="form-error">{error}</p>}
 
-      <div className="record-tabbar">
+      {/* Two halves. The left is the fields, behind whatever tab you
+          chose; the right is the notes, which every tab is read
+          beside. You read a record and write in its notes at the same
+          time, and a tab that hid them would mean losing your place to
+          check an age. */}
+      <div className="record-split">
+        <div className="record-left">
+          <div className="record-tabbar">
         <div className="record-tabs" role="tablist">
           {tabs.map((t) => (
             <button
@@ -287,6 +326,7 @@ export function NpcDetail({
                   editable={canEdit(col)}
                   dmOnly={Boolean(col.dmOnly)}
                   span={f.span}
+                  rows={f.rows}
                   onCommit={(text) => commit(col, text)}
                 />
               );
@@ -299,6 +339,25 @@ export function NpcDetail({
             {!showEmpty && " Tick “Show empty fields” to add something."}
           </p>
         )}
+          </div>
+        </div>
+
+        <aside className="record-notes">
+          {noteCols.map((col) => (
+            <RecordField
+              key={col.key}
+              col={col}
+              value={toInput(npc, col)}
+              editable={canEdit(col)}
+              dmOnly={Boolean(col.dmOnly)}
+              tall
+              onCommit={(text) => commit(col, text)}
+            />
+          ))}
+          {noteCols.length === 0 && (
+            <p className="settings-note">Nothing written here.</p>
+          )}
+        </aside>
       </div>
     </section>
   );
@@ -328,6 +387,8 @@ function RecordField({
   dmOnly,
   variant,
   span,
+  rows,
+  tall,
   onCommit,
 }: {
   col: ColumnDef;
@@ -338,6 +399,10 @@ function RecordField({
   variant?: "title" | "subtitle";
   /** Columns of the record grid, 1–4. The template decides it. */
   span?: number;
+  /** Rows of the record grid, 1–6. The template decides it. */
+  rows?: number;
+  /** The notes rail: fill whatever height it is given. */
+  tall?: boolean;
   onCommit: (text: string) => void;
 }) {
   const [draft, setDraft] = useState(value);
@@ -345,9 +410,16 @@ function RecordField({
   // Follow the live query when someone else edits the same record.
   useEffect(() => setDraft(value), [value]);
 
-  const className = `detail-field${dmOnly ? " dm-field" : ""}${
-    variant ? ` record-${variant}` : span ? ` sp-${span}` : ""
-  }`;
+  const className = [
+    "detail-field",
+    dmOnly ? "dm-field" : "",
+    variant ? `record-${variant}` : "",
+    !variant && span ? `sp-${span}` : "",
+    !variant && rows && rows > 1 ? `rw-${rows}` : "",
+    tall ? "tall" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   if (!editable) {
     return (

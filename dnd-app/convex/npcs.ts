@@ -352,7 +352,13 @@ export const saveTemplate = mutation({
       v.object({
         id: v.string(),
         title: v.string(),
-        fields: v.array(v.object({ key: v.string(), span: v.number() })),
+        fields: v.array(
+          v.object({
+            key: v.string(),
+            span: v.number(),
+            rows: v.optional(v.number()),
+          })
+        ),
       })
     ),
   },
@@ -365,6 +371,7 @@ export const saveTemplate = mutation({
       fields: t.fields.map((f) => ({
         key: f.key.slice(0, 64),
         span: Math.min(4, Math.max(1, Math.round(f.span) || 1)),
+        rows: Math.min(6, Math.max(1, Math.round(f.rows ?? 1) || 1)),
       })),
     }));
 

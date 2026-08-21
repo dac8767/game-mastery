@@ -35,6 +35,21 @@ export interface NpcSection {
 export const HEADER_KEYS = ["portraitPath", "name", "nickname"];
 
 /**
+ * Fields the record renders in a fixed place, outside the tabs.
+ *
+ * Notes are the reason the record is split in two: you read the fields
+ * and write in the notes, usually at the same time, and putting the
+ * notes behind a tab means losing your place to check somebody's age.
+ * They get a rail of their own that every tab is read beside.
+ *
+ * `hidden` is not a fact about the NPC the way the other fields are —
+ * it is a switch about who may see them at all — so it belongs with
+ * the name rather than in a list of attributes.
+ */
+export const NOTES_KEYS = ["playerNotes", "dmNotes"];
+export const PINNED_KEYS = ["hidden", ...NOTES_KEYS];
+
+/**
  * Read under the name as a one-line summary — the three facts you would
  * say out loud introducing them. Rendered as chips, skipped when empty.
  */
@@ -97,16 +112,10 @@ export const NPC_SECTIONS: NpcSection[] = [
     keys: ["job", "status", "politics", "wantsNeeds"],
   },
   {
-    id: "notes",
-    title: "Notes",
-    blurb: "Anyone at the table can write here.",
-    keys: ["playerNotes"],
-  },
-  {
     id: "dm",
     title: "DM only",
     blurb: "Never sent to a player — the server withholds these entirely.",
-    keys: ["hidden", "secret", "dmNotes"],
+    keys: ["secret"],
   },
 ];
 
@@ -114,6 +123,7 @@ export const NPC_SECTIONS: NpcSection[] = [
 export function placedKeys(): string[] {
   return [
     ...HEADER_KEYS,
+    ...PINNED_KEYS,
     ...NPC_SECTIONS.flatMap((s) => s.keys),
   ];
 }

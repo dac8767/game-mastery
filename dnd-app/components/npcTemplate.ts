@@ -30,6 +30,26 @@ export const SPANS = [
 export const MIN_SPAN = 1;
 export const MAX_SPAN = 4;
 
+/**
+ * How many grid ROWS a field takes.
+ *
+ * Separate from the column span because they answer different
+ * questions: how wide is about fitting a value on one line, how tall
+ * is about a description getting room to breathe. A two-row field
+ * beside two one-row fields is the arrangement that needs both, and it
+ * is only possible if the rows are a fixed track — which is why the
+ * record grid sets grid-auto-rows rather than letting content decide.
+ */
+export const MIN_ROWS = 1;
+export const MAX_ROWS = 6;
+
+export const ROW_SPANS = [
+  { value: 1, label: "1 row" },
+  { value: 2, label: "2 rows" },
+  { value: 3, label: "3 rows" },
+  { value: 4, label: "4 rows" },
+];
+
 /** Bounds, so a typo cannot produce a template nothing can render. */
 export const TEMPLATE_LIMITS = {
   tabs: 12,
@@ -38,8 +58,10 @@ export const TEMPLATE_LIMITS = {
 
 export interface TemplateField {
   key: string;
-  /** 1–4 columns of the record's grid. */
+  /** 1-4 columns of the record grid. */
   span: number;
+  /** 1-6 rows of the record grid. */
+  rows: number;
 }
 
 export interface TemplateTab {
@@ -52,10 +74,34 @@ export interface NpcTemplate {
   tabs: TemplateTab[];
 }
 
+/**
+ * A template as it comes off the wire, before reconciling.
+ *
+ * Every part optional because every part might be: a document stored
+ * before a field existed, or one hand-edited in the dashboard. This is
+ * the shape `reconcileTemplate` accepts; NpcTemplate is what it
+ * returns.
+ */
+export interface LooseTemplate {
+  tabs?: {
+    id?: string;
+    title?: string;
+    fields?: { key?: string; span?: number; rows?: number }[];
+  }[];
+}
+
 const clampSpan = (n: unknown): number => {
   const v = Math.round(Number(n));
   if (!Number.isFinite(v)) return 1;
   return Math.min(MAX_SPAN, Math.max(MIN_SPAN, v));
+};
+
+const clampRows = (n: unknown): number => {
+  const v = Math.round(Number(n));
+  // Absent is the common case, not an error: every field stored before
+  // rows existed has none, and one row is what it was being given.
+  if (!Number.isFinite(v)) return 1;
+  return Math.min(MAX_ROWS, Math.max(MIN_ROWS, v));
 };
 
 /**
@@ -89,7 +135,11 @@ export function defaultTemplate(
     tabs: sections.map((s, i) => ({
       id: s.id || tabId(s.title, i),
       title: s.title,
-      fields: s.keys.map((key) => ({ key, span: wide.has(key) ? 4 : 1 })),
+      fields: s.keys.map((key) => ({
+        key,
+        span: wide.has(key) ? 4 : 1,
+        rows: wide.has(key) ? 2 : 1,
+      })),
     })),
   };
 }
@@ -110,7 +160,12 @@ export function defaultTemplate(
  * beats gone.
  */
 export function reconcileTemplate(
-  template: NpcTemplate | null | undefined,
+  // Deliberately loose. What arrives is a stored document, which may
+  // predate any field this type currently requires — `rows` did not
+  // exist last week — and the whole job of this function is to turn
+  // whatever is there into something renderable. Typing the input as a
+  // complete NpcTemplate would be claiming the guarantee it provides.
+  template: LooseTemplate | null | undefined,
   validKeys: string[]
 ): NpcTemplate {
   const valid = new Set(validKeys);
@@ -125,7 +180,7 @@ export function reconcileTemplate(
       // to a field the eye has already scrolled past.
       if (!valid.has(key) || seen.has(key)) continue;
       seen.add(key);
-      fields.push({ key, span: clampSpan(f?.span) });
+      fields.push({ key, span: clampSpan(f?.span), rows: clampRows(f?.rows) });
     }
     const title = String(tab?.title ?? "").trim().slice(0, TEMPLATE_LIMITS.titleLength);
     tabs.push({
@@ -153,7 +208,7 @@ export function reconcileTemplate(
   const missing = validKeys.filter((k) => !seen.has(k));
   if (missing.length > 0) {
     tabs[tabs.length - 1].fields.push(
-      ...missing.map((key) => ({ key, span: 1 }))
+      ...missing.map((key) => ({ key, span: 1, rows: 1 }))
     );
   }
 
@@ -195,7 +250,7 @@ export function moveField(
   const moved =
     template.tabs
       .flatMap((t) => t.fields)
-      .find((f) => f.key === key) ?? { key, span: 1 };
+      .find((f) => f.key === key) ?? { key, span: 1, rows: 1 };
 
   return {
     tabs: template.tabs.map((t) => {
@@ -240,6 +295,21 @@ export function setSpan(
       ...t,
       fields: t.fields.map((f) =>
         f.key === key ? { ...f, span: clampSpan(span) } : f
+      ),
+    })),
+  };
+}
+
+export function setRows(
+  template: NpcTemplate,
+  key: string,
+  rows: number
+): NpcTemplate {
+  return {
+    tabs: template.tabs.map((t) => ({
+      ...t,
+      fields: t.fields.map((f) =>
+        f.key === key ? { ...f, rows: clampRows(rows) } : f
       ),
     })),
   };
