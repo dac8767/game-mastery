@@ -1135,17 +1135,87 @@ body.col-resizing {
   margin: 0.2rem 0 0;
 }
 
-/* Fields flow into as many columns as fit; prose takes a row of its
-   own, because a four-line textarea in a 14rem column is a slot. */
+/* The tab strip, and the switch for whether blanks are shown. */
+.record-tabbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 0.9rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.record-tabs {
+  display: flex;
+  gap: 0.15rem;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.record-tab {
+  padding: 0.45rem 0.8rem;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  margin-bottom: -1px;
+}
+
+.record-tab:hover {
+  color: var(--text);
+}
+
+.record-tab.on {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.record-empty-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: none;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  padding-bottom: 0.35rem;
+}
+
+/* A four-column grid, because a span is only meaningful against a
+   known count — `auto-fill` would make "half width" mean something
+   different at every window size. */
 .record-fields {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.75rem 1rem;
   margin-top: 0.6rem;
 }
 
-.record-fields .detail-field.wide {
-  grid-column: 1 / -1;
+.record-fields .detail-field.sp-1 {
+  grid-column: span 1;
+}
+.record-fields .detail-field.sp-2 {
+  grid-column: span 2;
+}
+.record-fields .detail-field.sp-3 {
+  grid-column: span 3;
+}
+.record-fields .detail-field.sp-4 {
+  grid-column: span 4;
+}
+
+/* Narrower windows have fewer columns, so the wider spans have to come
+   down with them or a "wide" field overflows its own grid. */
+@media (max-width: 1100px) {
+  .record-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .record-fields .detail-field.sp-3,
+  .record-fields .detail-field.sp-4 {
+    grid-column: span 2;
+  }
 }
 
 @media (max-width: 700px) {
@@ -1154,6 +1224,14 @@ body.col-resizing {
   }
   .record-portrait {
     width: 100%;
+  }
+  .record-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .record-fields .detail-field.sp-2,
+  .record-fields .detail-field.sp-3,
+  .record-fields .detail-field.sp-4 {
+    grid-column: span 1;
   }
 }
 
@@ -5005,4 +5083,79 @@ button.cal-day:hover {
 
 .cal-event-form input[type="number"] {
   width: 5rem;
+}
+
+/* ---------- The NPC record layout designer ---------- */
+
+.tpl-tabs {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.tpl-tab {
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.tpl-tab-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tpl-tab-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.tpl-fields {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.tpl-fields li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.4rem;
+  background: var(--bg-raised);
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.tpl-field-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tpl-fields select {
+  flex: none;
+  padding: 0.2rem 0.35rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.tpl-add {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.tpl-add .detail-input {
+  max-width: 16rem;
 }

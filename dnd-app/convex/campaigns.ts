@@ -430,6 +430,12 @@ export const purgeCampaign = internalMutation({
       .take(left);
     if (await sweep(calendarEvents)) return await more();
 
+    const npcTemplates = await ctx.db
+      .query("npcTemplates")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
+      .take(left);
+    if (await sweep(npcTemplates)) return await more();
+
     const prefs = await ctx.db
       .query("viewPrefs")
       .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))

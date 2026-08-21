@@ -1044,6 +1044,222 @@ export const unit = {
         .join() === "job"
     );
 
+    // ---- the NPC record template -----------------------------------
+    // The DM's own layout. Everything here is one property said five
+    // ways: a field cannot go missing. A template outlives the column
+    // list it was built from, and a field the template forgets is not
+    // missing from a tab — it is missing from the app, in every record
+    // in the campaign, with no screen that would show you.
+    const tplOut = compile("components/npcTemplate.ts");
+    const tpl = await import(
+      pathToFileURL(join(tplOut, "npcTemplate.js")).href
+    );
+
+    const KEYS = ["a", "b", "c", "d", "e"];
+    const base = tpl.defaultTemplate(
+      [
+        { id: "one", title: "One", keys: ["a", "b"] },
+        { id: "two", title: "Two", keys: ["c", "d", "e"] },
+      ],
+      ["e"]
+    );
+
+    check(
+      "defaultTemplate keeps the sections it is given",
+      base.tabs.length === 2 && tpl.templateKeys(base).join() === "a,b,c,d,e"
+    );
+    check(
+      "defaultTemplate widens the fields it is told are wide",
+      base.tabs[1].fields.find((f) => f.key === "e").span === 4 &&
+        base.tabs[0].fields[0].span === 1
+    );
+
+    // ---- reconcileTemplate -----------------------------------------
+    check(
+      "reconcile is idempotent",
+      eq(
+        tpl.reconcileTemplate(tpl.reconcileTemplate(base, KEYS), KEYS),
+        tpl.reconcileTemplate(base, KEYS)
+      )
+    );
+    check(
+      "a field the template never heard of is placed, not dropped",
+      tpl
+        .templateKeys(tpl.reconcileTemplate(base, [...KEYS, "brandNew"]))
+        .includes("brandNew")
+    );
+    check(
+      "a field whose column is gone is dropped",
+      !tpl
+        .templateKeys(tpl.reconcileTemplate(base, ["a", "b", "c"]))
+        .includes("e")
+    );
+    check(
+      "a key placed twice is kept once",
+      tpl
+        .templateKeys(
+          tpl.reconcileTemplate(
+            { tabs: [{ id: "x", title: "X", fields: [{ key: "a", span: 1 }, { key: "a", span: 2 }] }] },
+            ["a"]
+          )
+        )
+        .join() === "a"
+    );
+    check(
+      "a span outside 1–4 is clamped, not honoured",
+      tpl
+        .reconcileTemplate(
+          { tabs: [{ id: "x", title: "X", fields: [{ key: "a", span: 99 }, { key: "b", span: 0 }] }] },
+          ["a", "b"]
+        )
+        .tabs[0].fields.map((f) => f.span)
+        .join() === "4,1"
+    );
+    check(
+      "a span that is not a number becomes one column",
+      tpl
+        .reconcileTemplate(
+          { tabs: [{ id: "x", title: "X", fields: [{ key: "a", span: "wide" }] }] },
+          ["a"]
+        )
+        .tabs[0].fields[0].span === 1
+    );
+    check(
+      "nothing at all still renders something",
+      tpl.reconcileTemplate(null, []).tabs.length === 1
+    );
+    check(
+      "an empty template still places every field",
+      tpl.templateKeys(tpl.reconcileTemplate({ tabs: [] }, KEYS)).sort().join() ===
+        KEYS.join()
+    );
+    check(
+      "two tabs cannot share an id",
+      (() => {
+        const r = tpl.reconcileTemplate(
+          {
+            tabs: [
+              { id: "same", title: "A", fields: [] },
+              { id: "same", title: "B", fields: [{ key: "a", span: 1 }] },
+            ],
+          },
+          ["a"]
+        );
+        return new Set(r.tabs.map((t) => t.id)).size === r.tabs.length;
+      })()
+    );
+    check(
+      "a tab with no name gets one",
+      tpl
+        .reconcileTemplate({ tabs: [{ id: "x", title: "   ", fields: [] }] }, [])
+        .tabs[0].title === "Tab 1"
+    );
+
+    // ---- moving things ---------------------------------------------
+    const moved = tpl.moveField(base, "a", "two", 0);
+    check(
+      "moveField takes the field out of the tab it was in",
+      !moved.tabs[0].fields.some((f) => f.key === "a")
+    );
+    check(
+      "moveField puts it where it was asked to",
+      moved.tabs[1].fields[0].key === "a"
+    );
+    check(
+      "moveField keeps every field",
+      tpl.templateKeys(moved).sort().join() === KEYS.join()
+    );
+    check(
+      "moveField carries the width with the field",
+      tpl.moveField(base, "e", "one", 0).tabs[0].fields[0].span === 4
+    );
+    check(
+      "an index past the end lands at the end, not off it",
+      tpl.moveField(base, "a", "two", 999).tabs[1].fields.at(-1).key === "a"
+    );
+
+    check(
+      "shiftField reorders within the tab",
+      tpl.shiftField(base, "b", -1).tabs[0].fields.map((f) => f.key).join() ===
+        "b,a"
+    );
+    check(
+      "shiftField at the edge does nothing rather than wrapping",
+      eq(tpl.shiftField(base, "a", -1), base)
+    );
+    check(
+      "setSpan clamps",
+      tpl.setSpan(base, "a", 40).tabs[0].fields[0].span === 4
+    );
+
+    // ---- tabs -------------------------------------------------------
+    const withSecrets = tpl.addTab(base, "Secrets");
+    check(
+      "addTab appends an empty tab",
+      withSecrets.tabs.at(-1).fields.length === 0
+    );
+    check(
+      "addTab gives a unique id even for a repeated name",
+      (() => {
+        const twice = tpl.addTab(tpl.addTab(base, "Notes"), "Notes");
+        return new Set(twice.tabs.map((t) => t.id)).size === twice.tabs.length;
+      })()
+    );
+    check(
+      "addTab stops at the limit",
+      (() => {
+        let t = base;
+        for (let i = 0; i < 50; i++) t = tpl.addTab(t, `T${i}`);
+        return t.tabs.length === tpl.TEMPLATE_LIMITS.tabs;
+      })()
+    );
+    check(
+      "renameTab does not move the fields out of it",
+      tpl.renameTab(base, "one", "Renamed").tabs[0].fields.length === 2
+    );
+
+    // Removing a tab must not remove an evening's arranging with it.
+    const removed = tpl.removeTab(base, "one");
+    check(
+      "removeTab keeps the fields that were in it",
+      tpl.templateKeys(removed).sort().join() === KEYS.join()
+    );
+    check("removeTab removes the tab", removed.tabs.length === 1);
+    check(
+      "the last tab cannot be removed",
+      eq(
+        tpl.removeTab({ tabs: [base.tabs[0]] }, "one"),
+        { tabs: [base.tabs[0]] }
+      )
+    );
+    check(
+      "shiftTab reorders the strip",
+      tpl.shiftTab(base, "two", -1).tabs.map((t) => t.id).join() === "two,one"
+    );
+    check(
+      "shiftTab at the edge does nothing",
+      eq(tpl.shiftTab(base, "one", -1), base)
+    );
+
+    // ---- what a player is shown ------------------------------------
+    // Same rule as the sections: a tab a viewer has no fields for is
+    // not rendered empty. The outline of what was withheld is still
+    // information.
+    const forPlayerTabs = tpl.templateFor(base, ["a", "b"]);
+    check(
+      "templateFor drops a tab the viewer has nothing in",
+      forPlayerTabs.length === 1 && forPlayerTabs[0].id === "one"
+    );
+    check(
+      "templateFor keeps the fields they do get",
+      forPlayerTabs[0].fields.map((f) => f.key).join() === "a,b"
+    );
+    check(
+      "templateFor does not mutate the template it was given",
+      tpl.templateKeys(base).join() === "a,b,c,d,e"
+    );
+    check("templateFor on nothing is nothing", tpl.templateFor(base, []).length === 0);
+
     // ---- the locations tree ----------------------------------------
     // Everything here is about not losing a place: a player's list has
     // the hidden locations filtered out of it, so their children

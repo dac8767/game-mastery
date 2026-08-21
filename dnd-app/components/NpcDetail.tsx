@@ -1,15 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useMutation } from "convex/react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
 import { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
 import { COLUMNS, COLUMN_BY_KEY, ColumnDef, portraitSrc } from "@/components/npcColumns";
 import {
   HEADER_KEYS,
   SUMMARY_KEYS,
   arrange,
 } from "@/components/npcSections";
+import {
+  NpcTemplate,
+  defaultTemplate,
+  reconcileTemplate,
+  templateFor,
+} from "@/components/npcTemplate";
 
 /**
  * The expanded record: every field, editable in place.
@@ -73,19 +80,54 @@ export function fromInput(col: ColumnDef, text: string): unknown {
 /** Prose gets a row to itself; a name or a number does not need one. */
 const isWide = (col: ColumnDef) => col.kind === "longtext";
 
+/** Everything the record lays out — the header's own fields excepted. */
+export const BODY_KEYS = COLUMNS.map((c) => c.key).filter(
+  (k) => !HEADER_KEYS.includes(k)
+);
+
+/**
+ * The layout this campaign uses, whether or not the DM has built one.
+ *
+ * The shipped arrangement is the fallback, turned into a template so
+ * there is exactly one thing the record renders from. Reconciled
+ * against the real column list either way: a template stored last month
+ * has no opinion about a field added since, and an unmentioned field
+ * would otherwise be invisible in every record in the campaign.
+ */
+export function resolveTemplate(stored: NpcTemplate | null): NpcTemplate {
+  const base =
+    stored ??
+    defaultTemplate(
+      arrange(BODY_KEYS),
+      COLUMNS.filter(isWide).map((c) => c.key)
+    );
+  return reconcileTemplate(base, BODY_KEYS);
+}
+
 export function NpcDetail({
   npc,
+  campaignId,
   isDm,
   onClose,
 }: {
   npc: Npc;
+  campaignId: Id<"campaigns">;
   isDm: boolean;
   onClose: () => void;
 }) {
   const updateNpc = useMutation(api.npcs.updateNpc);
   const setPlayerNotes = useMutation(api.npcs.setPlayerNotes);
-  const mapServer = process.env.NEXT_PUBLIC_MAP_SERVER ?? "";
+  const stored = useQuery(api.npcs.getTemplate, { campaignId });
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * A DM opens a record to fill it in, so the blanks are the work. A
+   * player opens one to read it, where a column of empty labels is
+   * just noise. Hence the different starting position, and the toggle
+   * for when either of them wants the other view.
+   */
+  const [showEmpty, setShowEmpty] = useState(isDm);
+  const [tabId, setTabId] = useState<string | null>(null);
 
   // Escape closes it. Ignored while a field has focus, where Escape
   // already means "put that value back" — losing an edit and the whole
@@ -124,11 +166,23 @@ export function NpcDetail({
     }
   }
 
-  // What the server is willing to show this caller, arranged. The
-  // header shows its own fields, so they are held back from the
-  // sections rather than repeated in one.
+  // What the server is willing to show this caller, laid out the way
+  // the campaign's template says. The header shows its own fields, so
+  // they are held back from the tabs rather than repeated in one.
   const allowed = COLUMNS.filter((c) => isDm || !c.dmOnly).map((c) => c.key);
-  const sections = arrange(allowed.filter((k) => !HEADER_KEYS.includes(k)));
+  const tabs = useMemo(
+    () =>
+      templateFor(
+        resolveTemplate(stored ?? null),
+        allowed.filter((k) => !HEADER_KEYS.includes(k))
+      ),
+    // `allowed` is derived from a module constant and isDm, so its
+    // identity churns every render while its contents do not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [stored, isDm]
+  );
+
+  const openTab = tabs.find((t) => t.id === tabId) ?? tabs[0] ?? null;
 
   // The header's own fields, minus the portrait, which has its own
   // control. An empty one is dropped only when it is also read-only —
@@ -188,41 +242,83 @@ export function NpcDetail({
 
       {error && <p className="form-error">{error}</p>}
 
+      <div className="record-tabbar">
+        <div className="record-tabs" role="tablist">
+          {tabs.map((t) => (
+            <button
+              type="button"
+              key={t.id}
+              role="tab"
+              aria-selected={t.id === openTab?.id}
+              className={`record-tab${t.id === openTab?.id ? " on" : ""}`}
+              onClick={() => setTabId(t.id)}
+            >
+              {t.title}
+            </button>
+          ))}
+        </div>
+
+        <label className="record-empty-toggle">
+          <input
+            type="checkbox"
+            checked={showEmpty}
+            onChange={(e) => setShowEmpty(e.target.checked)}
+          />
+          <span>Show empty fields</span>
+        </label>
+      </div>
+
       <div className="record-body">
-        {sections.map((section) => {
-          const cols = section.keys
-            .map((k) => COLUMN_BY_KEY.get(k))
-            .filter((c): c is ColumnDef => Boolean(c))
-            // A read-only field with nothing in it is a label and a
-            // blank — noise on a record a player cannot change.
-            .filter((c) => canEdit(c) || toInput(npc, c));
-
-          if (cols.length === 0) return null;
-
-          return (
-            <section className="record-section" key={section.id}>
-              <h3>{section.title}</h3>
-              {section.blurb && (
-                <p className="settings-note">{section.blurb}</p>
-              )}
-              <div className="record-fields">
-                {cols.map((col) => (
-                  <RecordField
-                    key={col.key}
-                    col={col}
-                    value={toInput(npc, col)}
-                    editable={canEdit(col)}
-                    dmOnly={Boolean(col.dmOnly)}
-                    onCommit={(text) => commit(col, text)}
-                  />
-                ))}
-              </div>
-            </section>
-          );
-        })}
+        {openTab && (
+          <div className="record-fields">
+            {openTab.fields.map((f) => {
+              const col = COLUMN_BY_KEY.get(f.key);
+              if (!col) return null;
+              const value = toInput(npc, col);
+              // Empty and read-only is a label and a blank, always
+              // noise. Empty and editable is where the work is, so it
+              // is the toggle that decides.
+              if (!value && (!canEdit(col) || !showEmpty)) return null;
+              return (
+                <RecordField
+                  key={col.key}
+                  col={col}
+                  value={value}
+                  editable={canEdit(col)}
+                  dmOnly={Boolean(col.dmOnly)}
+                  span={f.span}
+                  onCommit={(text) => commit(col, text)}
+                />
+              );
+            })}
+          </div>
+        )}
+        {openTab && visibleCount(npc, openTab.fields, canEdit, showEmpty) === 0 && (
+          <p className="settings-note">
+            Nothing filled in on this tab.
+            {!showEmpty && " Tick “Show empty fields” to add something."}
+          </p>
+        )}
       </div>
     </section>
   );
+}
+
+/** How many of a tab's fields will actually render, for the empty note. */
+function visibleCount(
+  npc: Npc,
+  fields: { key: string }[],
+  canEdit: (col: ColumnDef) => boolean,
+  showEmpty: boolean
+): number {
+  let n = 0;
+  for (const f of fields) {
+    const col = COLUMN_BY_KEY.get(f.key);
+    if (!col) continue;
+    const value = toInput(npc, col);
+    if (value || (canEdit(col) && showEmpty)) n++;
+  }
+  return n;
 }
 
 function RecordField({
@@ -231,6 +327,7 @@ function RecordField({
   editable,
   dmOnly,
   variant,
+  span,
   onCommit,
 }: {
   col: ColumnDef;
@@ -239,6 +336,8 @@ function RecordField({
   dmOnly: boolean;
   /** Header fields are the same control, worn larger and unlabelled. */
   variant?: "title" | "subtitle";
+  /** Columns of the record grid, 1–4. The template decides it. */
+  span?: number;
   onCommit: (text: string) => void;
 }) {
   const [draft, setDraft] = useState(value);
@@ -247,8 +346,8 @@ function RecordField({
   useEffect(() => setDraft(value), [value]);
 
   const className = `detail-field${dmOnly ? " dm-field" : ""}${
-    isWide(col) && !variant ? " wide" : ""
-  }${variant ? ` record-${variant}` : ""}`;
+    variant ? ` record-${variant}` : span ? ` sp-${span}` : ""
+  }`;
 
   if (!editable) {
     return (

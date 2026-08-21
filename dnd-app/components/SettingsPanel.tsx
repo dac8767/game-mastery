@@ -7,6 +7,7 @@ import { Id } from "@/convex/_generated/dataModel";
 import { THEMES } from "@/components/themes";
 import { RULES_VERSIONS } from "@/components/lookupFilters";
 import { DATE_FORMATS, formatCardDate } from "@/components/campaignCard";
+import { NpcTemplateDesigner } from "@/components/NpcTemplateDesigner";
 import { NameField } from "@/components/NameField";
 import { TransferDm } from "@/components/TransferDm";
 import { CampaignDetails } from "@/components/CampaignDetails";
@@ -222,6 +223,8 @@ export function SettingsPanel({
               ))}
             </div>
           </section>
+
+          {isDm && <NpcTemplateDesigner campaignId={campaignId} />}
         </>
       )}
 

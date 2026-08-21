@@ -480,6 +480,37 @@ export default defineSchema({
    * with seven day names is a grid whose header doesn't line up with
    * its columns.
    */
+  /**
+   * How an opened NPC is laid out, for the whole campaign.
+   *
+   * One row per campaign, written by the DM, read by everyone: the
+   * point is that every record in the campaign reads the same way, so
+   * a per-person version would defeat it. Which FIELDS a given person
+   * actually receives is still the server's decision — a template
+   * naming dmNotes does not send dmNotes to a player.
+   *
+   * Only the arrangement is stored. What a field is, and whether it is
+   * DM-only, stays in components/npcColumns.ts, and
+   * components/npcTemplate.ts reconciles a stored template against it
+   * on the way in and out.
+   */
+  npcTemplates: defineTable({
+    campaignId: v.id("campaigns"),
+    tabs: v.array(
+      v.object({
+        id: v.string(),
+        title: v.string(),
+        fields: v.array(
+          v.object({
+            key: v.string(),
+            /** 1–4 columns of the record's grid. */
+            span: v.number(),
+          })
+        ),
+      })
+    ),
+  }).index("by_campaign", ["campaignId"]),
+
   calendars: defineTable({
     campaignId: v.id("campaigns"),
     daysPerWeek: v.number(),

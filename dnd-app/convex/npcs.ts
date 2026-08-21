@@ -307,3 +307,89 @@ export const setPortrait = mutation({
     });
   },
 });
+
+// ---------------------------------------------------------------------
+// The record layout
+// ---------------------------------------------------------------------
+
+/**
+ * How an opened NPC is laid out in this campaign.
+ *
+ * Lives here rather than in a module of its own because it is read
+ * alongside the roster and written by the same authority. Returning
+ * null where no row exists is deliberate: the client builds the
+ * shipped arrangement from npcSections in that case, and a server-side
+ * default would be a second copy of it.
+ */
+export const getTemplate = query({
+  args: { campaignId: v.id("campaigns") },
+  handler: async (ctx, args) => {
+    await requireMember(ctx, args.campaignId);
+    const row = await ctx.db
+      .query("npcTemplates")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
+      .unique();
+    return row ? { tabs: row.tabs } : null;
+  },
+});
+
+/** Bounds matching components/npcTemplate.ts, enforced where it counts. */
+const MAX_TABS = 12;
+const MAX_TITLE = 40;
+
+/**
+ * DM: replace the campaign's layout.
+ *
+ * Sent whole rather than patched: the designer edits a draft and saves
+ * it, and a per-move mutation would be one write per drag. The shape
+ * is re-clamped here because a mutation is a public API — the client
+ * clamp is so the form behaves, not a guarantee about what arrives.
+ */
+export const saveTemplate = mutation({
+  args: {
+    campaignId: v.id("campaigns"),
+    tabs: v.array(
+      v.object({
+        id: v.string(),
+        title: v.string(),
+        fields: v.array(v.object({ key: v.string(), span: v.number() })),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    await requireDm(ctx, args.campaignId);
+
+    const tabs = args.tabs.slice(0, MAX_TABS).map((t, i) => ({
+      id: t.id.slice(0, 64) || `tab-${i}`,
+      title: t.title.trim().slice(0, MAX_TITLE) || `Tab ${i + 1}`,
+      fields: t.fields.map((f) => ({
+        key: f.key.slice(0, 64),
+        span: Math.min(4, Math.max(1, Math.round(f.span) || 1)),
+      })),
+    }));
+
+    const existing = await ctx.db
+      .query("npcTemplates")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
+      .unique();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, { tabs });
+      return;
+    }
+    await ctx.db.insert("npcTemplates", { campaignId: args.campaignId, tabs });
+  },
+});
+
+/** DM: go back to the arrangement the app ships with. */
+export const resetTemplate = mutation({
+  args: { campaignId: v.id("campaigns") },
+  handler: async (ctx, args) => {
+    await requireDm(ctx, args.campaignId);
+    const existing = await ctx.db
+      .query("npcTemplates")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
+      .unique();
+    if (existing) await ctx.db.delete(existing._id);
+  },
+});

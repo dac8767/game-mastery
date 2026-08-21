@@ -745,6 +745,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
       {selectedNpc ? (
         <NpcDetail
           npc={selectedNpc}
+          campaignId={campaignId}
           isDm={isDm}
           onClose={() => setSelected(null)}
         />

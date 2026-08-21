@@ -310,6 +310,68 @@ export const integrity = {
       }
     }
 
+    // ---- the record template is bounded in two places ---------------
+    // The designer clamps so the form behaves; saveTemplate clamps
+    // because a mutation is a public API and the client's clamp is not
+    // a promise about what arrives. The two have to agree on the same
+    // numbers, or the designer offers a width the server quietly turns
+    // into a different one — a layout that looks right until it is
+    // reloaded.
+    const tplSrc = read("components", "npcTemplate.ts");
+
+    const num = (src, name, label) => {
+      const m = src.match(new RegExp(`${name}\\s*[:=]\\s*(\\d+)`));
+      if (!m) throw new Error(`could not read ${name} from ${label}`);
+      return Number(m[1]);
+    };
+    const maxSpan = num(tplSrc, "MAX_SPAN", "npcTemplate.ts");
+    const maxTabs = num(tplSrc, "tabs", "npcTemplate TEMPLATE_LIMITS");
+    const titleLen = num(tplSrc, "titleLength", "npcTemplate TEMPLATE_LIMITS");
+
+    const saveAt = npcsSrc.indexOf("export const saveTemplate");
+    if (saveAt === -1) throw new Error("no saveTemplate in convex/npcs.ts");
+    const saveBody = npcsSrc.slice(saveAt);
+
+    if (num(npcsSrc, "MAX_TABS", "convex/npcs.ts") !== maxTabs) {
+      problems.push(
+        `tab limit disagrees: npcTemplate says ${maxTabs}, convex/npcs.ts ` +
+          `says ${num(npcsSrc, "MAX_TABS", "convex/npcs.ts")}`
+      );
+    }
+    if (num(npcsSrc, "MAX_TITLE", "convex/npcs.ts") !== titleLen) {
+      problems.push(
+        `tab-title length disagrees: npcTemplate says ${titleLen}, ` +
+          `convex/npcs.ts says ${num(npcsSrc, "MAX_TITLE", "convex/npcs.ts")}`
+      );
+    }
+    if (!new RegExp(`Math\\.min\\(\\s*${maxSpan}\\s*,`).test(saveBody)) {
+      problems.push(
+        `saveTemplate does not clamp a span to ${maxSpan} — the designer ` +
+          "offers widths the server would store unchanged"
+      );
+    }
+    if (!/requireDm/.test(saveBody.slice(0, saveBody.indexOf("});")))) {
+      problems.push(
+        "npcs.saveTemplate does not go through requireDm — the record " +
+          "layout is campaign-wide, so any member could rearrange everyone's"
+      );
+    }
+
+    // The template addresses columns by string key, like everything
+    // else on this screen. A tab holding a key that is not a column
+    // renders nothing and cannot be fixed from the designer, because
+    // the designer is built from the same template.
+    const tplDefaults = [
+      ...tplSrc.matchAll(/key:\s*"([^"]+)"/g),
+    ].map((m) => m[1]);
+    for (const key of tplDefaults) {
+      if (!columnKeySet.has(key)) {
+        problems.push(
+          `npcTemplate.ts names a \`${key}\` field, which is not a column`
+        );
+      }
+    }
+
     // ---- nav slugs must have pages behind them ---------------------
     // The sidebar renders these and the ribbon's `t:` tokens address the
     // same list by id, so a renamed folder is a dead link in two places
