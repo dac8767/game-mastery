@@ -27,6 +27,7 @@ import {
   constArrayStrings,
   stripComments,
   sourceFiles,
+  literalUnionAfter,
 } from "./lib.mjs";
 
 /** Convex adds these to every document. */
@@ -472,6 +473,44 @@ export const integrity = {
       }
     }
 
+    // ---- date formats are a literal union in three places -----------
+    // Same shape of problem as the rules edition: the schema validates
+    // them, settings.ts re-declares them for the mutation, and
+    // DATE_FORMATS renders them as buttons. An option offered but not
+    // storable fails only when somebody clicks it.
+    const schemaFormats = literalUnionAfter(
+      schemaSrc,
+      /dateFormat:\s*v\./,
+      "schema.ts dateFormat"
+    ).sort();
+    const settingsFormats = literalUnionAfter(
+      read("convex", "settings.ts"),
+      /dateFormatValidator\s*=\s*v\./,
+      "settings.ts dateFormatValidator"
+    ).sort();
+    const cardSrc = read("components", "campaignCard.ts");
+    const formatsAt = cardSrc.indexOf("DATE_FORMATS");
+    if (formatsAt === -1) throw new Error("no DATE_FORMATS in campaignCard.ts");
+    const offeredFormats = [
+      ...cardSrc
+        .slice(formatsAt, cardSrc.indexOf("];", formatsAt))
+        .matchAll(/value:\s*"([^"]+)"/g),
+    ]
+      .map((m) => m[1])
+      .sort();
+
+    for (const [label, list] of [
+      ["convex/settings.ts", settingsFormats],
+      ["DATE_FORMATS", offeredFormats],
+    ]) {
+      if (list.join() !== schemaFormats.join()) {
+        problems.push(
+          `date formats disagree: schema has [${schemaFormats}], ` +
+            `${label} has [${list}]`
+        );
+      }
+    }
+
     // ---- deleting a campaign must reach everything in it ------------
     // The one failure here is invisible by construction: a table left
     // out of the purge keeps its rows forever, and nothing ever reads
@@ -552,32 +591,13 @@ export const integrity = {
     // the others accept a value they cannot store, or offer one nobody
     // can pick — neither of which TypeScript sees, because the schema
     // and the component never meet.
-    // A bounded window rather than a lazy match: `v.union(v.literal("a"),
-    // v.literal("b"))` has a `)` after the first literal, and anything
-    // non-greedy stops there and reports one edition where there are two.
-    const editionLiterals = (src, label) => {
-      // Anchored on the DECLARATION — `rulesVersion: v.…` — not on the
-      // name. It is also read and re-emitted elsewhere in these files,
-      // and the first mention is not always the one that defines it.
-      const at = src.search(/rulesVersion:\s*v\./);
-      if (at === -1) throw new Error(`no rulesVersion declared in ${label}`);
-      const window = src.slice(at, at + 200);
-      if (!/v\.union\(/.test(window)) {
-        throw new Error(`rulesVersion in ${label} is not a union of literals`);
-      }
-      const found = [...window.matchAll(/v\.literal\("([^"]+)"\)/g)].map(
-        (x) => x[1]
-      );
-      if (found.length === 0) {
-        throw new Error(`extracted no literals from ${label}`);
-      }
-      return found.sort();
-    };
+    const editionLiterals = (src, label) =>
+      literalUnionAfter(src, /rulesVersion:\s*v\./, label).sort();
 
-    const schemaEditions = editionLiterals(schemaSrc, "schema.ts");
+    const schemaEditions = editionLiterals(schemaSrc, "schema.ts rulesVersion");
     const mutationEditions = editionLiterals(
       read("convex", "campaigns.ts"),
-      "campaigns.ts"
+      "campaigns.ts rulesVersion"
     );
     // Bounded to the array's own literal. Every filter's options use
     // `value: "..."` too, so reading to the end of the file collects the
@@ -783,18 +803,18 @@ export const integrity = {
     // Settings offers the choice. Add a theme and forget the bootstrap
     // allowlist and it silently flashes the default on every load —
     // annoying, and invisible to anyone who never picked that theme.
-    const themeBlock = blockAfter(
-      schemaSrc,
-      /userSettings:\s*defineTable\(/,
-      "userSettings in schema.ts"
+    // Anchored on `theme:` itself, not on the table: userSettings holds
+    // more than one literal union now, and reading the whole block
+    // collected the date formats as if they were themes.
+    const themes = literalUnionAfter(
+      blockAfter(
+        schemaSrc,
+        /userSettings:\s*defineTable\(/,
+        "userSettings in schema.ts"
+      ),
+      /theme:\s*v\./,
+      "userSettings.theme"
     );
-    const themes = [
-      ...themeBlock.matchAll(/v\.literal\("([^"]+)"\)/g),
-    ].map((m) => m[1]);
-
-    if (themes.length === 0) {
-      problems.push("could not read the theme list from the schema");
-    }
 
     const layout = read("app", "layout.tsx");
     const themeList = read("components", "themes.ts");

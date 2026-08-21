@@ -31,20 +31,61 @@ const MONTHS = [
 ];
 
 /**
- * "12 Sep 2026", or the raw string if it is not a date we wrote.
+ * How dates read. A personal setting: the same session is on 9/5 or 5/9
+ * depending on who is looking at it, and neither side of that argument
+ * is going to be talked out of it.
+ */
+export type DateFormat = "dmy" | "mdy" | "numeric" | "iso";
+
+export const DATE_FORMATS: {
+  value: DateFormat;
+  label: string;
+  example: string;
+}[] = [
+  { value: "dmy", label: "Day first", example: "5 Sep 2026" },
+  { value: "mdy", label: "Month first", example: "Sep 5, 2026" },
+  { value: "numeric", label: "Numeric", example: "09/05/2026" },
+  { value: "iso", label: "Year first", example: "2026-09-05" },
+];
+
+const pad = (n: string) => n.padStart(2, "0");
+
+/**
+ * A stored date, written the way this person reads dates — or the raw
+ * string if it is not a date we wrote.
  *
  * Deliberately NOT `new Date(s).toLocaleDateString()`: parsing
  * "2026-09-12" that way reads it as UTC midnight, which in every
  * timezone west of Greenwich renders as the 11th. A date with no time
  * has no timezone, so it is split rather than parsed.
+ *
+ * "Numeric" is month-first, because it is the format someone picks when
+ * they already know which way round they mean — the day-first crowd is
+ * served by the option above it, which spells the month out and cannot
+ * be misread at all.
  */
-export function formatCardDate(value: unknown): string {
+export function formatCardDate(
+  value: unknown,
+  format: DateFormat = "dmy"
+): string {
   const raw = typeof value === "string" ? value.trim() : "";
   const m = raw.match(ISO_DATE);
   if (!m) return raw;
-  const month = MONTHS[Number(m[2]) - 1];
-  if (!month) return raw;
-  return `${Number(m[3])} ${month} ${m[1]}`;
+
+  const [, year, month, day] = m;
+  const name = MONTHS[Number(month) - 1];
+  if (!name) return raw;
+
+  switch (format) {
+    case "mdy":
+      return `${name} ${Number(day)}, ${year}`;
+    case "numeric":
+      return `${pad(month)}/${pad(day)}/${year}`;
+    case "iso":
+      return `${year}-${pad(month)}-${pad(day)}`;
+    default:
+      return `${Number(day)} ${name} ${year}`;
+  }
 }
 
 /** Whole days from `from` to `value`, or null if either is unusable. */

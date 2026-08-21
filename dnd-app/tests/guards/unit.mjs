@@ -630,6 +630,49 @@ export const unit = {
     check("nothing stays nothing", cc.formatCardDate(undefined) === "");
     check("a non-string", cc.formatCardDate(20260912) === "");
 
+    // Every offered format renders, and no two render alike — an option
+    // that looks identical to another is a setting that does nothing.
+    const rendered = cc.DATE_FORMATS.map((f) =>
+      cc.formatCardDate("2026-09-05", f.value)
+    );
+    check("every date format has a label", cc.DATE_FORMATS.every((f) => f.label));
+    check(
+      "every date format renders something",
+      rendered.every((r) => typeof r === "string" && r.length > 0)
+    );
+    check(
+      "no two formats look the same",
+      new Set(rendered).size === rendered.length
+    );
+    check(
+      "each format's example matches what it actually produces",
+      cc.DATE_FORMATS.every(
+        (f) => cc.formatCardDate("2026-09-05", f.value) === f.example
+      )
+    );
+    check(
+      "month first",
+      cc.formatCardDate("2026-09-05", "mdy") === "Sep 5, 2026"
+    );
+    check(
+      "numeric pads both parts",
+      cc.formatCardDate("2026-09-05", "numeric") === "09/05/2026"
+    );
+    check(
+      "year first is what was stored",
+      cc.formatCardDate("2026-09-05", "iso") === "2026-09-05"
+    );
+    check(
+      "an unknown format falls back rather than printing nothing",
+      cc.formatCardDate("2026-09-05", "nonsense") === "5 Sep 2026"
+    );
+    check(
+      "a bad date is left alone whichever format is asked for",
+      cc.DATE_FORMATS.every(
+        (f) => cc.formatCardDate("someday", f.value) === "someday"
+      )
+    );
+
     // The bug this exists for: `new Date("2026-09-12")` is UTC midnight,
     // which renders as the 11th anywhere west of Greenwich. Every date
     // on this card would be a day early for Derek, all year.

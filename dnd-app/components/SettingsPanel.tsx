@@ -5,6 +5,8 @@ import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { THEMES } from "@/components/themes";
 import { RULES_VERSIONS } from "@/components/lookupFilters";
+import { DATE_FORMATS, formatCardDate } from "@/components/campaignCard";
+import { NameField } from "@/components/NameField";
 import { CampaignDetails } from "@/components/CampaignDetails";
 import { CampaignRoster } from "@/components/CampaignRoster";
 
@@ -43,6 +45,16 @@ export function SettingsPanel({
 
   return (
     <div className="settings">
+      <section className="settings-block">
+        <h2>Your name</h2>
+        <p className="settings-note">
+          What everyone else sees you called — on a campaign card, as the DM
+          of the games you run, and beside anything you write. Until you set
+          it you show up as &ldquo;the DM&rdquo;.
+        </p>
+        <NameField current={settings.displayName} />
+      </section>
+
       <section className="settings-block">
         <h2>Roles</h2>
         <p className="settings-note">
@@ -192,6 +204,32 @@ export function SettingsPanel({
               <span className={`theme-swatch theme-${t.value}`} />
               <span className="theme-name">{t.label}</span>
               <span className="settings-note">{t.note}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="settings-block">
+        <h2>Dates</h2>
+        <p className="settings-note">
+          Yours alone, and only about how dates are written — not what they
+          mean. In-world dates use the campaign calendar under Tools, which
+          has its own months.
+        </p>
+        <div className="theme-options">
+          {DATE_FORMATS.map((f) => (
+            <button
+              type="button"
+              key={f.value}
+              className={`theme-option${
+                (settings.dateFormat ?? "dmy") === f.value ? " on" : ""
+              }`}
+              onClick={() => void save({ dateFormat: f.value })}
+            >
+              <span className="theme-name">{f.label}</span>
+              <span className="settings-note">
+                {formatCardDate("2026-09-05", f.value)}
+              </span>
             </button>
           ))}
         </div>

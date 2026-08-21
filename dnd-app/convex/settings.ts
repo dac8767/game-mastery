@@ -31,6 +31,9 @@ const DEFAULTS = {
   adminOverride: false,
   toolbarTokens: [] as string[],
   toolbarSet: false,
+  // Day-first, matching what the campaign card already showed. Changing
+  // an existing display is not a default's job.
+  dateFormat: "dmy" as const,
 };
 
 /** Shared reader so queries can honour viewAsPlayer without duplication. */
@@ -50,6 +53,7 @@ export async function getSettings(ctx: QueryCtx, userId: Id<"users">) {
         // legitimately have made, so "the array is empty" must never
         // stand in for "never arranged one".
         toolbarSet: doc.toolbarSet ?? false,
+        dateFormat: doc.dateFormat ?? DEFAULTS.dateFormat,
       }
     : DEFAULTS;
 }
@@ -59,11 +63,26 @@ export const mySettings = query({
   handler: async (ctx) => {
     const userId = await requireUser(ctx);
     const settings = await getSettings(ctx, userId);
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
     // Eligibility is read from the deployment env var, never stored, so
     // the client can be told about it but can never grant it.
-    return { ...settings, adminEligible: await isAdminEligible(ctx, userId) };
+    return {
+      ...settings,
+      displayName: profile?.displayName ?? null,
+      adminEligible: await isAdminEligible(ctx, userId),
+    };
   },
 });
+
+export const dateFormatValidator = v.union(
+  v.literal("dmy"),
+  v.literal("mdy"),
+  v.literal("numeric"),
+  v.literal("iso")
+);
 
 export const saveMySettings = mutation({
   args: {
@@ -71,6 +90,7 @@ export const saveMySettings = mutation({
     viewAsPlayer: v.optional(v.boolean()),
     adminOverride: v.optional(v.boolean()),
     toolbarTokens: v.optional(v.array(v.string())),
+    dateFormat: v.optional(dateFormatValidator),
   },
   handler: async (ctx, args) => {
     const userId = await requireUser(ctx);
@@ -96,6 +116,7 @@ export const saveMySettings = mutation({
         toolbarTokens: args.toolbarTokens ?? existing.toolbarTokens,
         toolbarSet:
           args.toolbarTokens !== undefined || (existing.toolbarSet ?? false),
+        dateFormat: args.dateFormat ?? existing.dateFormat,
       });
       return;
     }
@@ -107,7 +128,36 @@ export const saveMySettings = mutation({
       adminOverride: args.adminOverride ?? DEFAULTS.adminOverride,
       toolbarTokens: args.toolbarTokens,
       toolbarSet: args.toolbarTokens !== undefined,
+      dateFormat: args.dateFormat,
     });
+  },
+});
+
+/**
+ * Your own name, as everyone else sees it.
+ *
+ * Lives on `profiles` rather than `userSettings` because it is the one
+ * thing on this page other people read: a campaign card says who runs
+ * it, and until this is set it can only say "the DM".
+ */
+export const setMyName = mutation({
+  args: { displayName: v.string() },
+  handler: async (ctx, args) => {
+    const userId = await requireUser(ctx);
+    const name = args.displayName.trim();
+    if (name === "") throw new Error("A name cannot be blank");
+    if (name.length > 60) throw new Error("That name is too long");
+
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+
+    if (profile) {
+      await ctx.db.patch(profile._id, { displayName: name });
+      return;
+    }
+    await ctx.db.insert("profiles", { userId, displayName: name });
   },
 });
 

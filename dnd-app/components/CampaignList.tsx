@@ -6,7 +6,11 @@ import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
-import { formatCardDate, untilSession } from "@/components/campaignCard";
+import {
+  DateFormat,
+  formatCardDate,
+  untilSession,
+} from "@/components/campaignCard";
 
 /**
  * The front door: every campaign you are in, as a card you can read
@@ -24,6 +28,8 @@ type Card = NonNullable<
 
 export function CampaignList() {
   const cards = useQuery(api.campaigns.campaignCards);
+  const settings = useQuery(api.settings.mySettings);
+  const dateFormat: DateFormat = settings?.dateFormat ?? "dmy";
   const { signOut } = useAuthActions();
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<Card | null>(null);
@@ -61,7 +67,11 @@ export function CampaignList() {
         <ul className="campaign-list">
           {cards.map((card) => (
             <li key={card._id}>
-              <CampaignCard card={card} onDelete={() => setDeleting(card)} />
+              <CampaignCard
+                card={card}
+                dateFormat={dateFormat}
+                onDelete={() => setDeleting(card)}
+              />
             </li>
           ))}
         </ul>
@@ -76,9 +86,11 @@ export function CampaignList() {
 
 function CampaignCard({
   card,
+  dateFormat,
   onDelete,
 }: {
   card: Card;
+  dateFormat: DateFormat;
   onDelete: () => void;
 }) {
   const mapServer = process.env.NEXT_PUBLIC_MAP_SERVER ?? "";
@@ -115,13 +127,13 @@ function CampaignCard({
             </span>
             {card.startDate && (
               <span>
-                <strong>Started</strong> {formatCardDate(card.startDate)}
+                <strong>Started</strong> {formatCardDate(card.startDate, dateFormat)}
               </span>
             )}
             {card.nextSessionDate && (
               <span className={soon.overdue ? "overdue" : undefined}>
                 <strong>Next session</strong>{" "}
-                {formatCardDate(card.nextSessionDate)}
+                {formatCardDate(card.nextSessionDate, dateFormat)}
                 {soon.label && <span className="campaign-soon"> {soon.label}</span>}
               </span>
             )}

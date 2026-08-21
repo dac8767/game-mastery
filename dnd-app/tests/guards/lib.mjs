@@ -147,6 +147,39 @@ export function stripComments(source) {
     .replace(/(^|[^:])\/\/.*$/gm, "$1");
 }
 
+/**
+ * The string literals of one `v.union(v.literal(...), ...)` declaration.
+ *
+ * Anchored on the DECLARATION rather than on a name or a surrounding
+ * block, because both of the looser readings have already gone wrong
+ * here:
+ *
+ *   - reading every literal inside `userSettings` collected the date
+ *     formats as if they were themes, the moment a second union joined
+ *     that table
+ *   - reading from the first mention of `rulesVersion` found the field
+ *     being COPIED in a query rather than the field being declared
+ *
+ * A bounded window rather than a lazy match, too: `v.union(v.literal("a"),
+ * v.literal("b"))` has a `)` after the first literal, and anything
+ * non-greedy stops there and reports one value where there are two.
+ */
+export function literalUnionAfter(source, anchor, label, window = 260) {
+  const at = source.search(anchor);
+  if (at === -1) {
+    throw new Error(`could not find the ${label} declaration`);
+  }
+  const found = [
+    ...source
+      .slice(at, at + window)
+      .matchAll(/v\.literal\("([^"]+)"\)/g),
+  ].map((m) => m[1]);
+  if (found.length === 0) {
+    throw new Error(`no string literals in the ${label} declaration`);
+  }
+  return found;
+}
+
 /** Assert `pattern` appears in `source`, else record a problem. */
 export function requirePattern(problems, source, pattern, description) {
   if (!pattern.test(source)) {

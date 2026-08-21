@@ -279,6 +279,19 @@ export default defineSchema({
      * load for anyone who cleared theirs.
      */
     toolbarSet: v.optional(v.boolean()),
+    /**
+     * How dates read on screen. Personal, because the same session is on
+     * 9/5 or 5/9 depending on who is looking. Mirrors DATE_FORMATS in
+     * components/campaignCard.ts.
+     */
+    dateFormat: v.optional(
+      v.union(
+        v.literal("dmy"),
+        v.literal("mdy"),
+        v.literal("numeric"),
+        v.literal("iso")
+      )
+    ),
   }).index("by_user", ["userId"]),
 
   /**
