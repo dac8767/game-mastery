@@ -1328,6 +1328,33 @@ export const integrity = {
       }
     }
 
+    // ---- no control characters in source ---------------------------
+    // A NUL byte reached a committed file this way: `join(" ")` was
+    // written with a NUL where the space belonged. Nothing caught it.
+    // It compiled, it typechecked, the build succeeded, and the unit
+    // tests passed — a NUL is a perfectly good separator — so the only
+    // symptom was `grep` reporting the file as binary and refusing to
+    // search it.
+    //
+    // That is the whole shape of a silent failure: no error, correct
+    // behaviour, and a file the tools quietly stop being able to read.
+    // Tab, newline and carriage return are the only control characters
+    // source has any business containing.
+    for (const [file, src] of sourceFiles("components", "convex", "app")) {
+      for (let i = 0; i < src.length; i++) {
+        const code = src.charCodeAt(i);
+        if (code > 31 || code === 9 || code === 10 || code === 13) continue;
+        const line = src.slice(0, i).split("\n").length;
+        problems.push(
+          `${file}:${line} contains a control character (0x${code
+            .toString(16)
+            .padStart(2, "0")}) — it will compile and make the file binary ` +
+            "to grep and to diffs"
+        );
+        break;
+      }
+    }
+
     // ---- Lookup: the kind union is stated twice --------------------
     // lookupFilters.ts cannot import it: the unit guard compiles pure
     // modules in isolation and TypeScript's path mapping is

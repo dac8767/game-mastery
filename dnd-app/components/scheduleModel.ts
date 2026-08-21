@@ -303,13 +303,13 @@ export function blocks(
     for (const minute of slotsOf(w)) {
       const row = counts.get(slotKey(day, minute));
       const ok = row && row.count >= minimum;
-      const who = ok ? row.free.slice().sort().join(" ") : null;
+      const who = ok ? row.free.slice().sort().join(" ") : null;
 
       if (
         run &&
         ok &&
         run.endMinute === minute &&
-        run.free.slice().sort().join(" ") === who
+        run.free.slice().sort().join(" ") === who
       ) {
         run.endMinute = minute + w.slotMinutes;
         continue;
