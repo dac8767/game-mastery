@@ -607,6 +607,88 @@ export const unit = {
       )
     );
 
+    // ---- the campaign card's dates ---------------------------------
+    // "Next session" is the one fact on that screen somebody acts on, so
+    // being a day out is worse than showing nothing.
+    const cardOut = compile("components/campaignCard.ts");
+    const cc = await import(
+      pathToFileURL(join(cardOut, "campaignCard.js")).href
+    );
+
+    check(
+      "a stored date reads as a date",
+      cc.formatCardDate("2026-09-12") === "12 Sep 2026"
+    );
+    check(
+      "no leading zero on the day",
+      cc.formatCardDate("2026-09-05") === "5 Sep 2026"
+    );
+    check("January", cc.formatCardDate("2026-01-01") === "1 Jan 2026");
+    check("December", cc.formatCardDate("2026-12-31") === "31 Dec 2026");
+    check("a bad month is left alone", cc.formatCardDate("2026-13-01") === "2026-13-01");
+    check("free text passes through", cc.formatCardDate("someday") === "someday");
+    check("nothing stays nothing", cc.formatCardDate(undefined) === "");
+    check("a non-string", cc.formatCardDate(20260912) === "");
+
+    // The bug this exists for: `new Date("2026-09-12")` is UTC midnight,
+    // which renders as the 11th anywhere west of Greenwich. Every date
+    // on this card would be a day early for Derek, all year.
+    const late = new Date(2026, 8, 12, 23, 30); // 11:30pm local, 12 Sep
+    check(
+      "a session today is today, even late at night",
+      cc.daysUntil("2026-09-12", late) === 0
+    );
+    const early = new Date(2026, 8, 12, 0, 15); // 12:15am local
+    check(
+      "and in the small hours too",
+      cc.daysUntil("2026-09-12", early) === 0
+    );
+    check(
+      "tomorrow is one day away",
+      cc.daysUntil("2026-09-13", late) === 1
+    );
+    check(
+      "yesterday is minus one",
+      cc.daysUntil("2026-09-11", late) === -1
+    );
+    check(
+      "across a month boundary",
+      cc.daysUntil("2026-10-01", new Date(2026, 8, 30, 12)) === 1
+    );
+    check(
+      "across a year boundary",
+      cc.daysUntil("2027-01-01", new Date(2026, 11, 31, 12)) === 1
+    );
+    // A date range crossing a daylight-saving change is 24-hour maths on
+    // a clock that skips an hour; rounding is what keeps it whole.
+    check(
+      "across a daylight-saving change",
+      cc.daysUntil("2026-11-08", new Date(2026, 10, 1, 12)) === 7
+    );
+    check("unparseable is null", cc.daysUntil("soon", late) === null);
+
+    const at = (d) => cc.untilSession("2026-09-12", d).label;
+    check("tonight", at(new Date(2026, 8, 12, 18)) === "— tonight");
+    check("tomorrow", at(new Date(2026, 8, 11, 18)) === "— tomorrow");
+    check("this week", at(new Date(2026, 8, 9, 18)) === "— in 3 days");
+    check("next week", at(new Date(2026, 8, 2, 18)) === "— next week");
+    check("further out", at(new Date(2026, 7, 12, 18)) === "— in 4 weeks");
+    check("yesterday", at(new Date(2026, 8, 13, 18)) === "— yesterday");
+    check("a while ago", at(new Date(2026, 8, 20, 18)) === "— 8 days ago");
+    check(
+      "a past session is marked overdue",
+      cc.untilSession("2026-09-12", new Date(2026, 8, 20)).overdue === true
+    );
+    check(
+      "tonight is not overdue",
+      cc.untilSession("2026-09-12", new Date(2026, 8, 12, 23)).overdue === false
+    );
+    check(
+      "no date says nothing rather than guessing",
+      cc.untilSession(undefined).label === "" &&
+        cc.untilSession(undefined).overdue === false
+    );
+
     // ---- the locations tree ----------------------------------------
     // Everything here is about not losing a place: a player's list has
     // the hidden locations filtered out of it, so their children

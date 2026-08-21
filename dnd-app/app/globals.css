@@ -188,8 +188,15 @@ button {
   gap: 0.75rem;
 }
 
+/* The card is a link; the delete button cannot be inside it, or every
+   click on the card would have to guess which one you meant. */
+.campaign-card-wrap {
+  position: relative;
+}
+
 .campaign-card {
-  display: block;
+  display: flex;
+  gap: 1rem;
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -4195,4 +4202,331 @@ button.cal-day:hover {
   margin: 0;
   padding: 0 0.2rem;
   font-size: 0.78rem;
+}
+
+
+/* ---------- The campaign picker's cards ---------- */
+
+.campaign-art {
+  flex: none;
+  width: 6.5rem;
+  height: 6.5rem;
+  border-radius: 10px;
+  background-color: var(--bg-inset);
+  background-size: cover;
+  background-position: center;
+  border: 1px solid var(--border);
+}
+
+.campaign-art.empty {
+  /* A plate rather than a broken frame: most campaigns will not have a
+     picture on day one, and an obvious placeholder reads as unfinished. */
+  background-image: linear-gradient(
+    135deg,
+    var(--bg-inset),
+    var(--bg-raised)
+  );
+}
+
+.campaign-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.campaign-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 1.1rem;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  margin-top: 0.15rem;
+}
+
+.campaign-facts strong {
+  color: var(--text-dim);
+  font-weight: 600;
+  margin-right: 0.3rem;
+}
+
+.campaign-facts .overdue {
+  color: var(--bloodied);
+}
+
+.campaign-soon {
+  opacity: 0.8;
+}
+
+.campaign-party {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.9rem;
+  margin-top: 0.5rem;
+}
+
+.party-member {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.party-portrait {
+  width: 1.9rem;
+  height: 1.9rem;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.party-names {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.party-character {
+  font-size: 0.82rem;
+}
+
+.party-player {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.page-header-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.campaign-new {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding: 0.9rem 1rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.campaign-new input {
+  flex: 1;
+  min-width: 12rem;
+}
+
+.campaign-delete {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+/* Deliberately quiet until aimed at: it is the one control here that
+   cannot be undone. */
+.campaign-delete:hover {
+  color: var(--bloodied);
+  border-color: var(--bloodied);
+}
+
+/* ---------- Modal ---------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.modal {
+  width: min(32rem, 100%);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem 1.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.modal.danger {
+  border-color: var(--bloodied);
+}
+
+.modal h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.modal p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-dim);
+}
+
+.modal label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.danger-button {
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--bloodied);
+  background: var(--bloodied);
+  color: #fff;
+  font-weight: 600;
+}
+
+.danger-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ---------- The roster, in settings ---------- */
+
+.campaign-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  align-items: flex-start;
+  margin: 0.75rem 0;
+}
+
+.campaign-image-field {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.campaign-image-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+
+.roster {
+  list-style: none;
+  margin: 0.75rem 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.roster-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.roster-portrait {
+  width: 2.6rem;
+  height: 2.6rem;
+  flex: none;
+  padding: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  display: grid;
+  place-items: center;
+}
+
+.roster-portrait:hover {
+  border-color: var(--accent);
+}
+
+.roster-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.roster-portrait-empty {
+  color: var(--text-dim);
+  font-size: 1rem;
+}
+
+.roster-names {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.roster-character {
+  font-weight: 600;
+}
+
+.roster-player {
+  font-size: 0.82rem;
+}
+
+.roster-state {
+  flex: none;
+  font-size: 0.75rem;
+}
+
+.roster-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.roster-add input {
+  flex: 1;
+  min-width: 10rem;
+}
+
+@media (max-width: 700px) {
+  .campaign-card {
+    flex-direction: column;
+  }
+
+  .campaign-art {
+    width: 100%;
+    height: 8rem;
+  }
 }

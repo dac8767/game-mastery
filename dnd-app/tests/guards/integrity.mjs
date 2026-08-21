@@ -472,6 +472,72 @@ export const integrity = {
       }
     }
 
+    // ---- deleting a campaign must reach everything in it ------------
+    // The one failure here is invisible by construction: a table left
+    // out of the purge keeps its rows forever, and nothing ever reads
+    // them, so there is no screen where the leak shows up. The schema is
+    // the authority on what a campaign owns, so the list is derived from
+    // it rather than written down twice.
+    const campaignsSrc = read("convex", "campaigns.ts");
+    const purge = campaignsSrc.slice(
+      campaignsSrc.indexOf("export const purgeCampaign")
+    );
+    if (!purge.startsWith("export const purgeCampaign")) {
+      throw new Error("no purgeCampaign in convex/campaigns.ts");
+    }
+
+    const ownedTables = [
+      ...schemaSrc.matchAll(/\n  (\w+): defineTable\(\{([\s\S]*?)\n  \}\)/g),
+    ]
+      .filter(([, , body]) => /campaignId: v\.id\("campaigns"\)/.test(body))
+      .map(([, table]) => table);
+
+    if (ownedTables.length === 0) {
+      throw new Error("found no campaign-scoped tables in schema.ts");
+    }
+    for (const table of ownedTables) {
+      if (!new RegExp(`query\\("${table}"\\)`).test(purge)) {
+        problems.push(
+          `purgeCampaign never queries \`${table}\`, which carries a ` +
+            "campaignId — deleting a campaign would strand its rows with " +
+            "nothing left that can find them"
+        );
+      }
+    }
+
+    // The two tables a campaign owns only through a parent. Named here
+    // because the schema cannot say it: they carry an encounterId and a
+    // pageId, so the rule above cannot see them.
+    for (const [table, via] of [
+      ["combatants", "encounters"],
+      ["notebookBoxes", "notebookNodes"],
+    ]) {
+      if (!new RegExp(`query\\("${table}"\\)`).test(purge)) {
+        problems.push(
+          `purgeCampaign never queries \`${table}\` — it belongs to a ` +
+            `campaign through ${via}, so nothing else will ever delete it`
+        );
+      }
+    }
+
+    // Deleting has to be harder than clicking. The typed name is the
+    // entire safeguard, and it lives in the mutation rather than the
+    // dialog so a direct call cannot skip it.
+    const deleteFn = campaignsSrc.slice(
+      campaignsSrc.indexOf("export const deleteCampaign"),
+      campaignsSrc.indexOf("export const purgeCampaign")
+    );
+    if (!/confirmName/.test(deleteFn) || !/campaign\.name/.test(deleteFn)) {
+      problems.push(
+        "campaigns.deleteCampaign does not check a typed name against the " +
+          "campaign's own — the confirmation would be advisory, and a " +
+          "misfired call would delete a campaign outright"
+      );
+    }
+    if (!/requireDm\(/.test(deleteFn)) {
+      problems.push("campaigns.deleteCampaign does not go through requireDm");
+    }
+
     // ---- the rules edition is a literal union in three places -------
     // The schema validates it, the mutation re-declares it, and
     // lookupFilters offers it as buttons. Add a third edition to one and
@@ -482,8 +548,11 @@ export const integrity = {
     // v.literal("b"))` has a `)` after the first literal, and anything
     // non-greedy stops there and reports one edition where there are two.
     const editionLiterals = (src, label) => {
-      const at = src.indexOf("rulesVersion");
-      if (at === -1) throw new Error(`no rulesVersion in ${label}`);
+      // Anchored on the DECLARATION — `rulesVersion: v.…` — not on the
+      // name. It is also read and re-emitted elsewhere in these files,
+      // and the first mention is not always the one that defines it.
+      const at = src.search(/rulesVersion:\s*v\./);
+      if (at === -1) throw new Error(`no rulesVersion declared in ${label}`);
       const window = src.slice(at, at + 200);
       if (!/v\.union\(/.test(window)) {
         throw new Error(`rulesVersion in ${label} is not a union of literals`);

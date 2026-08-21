@@ -79,6 +79,24 @@ export default defineSchema({
     rulesVersion: v.optional(
       v.union(v.literal("2014"), v.literal("2024"))
     ),
+
+    /**
+     * The picture on the campaign card, held the same two ways NPC
+     * portraits are: `imageId` is an upload in Convex file storage and
+     * wins when set; `imagePath` is the map-server route, e.g.
+     * "web/campaigns/moonbrook.webp", for art you already keep there.
+     */
+    imageId: v.optional(v.id("_storage")),
+    imagePath: v.optional(v.string()),
+
+    /**
+     * Real-world dates, as "YYYY-MM-DD" — the day the group first sat
+     * down, and when they next will. Not in-world dates: the campaign
+     * calendar owns those, and it is a per-campaign invention with its
+     * own month names and week length (see calendars).
+     */
+    startDate: v.optional(v.string()),
+    nextSessionDate: v.optional(v.string()),
   }).index("by_dm", ["dmId"]),
 
   campaignMembers: defineTable({
@@ -89,16 +107,36 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_campaign_user", ["campaignId", "userId"]),
 
+  /**
+   * The party. One row per character, whether or not the person playing
+   * it has an account yet.
+   *
+   * A DM builds the roster before anyone signs up, so `playerId` and
+   * `playerName` say different things and both can be absent:
+   *
+   *   playerName set, playerId unset   a real person, typed by the DM,
+   *                                    waiting to be claimed
+   *   playerId set                     claimed; that account owns it
+   *   neither set                      a DM-run sheet, no player at all
+   *
+   * That distinction is why `playerName` exists rather than reusing an
+   * empty `playerId`: "nobody plays this" and "the player has not signed
+   * up yet" want opposite handling when someone finally registers.
+   */
   characters: defineTable({
     campaignId: v.id("campaigns"),
-    playerId: v.optional(v.id("users")), // undefined = DM-run NPC sheet
+    playerId: v.optional(v.id("users")),
+    /** Who plays it, before they have an account to link. */
+    playerName: v.optional(v.string()),
     name: v.string(),
     className: v.optional(v.string()),
     level: v.optional(v.number()),
     maxHp: v.number(),
     ac: v.optional(v.number()),
     initiativeBonus: v.optional(v.number()),
-    portraitPath: v.optional(v.string()), // on the map server
+    /** Uploaded art wins over the map-server path, as NPCs do. */
+    portraitId: v.optional(v.id("_storage")),
+    portraitPath: v.optional(v.string()),
     notes: v.optional(v.string()), // DM-visible only
   })
     .index("by_campaign", ["campaignId"])
@@ -487,7 +525,11 @@ export default defineSchema({
     // Grid (dense rows) or tiles (portrait-led cards).
     viewMode: v.optional(v.union(v.literal("grid"), v.literal("tiles"))),
     tilesPerRow: v.optional(v.number()),
-  }).index("by_user_campaign_view", ["userId", "campaignId", "view"]),
+  })
+    .index("by_user_campaign_view", ["userId", "campaignId", "view"])
+    // Keyed by user first above, so deleting a campaign could not find
+    // its rows without this second way in.
+    .index("by_campaign", ["campaignId"]),
 
   /**
    * Chat channels for a campaign.
@@ -555,7 +597,10 @@ export default defineSchema({
     collapsed: v.optional(v.boolean()),
   })
     .index("by_user_campaign", ["userId", "campaignId"])
-    .index("by_parent", ["parentId"]),
+    .index("by_parent", ["parentId"])
+    // Same reason as viewPrefs: a notebook belongs to one person, so
+    // nothing else could enumerate a campaign's notebooks to delete them.
+    .index("by_campaign", ["campaignId"]),
 
   /**
    * One row per box, not an array on the page.

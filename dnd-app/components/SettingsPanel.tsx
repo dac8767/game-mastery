@@ -5,6 +5,8 @@ import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { THEMES } from "@/components/themes";
 import { RULES_VERSIONS } from "@/components/lookupFilters";
+import { CampaignDetails } from "@/components/CampaignDetails";
+import { CampaignRoster } from "@/components/CampaignRoster";
 
 /**
  * Settings.
@@ -125,6 +127,13 @@ export function SettingsPanel({
             </span>
           </label>
         </section>
+      )}
+
+      {current?.isDm && (
+        <>
+          <CampaignDetails campaignId={campaignId} />
+          <CampaignRoster campaignId={campaignId} />
+        </>
       )}
 
       {current?.isDm && (
