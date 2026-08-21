@@ -37,7 +37,6 @@ export function TransferDm({
     <section className="settings-block">
       <h2>Hand over the DM role</h2>
       <p className="settings-note">
-        <strong>Campaign-wide, and only yours while you are the DM.</strong>{" "}
         Made a campaign for someone else to run? Give it to them.
       </p>
 

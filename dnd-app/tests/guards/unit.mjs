@@ -607,6 +607,52 @@ export const unit = {
       )
     );
 
+    // ---- the settings tabs -----------------------------------------
+    // resolveTab is what stops the page going blank underneath someone:
+    // handing over a campaign on the Game Master tab removes that tab
+    // while it is the one you are looking at.
+    const tabsOut = compile("components/settingsTabs.ts");
+    const st = await import(
+      pathToFileURL(join(tabsOut, "settingsTabs.js")).href
+    );
+
+    check("tabs are declared", st.SETTINGS_TABS.length > 0);
+    check(
+      "tab ids are unique",
+      new Set(st.SETTINGS_TABS.map((t) => t.id)).size ===
+        st.SETTINGS_TABS.length
+    );
+    check(
+      "every tab has a label and a blurb",
+      st.SETTINGS_TABS.every((t) => t.label && t.blurb)
+    );
+    check(
+      "a player sees only the tabs that are theirs",
+      st.visibleTabs(false).every((t) => !t.dmOnly)
+    );
+    check("a DM sees all of them", st.visibleTabs(true).length === st.SETTINGS_TABS.length);
+    check(
+      "a player still has somewhere to land",
+      st.visibleTabs(false).length > 0
+    );
+    check(
+      "the first tab is one everybody can see",
+      st.SETTINGS_TABS[0].dmOnly !== true
+    );
+
+    check("a valid tab is kept", st.resolveTab("interface", false) === "interface");
+    check("a DM keeps a DM tab", st.resolveTab("players", true) === "players");
+    check(
+      "a player asking for a DM tab is redirected, not shown a blank page",
+      st.resolveTab("players", false) === st.visibleTabs(false)[0].id
+    );
+    check(
+      "losing the DM role moves you off a DM tab",
+      st.resolveTab("gm", false) === st.visibleTabs(false)[0].id
+    );
+    check("nonsense falls back", st.resolveTab("nope", true) === st.SETTINGS_TABS[0].id);
+    check("an empty selection falls back", st.resolveTab("", false).length > 0);
+
     // ---- the campaign card's dates ---------------------------------
     // "Next session" is the one fact on that screen somebody acts on, so
     // being a day out is worse than showing nothing.

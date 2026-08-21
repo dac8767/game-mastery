@@ -45,10 +45,9 @@ export function CampaignRoster({
     <section className="settings-block">
       <h2>Players and characters</h2>
       <p className="settings-note">
-        <strong>Campaign-wide, and yours to set as DM.</strong> Add everyone at
-        your table by name — they don&apos;t need an account. When player
-        sign-up arrives, each person claims the character already waiting for
-        them, keeping its portrait and history.
+        Add everyone at your table by name — they don&apos;t need an account.
+        When player sign-up arrives, each person claims the character already
+        waiting for them, keeping its portrait and history.
       </p>
 
       {characters === undefined ? (

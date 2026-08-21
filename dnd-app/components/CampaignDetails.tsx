@@ -83,8 +83,7 @@ export function CampaignDetails({
     <section className="settings-block">
       <h2>Campaign card</h2>
       <p className="settings-note">
-        <strong>Campaign-wide, and yours to set as DM.</strong> This is what
-        everyone sees on the screen where they pick a campaign.
+        What everyone sees on the screen where they pick a campaign.
       </p>
 
       <div className="campaign-details">

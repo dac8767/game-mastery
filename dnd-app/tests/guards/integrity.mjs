@@ -473,6 +473,46 @@ export const integrity = {
       }
     }
 
+    // ---- every settings tab must have a panel, and vice versa -------
+    // The strip and the panels read one declaration, but they read it in
+    // two different ways: the strip maps over SETTINGS_TABS, the panels
+    // are `tab === "id"` branches. Both failures are silent — a tab that
+    // renders an empty page, or a section nothing can navigate to.
+    const tabsSrc = read("components", "settingsTabs.ts");
+    const declaredTabs = [
+      ...tabsSrc
+        .slice(tabsSrc.indexOf("SETTINGS_TABS"), tabsSrc.indexOf("];"))
+        .matchAll(/id:\s*"([^"]+)"/g),
+    ].map((m) => m[1]);
+
+    if (declaredTabs.length === 0) {
+      throw new Error("no tabs declared in settingsTabs.ts");
+    }
+
+    const panelSrc = read("components", "SettingsPanel.tsx");
+    const rendered = [
+      ...panelSrc.matchAll(/tab === "([^"]+)"/g),
+    ].map((m) => m[1]);
+
+    for (const id of declaredTabs) {
+      if (!rendered.includes(id)) {
+        problems.push(
+          `settings tab "${id}" is declared but SettingsPanel renders no ` +
+            "panel for it — it would be a tab you can click that shows " +
+            "nothing"
+        );
+      }
+    }
+    for (const id of rendered) {
+      if (!declaredTabs.includes(id)) {
+        problems.push(
+          `SettingsPanel renders a panel for "${id}", which is not a ` +
+            "declared tab — nothing can select it, so those settings are " +
+            "unreachable"
+        );
+      }
+    }
+
     // ---- handing over the DM role -----------------------------------
     // The one mutation that changes WHO the DM is. Authority here is
     // structural — every other check in the app reads campaign.dmId — so

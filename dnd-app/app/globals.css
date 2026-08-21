@@ -4553,3 +4553,42 @@ button.cal-day:hover {
   margin: 0.75rem 0;
   flex-wrap: wrap;
 }
+
+/* ---------- Settings tabs ---------- */
+
+.settings-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.4rem;
+}
+
+.settings-tab {
+  padding: 0.5rem 0.9rem;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: 6px 6px 0 0;
+}
+
+.settings-tab:hover {
+  color: var(--text);
+  background: var(--bg-inset);
+}
+
+.settings-tab.on {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* Whose settings these are, said once per tab rather than on every
+   block inside it. */
+.settings-blurb {
+  margin: 0 0 0.5rem;
+  color: var(--text-dim);
+  font-size: 0.84rem;
+}
