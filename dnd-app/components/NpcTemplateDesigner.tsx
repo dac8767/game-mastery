@@ -228,8 +228,22 @@ export function NpcTemplateDesigner({
       {error && <p className="form-error">{error}</p>}
 
       <div className="tpl-wys" onPointerMove={moveResize} onPointerUp={endResize}>
+        {/* The record's own top bar, inert. Drawn because leaving it out
+            would put the tab strip at the top of the preview and an inch
+            lower in the record. */}
+        <div className="record-bar">
+          <span className="npc-btn primary">Back to NPC List</span>
+          <span className="npc-btn primary record-hide-btn">
+            Hide Character from Players
+          </span>
+        </div>
+
         <div className="record-split">
-        <div className="record-left">
+        <section className="record-pane record-left">
+          <header className="pane-head">
+            <h2>NPC Info</h2>
+          </header>
+          <div className="pane-body">
           {/* The record's header, drawn as the record draws it, and in
               the same column — the notes run the full height beside it
               rather than starting underneath. Not arrangeable: the
@@ -253,10 +267,6 @@ export function NpcTemplateDesigner({
               </p>
             </div>
             <div className="record-head-right">
-              <label className="record-hide">
-                <input type="checkbox" disabled />
-                <span>Hide NPC from players</span>
-              </label>
               <span className="settings-note tpl-head-note">
                 Fixed — every record opens on its portrait and name.
               </span>
@@ -475,6 +485,7 @@ export function NpcTemplateDesigner({
           )}
         </div>
         </div>
+        </section>
 
         {/* Drawn because it is half the record, and leaving it out
             would make the tabs look twice as wide here as they are. */}

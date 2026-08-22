@@ -1118,14 +1118,83 @@ body.col-resizing {
 
 /* The open NPC, in the list's own slot: same flex child the table is,
    so it inherits the whole area rather than floating over it. */
+/* The record is a bar and two panes, not one big box. Each pane carries
+   its own frame and title, so "NPC Info" and "Player Notes" read as
+   separate things on the page rather than as regions of one card. */
 .npc-record {
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  padding: 1.1rem 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  /* hidden, not auto: the panes fit the window and scroll INSIDE
+     themselves. Let this one scroll instead and the two columns grow to
+     whatever the longer of them needs, so reading to the bottom of the
+     notes scrolls the fields away too — which is the one thing the
+     two-column layout exists to prevent. */
+  overflow: hidden;
+}
+
+.record-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+/* The designer draws this bar out of spans, which are inline and would
+   sit half a line lower than the record's real buttons. */
+.record-bar .npc-btn {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* The way out on the left, who may see it on the right, and nothing
+   between them — the gap is what makes the pair read as two opposite
+   decisions rather than a row of buttons. */
+.record-bar > :last-child {
+  margin-left: auto;
+}
+
+.record-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
   background: var(--bg-raised);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.pane-head {
+  flex: none;
+  padding: 0.55rem 0.9rem;
+  background: var(--bg-inset);
+  border-bottom: 1px solid var(--border);
+}
+
+.pane-head h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.pane-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  padding: 0.9rem 1rem 1.1rem;
+}
+
+/* On when the NPC is hidden, so the button says which way it is set.
+   A button with no state cannot tell "hide this" from "this is
+   hidden", which the checkbox it replaced did for free. */
+.record-hide-btn.on {
+  background: var(--bloodied);
+  border-color: var(--bloodied);
 }
 
 /* Portrait left, who-they-are middle, the way out right. */
@@ -5448,6 +5517,9 @@ button.cal-day:hover {
 
 /* The editor is the record, so it borrows the record's own frame. */
 .tpl-wys {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
   margin: 0.75rem 0;
   padding: 0.9rem 1rem 1.1rem;
   background: var(--bg);
@@ -5677,14 +5749,19 @@ button.cal-day:hover {
    used to span the full width with the notes starting under it, which
    left the notes reading as a footnote to the record rather than the
    other half of it. */
+/* 52/47, from the design: the fields column is the wider of the two
+   because a four-column field grid needs the room, and the notes column
+   is not far behind because it is where the writing happens. Fractions
+   rather than pixels, so the ratio survives any window width. */
 .record-split {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1.25rem;
+  grid-template-columns: minmax(0, 52fr) minmax(0, 47fr);
+  gap: 0.6rem;
   /* stretch, not start: the notes column runs top to bottom beside
      everything on the left, which is the point of it being a column. */
   align-items: stretch;
-  min-height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 @media (max-width: 1000px) {
@@ -5695,29 +5772,23 @@ button.cal-day:hover {
 
 .record-left {
   min-width: 0;
-  display: flex;
-  flex-direction: column;
 }
 
 /* The notes are read beside whatever tab is open, so they line up with
    the tab strip rather than with the fields below it. */
 .record-notes {
   min-width: 0;
+  min-height: 0;
   display: grid;
-  gap: 0.9rem;
-  align-content: start;
-  padding: 0.75rem 0.9rem 0.9rem;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  gap: 0.6rem;
+  align-content: stretch;
 }
 
-/* One thread gets the whole column; the DM keeps two and gets half
-   each. Either way the column is full height, so a thread has room to
-   be a thread rather than three lines and a scrollbar. */
+/* One thread gets the whole column; the DM keeps two. Either way the
+   column is full height, so a thread has room to be a thread rather
+   than three lines and a scrollbar. */
 .record-notes:not(.split) {
   grid-template-rows: minmax(0, 1fr);
-  align-content: stretch;
 }
 
 .record-notes .detail-field.tall .detail-input {
@@ -5865,37 +5936,69 @@ button.cal-day:hover {
 /* ---------- Notes as a thread ---------- */
 
 /* A player gets the whole column for the one thread. A DM keeps two
-   sets and needs both beside the record, so the column splits. */
+   sets and needs both beside the record — 33/41 from the design, with
+   DM Notes the taller of the two because that is where a DM writes. */
 .record-notes.split {
   display: grid;
-  grid-template-rows: 1fr 1fr;
-  gap: 0.9rem;
+  grid-template-rows: minmax(0, 33fr) minmax(0, 41fr);
+  gap: 0.6rem;
   min-height: 0;
 }
 
+/* Each thread is its own framed pane, matching NPC Info beside it. */
 .note-thread {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  gap: 0.35rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
 }
 
 .note-thread-head {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  padding: 0.55rem 0.9rem;
+  background: var(--bg-inset);
+  border-bottom: 1px solid var(--border);
 }
 
 .note-thread-head h3 {
   margin: 0;
-  font-size: 0.72rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--accent);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
 }
 
+.note-dm .note-thread-head {
+  border-bottom-color: var(--border);
+}
+
+/* Everything below the title band lives inside the same padding the
+   NPC Info body uses, so the two columns line up across the gap. */
+.note-thread > :not(.note-thread-head) {
+  margin-left: 0.9rem;
+  margin-right: 0.9rem;
+}
+
+.note-thread > .settings-note {
+  margin-top: 0.6rem;
+}
+
+.note-thread > .note-composer {
+  margin-bottom: 0.8rem;
+}
+
+/* The title reads as a title in both panes. What marks this one as the
+   DM's is the "DM only" tag beside it and the red edge on every card
+   inside it — a red heading on top of those is a third telling of the
+   same thing, and it made the two panes look like different kinds of
+   object rather than a pair. */
 .note-dm .note-thread-head h3 {
-  color: var(--bloodied);
+  color: var(--text);
 }
 
 .note-thread .settings-note {

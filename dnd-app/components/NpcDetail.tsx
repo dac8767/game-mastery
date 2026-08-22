@@ -200,6 +200,7 @@ export function NpcDetail({
     .filter((c) => (isDm || !c.dmOnly) && (canEdit(c) || toInput(npc, c)));
 
   const hiddenCol = COLUMN_BY_KEY.get("hidden") ?? null;
+  const isHidden = hiddenCol ? toInput(npc, hiddenCol) === "true" : false;
 
   // The notes rail: read beside whatever tab is open, never behind
   // one. You read the fields and write in the notes at the same time,
@@ -216,13 +217,49 @@ export function NpcDetail({
 
   return (
     <section className="npc-record" aria-label={`${npc.name} — full record`}>
+      {/* The two actions that are about the record rather than in it:
+          leaving, and who is allowed to see it. Across the top, away
+          from the fields, because neither is a fact about the NPC. */}
+      <div className="record-bar">
+        <button type="button" className="npc-btn primary" onClick={onClose}>
+          Back to NPC List
+        </button>
+
+        {/* A toggle that says which way it is currently set. The old
+            checkbox did that for free; a button has to say it, or you
+            cannot tell "hide this" from "this is hidden" without going
+            to look at the list. The server withholds a hidden NPC from
+            players regardless of what this button says. */}
+        {isDm && hiddenCol && (
+          <button
+            type="button"
+            className={`npc-btn primary record-hide-btn${
+              isHidden ? " on" : ""
+            }`}
+            aria-pressed={isHidden}
+            title={
+              isHidden
+                ? "Players cannot see this NPC. Click to show them."
+                : "Players can see this NPC. Click to hide it."
+            }
+            onClick={() => void commit(hiddenCol, isHidden ? "false" : "true")}
+          >
+            {isHidden ? "Hidden from Players" : "Hide Character from Players"}
+          </button>
+        )}
+      </div>
+
       {/* Two halves. The left is the fields, behind whatever tab you
           chose; the right is the notes, which every tab is read
           beside. You read a record and write in its notes at the same
           time, and a tab that hid them would mean losing your place to
           check an age. */}
       <div className="record-split">
-        <div className="record-left">
+        <section className="record-pane record-left">
+          <header className="pane-head">
+            <h2>NPC Info</h2>
+          </header>
+          <div className="pane-body">
         <header className="record-head">
           <PortraitField npc={npc} editable={isDm} />
 
@@ -258,27 +295,6 @@ export function NpcDetail({
             )}
           </div>
 
-          <div className="record-head-right">
-            {/* Not a fact about the NPC the way the fields are — a switch
-                about who may see them at all — so it sits with the name
-                rather than in a list of attributes. DM-only, and the
-                server withholds a hidden NPC regardless of this. */}
-            {isDm && hiddenCol && (
-              <label className="record-hide">
-                <input
-                  type="checkbox"
-                  checked={toInput(npc, hiddenCol) === "true"}
-                  onChange={(e) =>
-                    void commit(hiddenCol, e.target.checked ? "true" : "false")
-                  }
-                />
-                <span>Hide NPC from players</span>
-              </label>
-            )}
-            <button type="button" className="npc-btn" onClick={onClose}>
-              Back to the list
-            </button>
-          </div>
         </header>
 
         {error && <p className="form-error">{error}</p>}
@@ -342,7 +358,8 @@ export function NpcDetail({
           </p>
         )}
           </div>
-        </div>
+          </div>
+        </section>
 
         {/* A player gets the whole column for the table pad. A DM gets
             it split, because they keep two sets of notes and need both
