@@ -79,18 +79,8 @@ export function SettingsPanel({
 
       {active && <p className="settings-blurb">{active.blurb}</p>}
 
-      {tab === "general" && (
+      {tab === "system" && (
         <>
-          <section className="settings-block">
-            <h2>Your name</h2>
-            <p className="settings-note">
-              What everyone else sees you called — on a campaign card, as the
-              DM of the games you run, and beside anything you write. Until you
-              set it you show up as &ldquo;the DM&rdquo;.
-            </p>
-            <NameField current={settings.displayName} />
-          </section>
-
           <section className="settings-block">
             <h2>Dates</h2>
             <p className="settings-note">
@@ -115,6 +105,21 @@ export function SettingsPanel({
                 </button>
               ))}
             </div>
+          </section>
+
+        </>
+      )}
+
+      {tab === "user" && (
+        <>
+          <section className="settings-block">
+            <h2>Your name</h2>
+            <p className="settings-note">
+              What everyone else sees you called — on a campaign card, as the
+              DM of the games you run, and beside anything you write. Until you
+              set it you show up as &ldquo;the DM&rdquo;.
+            </p>
+            <NameField current={settings.displayName} />
           </section>
 
           <section className="settings-block">
@@ -187,8 +192,46 @@ export function SettingsPanel({
               </label>
             </section>
           )}
+          {/* The DM controls, on the person rather than in a tab of
+              their own. They only ever applied to one person, and a
+              tab that appears and disappears as the campaign changes
+              hands is a tab most people never see exist. */}
+          {isDm && (
+            <>
+            <section className="settings-block">
+              <h2>Preview</h2>
+              <p className="settings-note">
+                The one setting here that is yours alone — it changes what you
+                are served, not what anyone else sees.
+              </p>
+              <label className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.viewAsPlayer}
+                  onChange={(e) => void save({ viewAsPlayer: e.target.checked })}
+                />
+                <span>
+                  <strong>View as a player</strong>
+                  <br />
+                  <span className="settings-note">
+                    Serves you the player&apos;s view so you can check what
+                    you&apos;re giving away. The server genuinely withholds the
+                    data — hidden NPCs and DM fields never reach the browser — so
+                    this is a real preview, not a mask. It outranks admin access,
+                    so it stays truthful either way. You can still edit.
+                  </span>
+                </span>
+              </label>
+            </section>
+
+            {current?.isDm && (
+              <TransferDm campaignId={campaignId} campaignName={current.name} />
+            )}
+            </>
+          )}
         </>
       )}
+
 
       {tab === "campaign" && (
         <>
@@ -232,39 +275,6 @@ export function SettingsPanel({
         <NpcTemplateDesigner campaignId={campaignId} />
       )}
 
-      {tab === "gm" && (
-        <>
-          <section className="settings-block">
-            <h2>Preview</h2>
-            <p className="settings-note">
-              The one setting here that is yours alone — it changes what you
-              are served, not what anyone else sees.
-            </p>
-            <label className="settings-toggle">
-              <input
-                type="checkbox"
-                checked={settings.viewAsPlayer}
-                onChange={(e) => void save({ viewAsPlayer: e.target.checked })}
-              />
-              <span>
-                <strong>View as a player</strong>
-                <br />
-                <span className="settings-note">
-                  Serves you the player&apos;s view so you can check what
-                  you&apos;re giving away. The server genuinely withholds the
-                  data — hidden NPCs and DM fields never reach the browser — so
-                  this is a real preview, not a mask. It outranks admin access,
-                  so it stays truthful either way. You can still edit.
-                </span>
-              </span>
-            </label>
-          </section>
-
-          {current?.isDm && (
-            <TransferDm campaignId={campaignId} campaignName={current.name} />
-          )}
-        </>
-      )}
 
       {tab === "players" && <CampaignRoster campaignId={campaignId} />}
 

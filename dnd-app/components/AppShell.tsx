@@ -188,11 +188,21 @@ export function AppShell({
           </div>
         ))}
 
-        {/* Account actions only. Settings is an ordinary sidebar item
-            now — arrangeable like the rest, and pinned visible by
-            sidebarLayout — so a second hard-coded link here rendered it
-            twice. */}
+        {/* Settings sits here rather than in the arranged sections
+            above: it is the way back to the screen that arranges them,
+            so a sidebar you could hide it from would be a door that
+            locks from the inside. It is out of ALL_NAV_ITEMS for the
+            same reason, which is also what stops it rendering twice. */}
         <div className="sidebar-footer">
+          <Link
+            href={`${base}/settings`}
+            className={`nav-item${
+              pathname === `${base}/settings` ? " active" : ""
+            }`}
+          >
+            <span className="nav-icon">⚙</span>
+            Settings
+          </Link>
           {runsThis && (
             <button
               type="button"

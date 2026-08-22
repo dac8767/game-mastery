@@ -813,6 +813,24 @@ export const unit = {
       st.SETTINGS_TABS.find((t) => t.id === "templates")?.dmOnly === true
     );
     check(
+      "System and User replaced General, and Game Master is gone",
+      st.SETTINGS_TABS.some((t) => t.id === "system") &&
+        st.SETTINGS_TABS.some((t) => t.id === "user") &&
+        !st.SETTINGS_TABS.some((t) => t.id === "general") &&
+        !st.SETTINGS_TABS.some((t) => t.id === "gm")
+    );
+    check(
+      "User is not DM-only — it is where everyone edits their name",
+      st.SETTINGS_TABS.find((t) => t.id === "user")?.dmOnly !== true
+    );
+    // A tab id saved before this rename still resolves to something,
+    // rather than leaving the strip pointing at a panel that is gone.
+    check(
+      "a stale saved tab falls back rather than blanking the page",
+      st.resolveTab("gm", true) === st.SETTINGS_TABS[0].id &&
+        st.resolveTab("general", false) === st.visibleTabs(false)[0].id
+    );
+    check(
       "the first tab is one everybody can see",
       st.SETTINGS_TABS[0].dmOnly !== true
     );
@@ -1308,26 +1326,23 @@ export const unit = {
       })()
     );
 
-    // The door that would lock from the inside.
+    // The pin mechanism. Nothing uses it now — Settings was its only
+    // member and has left the designer entirely — so it is checked
+    // against a made-up entry, which is what keeps it honest for
+    // whatever needs it next.
     check(
-      "Settings cannot be hidden by toggling it",
-      sb
-        .toggleHidden(sbBase, "settings")
-        .sections.flatMap((s) => s.items)
-        .find((i) => i.id === "settings").hidden === false
-    );
-    check(
-      "nor by storing it hidden",
-      sb
-        .reconcileSidebar(
-          {
-            sections: [
-              { id: "x", title: "X", items: [{ id: "settings", hidden: true }] },
-            ],
-          },
-          ["settings"]
-        )
-        .sections[0].items[0].hidden === false
+      "a pinned item cannot be hidden by toggling it",
+      (() => {
+        const pinned = sb.ALWAYS_VISIBLE;
+        if (pinned.length === 0) return true; // nothing to pin today
+        const id = pinned[0];
+        return (
+          sb
+            .toggleHidden(sbBase, id)
+            .sections.flatMap((s) => s.items)
+            .find((i) => i.id === id)?.hidden !== true
+        );
+      })()
     );
     check(
       "an ordinary item still hides",
@@ -1453,11 +1468,41 @@ export const unit = {
         .hiddenItems(sb.hideAll(sbBase))
         .map((i) => i.id)
         .sort()
-        .join() === "chat,dice,npcs,table"
+        .join() ===
+        IDS.filter((id) => !sb.ALWAYS_VISIBLE.includes(id)).slice().sort().join()
     );
     check(
-      "hideAll still cannot hide Settings",
-      !sb.hiddenItems(sb.hideAll(sbBase)).some((i) => i.id === "settings")
+      "hideAll leaves anything pinned alone",
+      !sb
+        .hiddenItems(sb.hideAll(sbBase))
+        .some((i) => sb.ALWAYS_VISIBLE.includes(i.id))
+    );
+
+    // ---- setHidden, which is what a drag needs ---------------------
+    // A drop into Hidden means hidden, whatever it was. A toggle would
+    // make dragging an already-hidden item into Hidden un-hide it,
+    // which is the opposite of what the gesture said.
+    check(
+      "setHidden(true) on something already hidden leaves it hidden",
+      sb
+        .setHidden(sb.setHidden(sbBase, "npcs", true), "npcs", true)
+        .sections.flatMap((s) => s.items)
+        .find((i) => i.id === "npcs").hidden === true
+    );
+    check(
+      "setHidden(false) on something already shown leaves it shown",
+      sb
+        .setHidden(sbBase, "npcs", false)
+        .sections.flatMap((s) => s.items)
+        .find((i) => i.id === "npcs").hidden === false
+    );
+    check(
+      "setHidden does not move the item out of its section",
+      sb.sidebarIds(sb.setHidden(sbBase, "npcs", true)).join() === IDS.join()
+    );
+    check(
+      "an unknown id changes nothing",
+      eq(sb.setHidden(sbBase, "nope", true), sbBase)
     );
     check(
       "showAll brings everything back",

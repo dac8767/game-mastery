@@ -5996,3 +5996,30 @@ button.cal-day:hover {
   padding: 0.35rem 0.5rem;
   border-top: 1px solid var(--border);
 }
+
+/* Dragging replaced the arrows and the section dropdown. */
+.sbd-row {
+  cursor: grab;
+}
+
+.sbd-row:active {
+  cursor: grabbing;
+}
+
+.sbd-row.over {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.sbd-drop-hint {
+  padding: 0.6rem 0.4rem;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  text-align: center;
+}
+
+/* A short Hidden column is a small target, so it keeps a minimum
+   height worth aiming at. */
+.sbd-hidden-col {
+  min-height: 10rem;
+}

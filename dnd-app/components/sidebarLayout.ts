@@ -34,14 +34,15 @@ export const SIDEBAR_LIMITS = {
 };
 
 /**
- * Items that cannot be hidden, whatever the layout says.
+ * Nothing here needs pinning any more.
  *
- * Settings is where the sidebar is edited. Hiding it would remove the
- * only way back to the screen that un-hides it — a door that locks
- * from the inside, one click, no warning, and no route left but typing
- * the URL from memory.
+ * Settings used to, because it was an arrangeable item and hiding it
+ * would have removed the only way back to the screen that un-hides
+ * things. It now lives in the footer, outside the designer entirely,
+ * which solves the same problem by not creating it. The list stays so
+ * the mechanism is here if another item ever needs it.
  */
-export const ALWAYS_VISIBLE = ["settings"];
+export const ALWAYS_VISIBLE: string[] = [];
 
 export function sectionId(title: string, index: number): string {
   const slug = title
@@ -166,6 +167,28 @@ export function toggleHidden(
       items: s.items.map((i) =>
         i.id === id ? { ...i, hidden: !i.hidden } : i
       ),
+    })),
+  };
+}
+
+/**
+ * Hide or show an item outright, rather than flipping it.
+ *
+ * What dragging needs: a drop into the Hidden column means hidden,
+ * whatever it was before, and a drop back into a section means shown.
+ * A toggle would make a drag into Hidden un-hide something already
+ * hidden, which is the opposite of what the gesture said.
+ */
+export function setHidden(
+  layout: SidebarLayout,
+  id: string,
+  hidden: boolean
+): SidebarLayout {
+  if (hidden && ALWAYS_VISIBLE.includes(id)) return layout;
+  return {
+    sections: layout.sections.map((s) => ({
+      ...s,
+      items: s.items.map((i) => (i.id === id ? { ...i, hidden } : i)),
     })),
   };
 }

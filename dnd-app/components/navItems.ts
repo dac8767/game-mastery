@@ -125,16 +125,20 @@ export const SIDEBAR_GROUPS = [
     title: "Asset Library",
     itemIds: ASSET_ITEMS.map((i) => i.id),
   },
-  { id: "settings", title: "", itemIds: [SETTINGS_ITEM.id] },
 ];
 
 /** Every item the sidebar can place, by id. */
+/**
+ * Every item the sidebar ARRANGES. Settings is not one of them: it
+ * lives in the footer with the account actions, because it is the way
+ * back to the screen that arranges everything else and a sidebar you
+ * can hide it from is a door that locks from the inside.
+ */
 export const ALL_NAV_ITEMS: NavItem[] = [
   ...CAMPAIGN_ITEMS,
   ...TOOL_ITEMS,
   ...LOOKUP_ITEMS,
   ...ASSET_ITEMS,
-  SETTINGS_ITEM,
 ];
 
 export const NAV_ITEM_BY_ID = new Map(ALL_NAV_ITEMS.map((i) => [i.id, i]));

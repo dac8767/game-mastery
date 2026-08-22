@@ -653,15 +653,33 @@ export const integrity = {
       }
     }
 
-    // No nav destination may ALSO be hard-coded into the shell.
+    // An item the sidebar ARRANGES may not also be hard-coded into the
+    // shell.
     //
     // Settings shipped in the sidebar twice this way: it became an
-    // ordinary arrangeable item, and the footer kept its own link to
-    // it. Both rendered, neither was wrong on its own, and the layout
-    // system had no way to know about the second one — hiding Settings
-    // in the designer would have removed one of the two.
-    for (const item of navSrc.matchAll(/\bslug:\s*"([^"]+)"/g)) {
-      const slug = item[1];
+    // arrangeable item while the footer kept its own link to it. Both
+    // rendered, neither was wrong on its own, and the layout system had
+    // no way to know about the second — hiding it in the designer would
+    // have removed one of the two.
+    //
+    // Settings is now deliberately OUT of the arranged set and in the
+    // footer, so the check is against membership of ALL_NAV_ITEMS
+    // rather than against having a slug at all. A hard-coded link to
+    // something the designer cannot touch is the fix, not the bug.
+    const arrangedGroups = ["CAMPAIGN_ITEMS", "TOOL_ITEMS", "LOOKUP_ITEMS", "ASSET_ITEMS"];
+    const arrangedSlugs = new Set();
+    for (const group of arrangedGroups) {
+      const at = navSrc.indexOf(`export const ${group}`);
+      if (at === -1) throw new Error(`no ${group} in navItems.ts`);
+      const end = navSrc.indexOf("];", at);
+      for (const m of navSrc.slice(at, end).matchAll(/\bslug:\s*"([^"]+)"/g)) {
+        arrangedSlugs.add(m[1]);
+      }
+    }
+    if (arrangedSlugs.size === 0) {
+      throw new Error("no arranged slugs found — parser out of date?");
+    }
+    for (const slug of arrangedSlugs) {
       if (shellSrc.includes("${base}/" + slug)) {
         problems.push(
           `AppShell hard-codes a link to "${slug}", which the sidebar layout ` +

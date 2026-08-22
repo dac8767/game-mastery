@@ -11,9 +11,11 @@
  *
  * The division is by WHOSE setting it is, not by subject:
  *
- *   General      you and your account, everywhere in the app
+ *   System       how the app behaves for you, everywhere in it
+ *   User         you: your name, your access, and the DM controls if
+ *                you run this game — they belong to a person, not to a
+ *                separate tab that only ever had one occupant
  *   Campaign     this campaign, as a thing with a name and a picture
- *   Game Master  the authority itself — previewing it, handing it over
  *   Players      who is at the table and what they play
  *   Templates    how a record is laid out, campaign-wide
  *   Interface    how the app looks and reads, yours alone
@@ -24,9 +26,9 @@
  */
 
 export type SettingsTab =
-  | "general"
+  | "system"
+  | "user"
   | "campaign"
-  | "gm"
   | "players"
   | "templates"
   | "interface";
@@ -42,21 +44,20 @@ export interface SettingsTabDef {
 
 export const SETTINGS_TABS: SettingsTabDef[] = [
   {
-    id: "general",
-    label: "General",
+    id: "system",
+    label: "System",
+    blurb: "How the app behaves for you, everywhere in it.",
+  },
+  {
+    id: "user",
+    label: "User",
     blurb:
-      "You and your account — your name, how dates read, and the campaigns you are in.",
+      "You: your name, what you can reach, and — if you run this game — the DM controls.",
   },
   {
     id: "campaign",
     label: "Campaign",
     blurb: "This campaign, as everyone else sees it. Campaign-wide.",
-    dmOnly: true,
-  },
-  {
-    id: "gm",
-    label: "Game Master",
-    blurb: "Running the game: checking what players see, and handing it on.",
     dmOnly: true,
   },
   {
