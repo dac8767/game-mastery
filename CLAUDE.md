@@ -55,6 +55,16 @@ everything in the list I just printed" is how a report nobody read
 gets marked done. Status was Derek's alone until he asked for this;
 reopening one in the dashboard is still his.
 
+**Game Mastery only. Never report on ScriptCraft feedback**, or on any
+other app's. `npm run feedback` already filters to `app=Game Mastery`,
+so the way this goes wrong is querying the table directly and reading
+rows the script deliberately left out — which is what happened, and
+which put another project's bug reports into a Game Mastery session.
+The table is shared; the tool is the scope. Use the tool.
+
+When the list is empty, say so and stop. An empty queue is the answer,
+not a prompt to go looking somewhere else for something to report.
+
 ## Re-importing the Lookup library
 
 Anything that changes what `scripts/import-foundry.mjs` writes — a new
