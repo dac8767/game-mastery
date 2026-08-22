@@ -1287,10 +1287,14 @@ export const unit = {
       "a snippet opens on the densest run of matches",
       snip.includes("explained") || snip.includes("means")
     );
-    check(
-      "an elision is marked at whichever end was cut",
-      snip.startsWith("…") || snip.endsWith("…")
-    );
+    // Both ends, checked separately. An "either end" assertion passes
+    // when one of the two ellipses stops being written, which is the
+    // half that matters: an extract that looks like a whole rule is
+    // exactly the mistake this tool exists to prevent.
+    const fromTop = rs.snippet(passage, ["appears"], 120);
+    check("a cut at the front is marked", snip.startsWith("…"));
+    check("a cut at the back is marked", fromTop.endsWith("…"));
+    check("an end that was not cut gets no ellipsis", !fromTop.startsWith("…"));
     check(
       "a short section is returned whole, with no ellipsis",
       rs.snippet("Short rule.", ["rule"], 120) === "Short rule."
