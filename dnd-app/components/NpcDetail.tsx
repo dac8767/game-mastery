@@ -216,66 +216,6 @@ export function NpcDetail({
 
   return (
     <section className="npc-record" aria-label={`${npc.name} — full record`}>
-      <header className="record-head">
-        <PortraitField npc={npc} editable={isDm} />
-
-        <div className="record-titles">
-          {/* Through RecordField like everything else, not as a heading
-              with the value baked in: name and nickname are editable
-              columns, and rendering them as text is how a DM quietly
-              loses the ability to rename an NPC from its own record. */}
-          {headerFields.map((col) => (
-            <RecordField
-              key={col.key}
-              col={col}
-              value={toInput(npc, col)}
-              editable={canEdit(col)}
-              dmOnly={Boolean(col.dmOnly)}
-              variant={col.key === "name" ? "title" : "subtitle"}
-              onCommit={(text) => commit(col, text)}
-            />
-          ))}
-          {summary.length > 0 && (
-            <p className="record-summary">
-              {summary.map((s) => (
-                <span className="record-chip" key={s.key}>
-                  {s.text}
-                </span>
-              ))}
-            </p>
-          )}
-          {!isDm && (
-            <p className="settings-note">
-              You can edit Player Notes. Everything else is the DM&apos;s.
-            </p>
-          )}
-        </div>
-
-        <div className="record-head-right">
-          {/* Not a fact about the NPC the way the fields are — a switch
-              about who may see them at all — so it sits with the name
-              rather than in a list of attributes. DM-only, and the
-              server withholds a hidden NPC regardless of this. */}
-          {isDm && hiddenCol && (
-            <label className="record-hide">
-              <input
-                type="checkbox"
-                checked={toInput(npc, hiddenCol) === "true"}
-                onChange={(e) =>
-                  void commit(hiddenCol, e.target.checked ? "true" : "false")
-                }
-              />
-              <span>Hide NPC from players</span>
-            </label>
-          )}
-          <button type="button" className="npc-btn" onClick={onClose}>
-            Back to the list
-          </button>
-        </div>
-      </header>
-
-      {error && <p className="form-error">{error}</p>}
-
       {/* Two halves. The left is the fields, behind whatever tab you
           chose; the right is the notes, which every tab is read
           beside. You read a record and write in its notes at the same
@@ -283,6 +223,66 @@ export function NpcDetail({
           check an age. */}
       <div className="record-split">
         <div className="record-left">
+        <header className="record-head">
+          <PortraitField npc={npc} editable={isDm} />
+
+          <div className="record-titles">
+            {/* Through RecordField like everything else, not as a heading
+                with the value baked in: name and nickname are editable
+                columns, and rendering them as text is how a DM quietly
+                loses the ability to rename an NPC from its own record. */}
+            {headerFields.map((col) => (
+              <RecordField
+                key={col.key}
+                col={col}
+                value={toInput(npc, col)}
+                editable={canEdit(col)}
+                dmOnly={Boolean(col.dmOnly)}
+                variant={col.key === "name" ? "title" : "subtitle"}
+                onCommit={(text) => commit(col, text)}
+              />
+            ))}
+            {summary.length > 0 && (
+              <p className="record-summary">
+                {summary.map((s) => (
+                  <span className="record-chip" key={s.key}>
+                    {s.text}
+                  </span>
+                ))}
+              </p>
+            )}
+            {!isDm && (
+              <p className="settings-note">
+                You can edit Player Notes. Everything else is the DM&apos;s.
+              </p>
+            )}
+          </div>
+
+          <div className="record-head-right">
+            {/* Not a fact about the NPC the way the fields are — a switch
+                about who may see them at all — so it sits with the name
+                rather than in a list of attributes. DM-only, and the
+                server withholds a hidden NPC regardless of this. */}
+            {isDm && hiddenCol && (
+              <label className="record-hide">
+                <input
+                  type="checkbox"
+                  checked={toInput(npc, hiddenCol) === "true"}
+                  onChange={(e) =>
+                    void commit(hiddenCol, e.target.checked ? "true" : "false")
+                  }
+                />
+                <span>Hide NPC from players</span>
+              </label>
+            )}
+            <button type="button" className="npc-btn" onClick={onClose}>
+              Back to the list
+            </button>
+          </div>
+        </header>
+
+        {error && <p className="form-error">{error}</p>}
+
           <div className="record-tabbar">
         <div className="record-tabs" role="tablist">
           {tabs.map((t) => (

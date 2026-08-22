@@ -5590,12 +5590,18 @@ button.cal-day:hover {
 
 /* ---------- The record: fields left, notes right ---------- */
 
+/* The whole record is two columns, header included. The name block
+   used to span the full width with the notes starting under it, which
+   left the notes reading as a footnote to the record rather than the
+   other half of it. */
 .record-split {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 1.25rem;
-  align-items: start;
-  margin-top: 0.5rem;
+  /* stretch, not start: the notes column runs top to bottom beside
+     everything on the left, which is the point of it being a column. */
+  align-items: stretch;
+  min-height: 100%;
 }
 
 @media (max-width: 1000px) {
@@ -5606,6 +5612,8 @@ button.cal-day:hover {
 
 .record-left {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* The notes are read beside whatever tab is open, so they line up with
@@ -5619,6 +5627,14 @@ button.cal-day:hover {
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: 10px;
+}
+
+/* One thread gets the whole column; the DM keeps two and gets half
+   each. Either way the column is full height, so a thread has room to
+   be a thread rather than three lines and a scrollbar. */
+.record-notes:not(.split) {
+  grid-template-rows: minmax(0, 1fr);
+  align-content: stretch;
 }
 
 .record-notes .detail-field.tall .detail-input {

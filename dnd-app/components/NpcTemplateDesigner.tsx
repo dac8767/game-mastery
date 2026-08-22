@@ -228,39 +228,41 @@ export function NpcTemplateDesigner({
       {error && <p className="form-error">{error}</p>}
 
       <div className="tpl-wys" onPointerMove={moveResize} onPointerUp={endResize}>
-        {/* The record's header, drawn as the record draws it. Not
-            arrangeable: the portrait and the name are what tell you
-            whose record you are looking at. */}
-        <div className="record-head tpl-head">
-          <div className="record-portrait">
-            <div className="portrait-empty">Portrait</div>
-          </div>
-          <div className="record-titles">
-            <div className="detail-field record-title">
-              <div className="detail-value">Name</div>
-            </div>
-            <div className="detail-field record-subtitle">
-              <div className="detail-value">“Nickname”</div>
-            </div>
-            <p className="record-summary">
-              <span className="record-chip">Job</span>
-              <span className="record-chip">Species</span>
-              <span className="record-chip">Place</span>
-            </p>
-          </div>
-          <div className="record-head-right">
-            <label className="record-hide">
-              <input type="checkbox" disabled />
-              <span>Hide NPC from players</span>
-            </label>
-            <span className="settings-note tpl-head-note">
-              Fixed — every record opens on its portrait and name.
-            </span>
-          </div>
-        </div>
-
         <div className="record-split">
         <div className="record-left">
+          {/* The record's header, drawn as the record draws it, and in
+              the same column — the notes run the full height beside it
+              rather than starting underneath. Not arrangeable: the
+              portrait and the name are what tell you whose record you
+              are looking at. */}
+          <div className="record-head tpl-head">
+            <div className="record-portrait">
+              <div className="portrait-empty">Portrait</div>
+            </div>
+            <div className="record-titles">
+              <div className="detail-field record-title">
+                <div className="detail-value">Name</div>
+              </div>
+              <div className="detail-field record-subtitle">
+                <div className="detail-value">“Nickname”</div>
+              </div>
+              <p className="record-summary">
+                <span className="record-chip">Job</span>
+                <span className="record-chip">Species</span>
+                <span className="record-chip">Place</span>
+              </p>
+            </div>
+            <div className="record-head-right">
+              <label className="record-hide">
+                <input type="checkbox" disabled />
+                <span>Hide NPC from players</span>
+              </label>
+              <span className="settings-note tpl-head-note">
+                Fixed — every record opens on its portrait and name.
+              </span>
+            </div>
+          </div>
+
         <div className="record-tabbar">
           <div className="record-tabs" role="tablist">
             {template.tabs.map((tab, ti) => (

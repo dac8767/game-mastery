@@ -266,6 +266,29 @@ export const integrity = {
         );
       }
     }
+    // The record is two columns, header included.
+    //
+    // With the header outside the split it spans the full width and the
+    // notes start underneath it, reading as a footnote to the record
+    // rather than the other half of it. Both files draw the same
+    // layout, and the designer claims to be WYSIWYG, so they have to
+    // agree about this or the preview lies.
+    for (const file of ["NpcDetail.tsx", "NpcTemplateDesigner.tsx"]) {
+      const src = read("components", file);
+      const split = src.indexOf(`className="record-split"`);
+      const head = src.indexOf(`className="record-head`);
+      if (split === -1 || head === -1) {
+        throw new Error(`no record-split or record-head in ${file}`);
+      }
+      if (head < split) {
+        problems.push(
+          `${file} puts the record header OUTSIDE record-split, so it spans ` +
+            "the full width and the notes column starts below it instead of " +
+            "running the full height beside it"
+        );
+      }
+    }
+
     // A pinned field is out of the template's hands, so the ONLY thing
     // that renders it is NpcDetail itself. Pinning one and forgetting
     // to draw it is the same silent loss as leaving it out of a
