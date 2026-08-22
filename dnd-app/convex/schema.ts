@@ -545,6 +545,37 @@ export default defineSchema({
     .index("by_campaign_user", ["campaignId", "userId"]),
 
   /**
+   * Notes on an NPC — a thread of them, not one text field.
+   *
+   * Two channels. `player` is the table's shared pad: anyone in the
+   * campaign writes there and everyone reads it. `dm` is the DM's, and
+   * is never sent to anyone else — the query filters it out server-side
+   * rather than the client hiding it, like every other DM-only thing
+   * here.
+   *
+   * The body is sanitised HTML. It is written by one member and
+   * rendered in another's browser, so it is rebuilt from an allowlist
+   * in the mutation — see components/noteFormat.ts. Images are storage
+   * ids on the note rather than markup in it, so the body never carries
+   * a URL.
+   *
+   * `authorId` is who may edit or delete it. Not the DM, not the
+   * campaign owner: the person who wrote it.
+   */
+  npcNotes: defineTable({
+    campaignId: v.id("campaigns"),
+    npcId: v.id("npcs"),
+    authorId: v.id("users"),
+    channel: v.union(v.literal("player"), v.literal("dm")),
+    body: v.string(),
+    imageIds: v.optional(v.array(v.id("_storage"))),
+    /** Set on every edit after the first save. */
+    editedAt: v.optional(v.number()),
+  })
+    .index("by_npc", ["npcId"])
+    .index("by_campaign", ["campaignId"]),
+
+  /**
    * How an opened NPC is laid out, for the whole campaign.
    *
    * One row per campaign, written by the DM, read by everyone: the

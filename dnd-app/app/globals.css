@@ -5762,3 +5762,237 @@ button.cal-day:hover {
   background: var(--accent);
   color: var(--bg);
 }
+
+/* ---------- Notes as a thread ---------- */
+
+/* A player gets the whole column for the one thread. A DM keeps two
+   sets and needs both beside the record, so the column splits. */
+.record-notes.split {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 0.9rem;
+  min-height: 0;
+}
+
+.note-thread {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 0.35rem;
+}
+
+.note-thread-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.note-thread-head h3 {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.note-dm .note-thread-head h3 {
+  color: var(--bloodied);
+}
+
+.note-thread .settings-note {
+  margin: 0;
+}
+
+.note-list {
+  list-style: none;
+  margin: 0.4rem 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+  /* The thread scrolls, the composer stays put: a long thread must not
+     push the box you write in off the bottom of the screen. */
+  overflow-y: auto;
+  min-height: 3rem;
+  flex: 1;
+}
+
+.note-empty {
+  padding: 0.5rem 0;
+}
+
+.note-card {
+  padding: 0.5rem 0.6rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.note-dm .note-card {
+  border-left: 2px solid var(--bloodied);
+}
+
+.note-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.3rem;
+}
+
+.note-author {
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.note-when {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+.note-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+}
+
+.note-body {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.note-body p,
+.note-body ul,
+.note-body ol,
+.note-body blockquote {
+  margin: 0 0 0.4rem;
+}
+
+.note-body ul,
+.note-body ol {
+  padding-left: 1.2rem;
+}
+
+.note-body blockquote {
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--border);
+  color: var(--text-dim);
+}
+
+.note-body a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.note-body code {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.85em;
+  background: var(--bg);
+  padding: 0 0.25rem;
+  border-radius: 4px;
+}
+
+.note-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+.note-images img {
+  max-width: 100%;
+  max-height: 12rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.note-thumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.3rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.75rem;
+}
+
+.note-thumb img {
+  max-height: 2.5rem;
+  border: none;
+}
+
+/* ---- writing one ---- */
+
+.note-composer {
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-inset);
+  overflow: hidden;
+}
+
+.note-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem;
+  padding: 0.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.note-tool {
+  min-width: 1.6rem;
+  height: 1.6rem;
+  padding: 0 0.3rem;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.note-tool:hover:not(:disabled) {
+  background: var(--bg-inset);
+  color: var(--text);
+}
+
+.note-tool:disabled {
+  opacity: 0.35;
+}
+
+.note-input {
+  min-height: 4.5rem;
+  max-height: 14rem;
+  overflow-y: auto;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  outline: none;
+  overflow-wrap: anywhere;
+}
+
+/* An empty contentEditable has no height and no hint of what it is
+   for, so the placeholder is drawn on the emptiness itself. */
+.note-input:empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-dim);
+}
+
+.note-input ul,
+.note-input ol {
+  padding-left: 1.2rem;
+  margin: 0 0 0.4rem;
+}
+
+.note-composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  padding: 0.35rem 0.5rem;
+  border-top: 1px solid var(--border);
+}

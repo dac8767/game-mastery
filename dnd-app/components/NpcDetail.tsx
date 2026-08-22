@@ -13,6 +13,7 @@ import {
   SUMMARY_KEYS,
   arrange,
 } from "@/components/npcSections";
+import { NoteThread } from "@/components/NoteThread";
 import {
   LooseTemplate,
   NpcTemplate,
@@ -121,6 +122,7 @@ export function NpcDetail({
   const updateNpc = useMutation(api.npcs.updateNpc);
   const setPlayerNotes = useMutation(api.npcs.setPlayerNotes);
   const stored = useQuery(api.npcs.getTemplate, { campaignId });
+  const noteData = useQuery(api.npcs.listNotes, { npcId: npc._id });
   const [error, setError] = useState<string | null>(null);
 
   /**
@@ -342,20 +344,48 @@ export function NpcDetail({
           </div>
         </div>
 
-        <aside className="record-notes">
-          {noteCols.map((col) => (
-            <RecordField
-              key={col.key}
-              col={col}
-              value={toInput(npc, col)}
-              editable={canEdit(col)}
-              dmOnly={Boolean(col.dmOnly)}
-              tall
-              onCommit={(text) => commit(col, text)}
+        {/* A player gets the whole column for the table pad. A DM gets
+            it split, because they keep two sets of notes and need both
+            beside the record at once. */}
+        <aside className={`record-notes${isDm ? " split" : ""}`}>
+          <NoteThread
+            npcId={npc._id}
+            channel="player"
+            title="Player Notes"
+            blurb="Everyone at the table writes here and everyone reads it."
+            notes={noteData?.notes ?? []}
+            youId={noteData?.youId ?? null}
+            canWrite={Boolean(noteData)}
+          />
+
+          {isDm && (
+            <NoteThread
+              npcId={npc._id}
+              channel="dm"
+              title="DM Notes"
+              blurb="Yours. Never sent to a player."
+              notes={noteData?.notes ?? []}
+              youId={noteData?.youId ?? null}
+              canWrite={Boolean(noteData)}
             />
-          ))}
-          {noteCols.length === 0 && (
-            <p className="settings-note">Nothing written here.</p>
+          )}
+
+          {/* Anything written before notes became separate items, shown
+              only when there is something in it. Kept rather than
+              migrated: it is somebody's writing, and a migration that
+              guessed at where the paragraphs went could mangle it. */}
+          {noteCols.map((col) =>
+            toInput(npc, col) ? (
+              <RecordField
+                key={col.key}
+                col={col}
+                value={toInput(npc, col)}
+                editable={canEdit(col)}
+                dmOnly={Boolean(col.dmOnly)}
+                tall
+                onCommit={(text) => commit(col, text)}
+              />
+            ) : null
           )}
         </aside>
       </div>

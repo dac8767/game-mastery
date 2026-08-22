@@ -1048,6 +1048,181 @@ export const unit = {
         .join() === "job"
     );
 
+    // ---- what a note is allowed to contain -------------------------
+    // A player writing a note is handing markup to the DM's browser.
+    // Every case below is something that renders as a script, a
+    // request, or a hijacked page if it survives — so this is the one
+    // module where a passing test is the actual security property and
+    // not a proxy for it.
+    const nfOut = compile("components/noteFormat.ts");
+    const nf = await import(pathToFileURL(join(nfOut, "noteFormat.js")).href);
+
+    const clean = (s) => nf.sanitizeNoteHtml(s);
+    const has = (s, needle) => clean(s).toLowerCase().includes(needle);
+
+    check(
+      "ordinary formatting survives",
+      clean("<p>Hello <b>there</b> and <em>hi</em></p>") ===
+        "<p>Hello <b>there</b> and <em>hi</em></p>"
+    );
+    check(
+      "lists survive, which is half the point of rich notes",
+      clean("<ul><li>one</li><li>two</li></ul>") ===
+        "<ul><li>one</li><li>two</li></ul>"
+    );
+
+    // ---- scripts ----
+    check("a script tag is gone", !has("<script>alert(1)</script>", "script"));
+    check(
+      "and its CONTENTS go with it",
+      !clean("<script>alert(1)</script>").includes("alert")
+    );
+    check(
+      "an unclosed script does not leak its body",
+      !clean("<script>alert(1)").includes("alert")
+    );
+    check(
+      "a script hidden in mixed case is still a script",
+      !has("<ScRiPt>alert(1)</ScRiPt>", "alert")
+    );
+    check("style blocks go too", !has("<style>body{x:1}</style>", "style"));
+    check("iframes go", !has('<iframe src="x"></iframe>', "iframe"));
+    check("svg goes, because it can carry script", !has("<svg><g/></svg>", "svg"));
+
+    // ---- event handlers ----
+    // The classic: a tag that IS allowed, carrying an attribute that is
+    // not. The attribute has to go without taking the tag with it.
+    check(
+      "onerror is dropped from an allowed tag",
+      !has('<b onerror="alert(1)">x</b>', "onerror")
+    );
+    check(
+      "onclick is dropped and the text kept",
+      clean('<p onclick="alert(1)">hello</p>') === "<p>hello</p>"
+    );
+    check(
+      "an unquoted handler is dropped too",
+      !has("<p onclick=alert(1)>x</p>", "onclick")
+    );
+    check(
+      "style attributes are dropped",
+      !has('<p style="position:fixed;inset:0">x</p>', "style=")
+    );
+
+    // ---- links ----
+    check(
+      "an http link survives",
+      has('<a href="https://example.com">x</a>', 'href="https://example.com"')
+    );
+    check(
+      "and opens elsewhere, without handing over the opener",
+      has('<a href="https://example.com">x</a>', 'rel="noopener noreferrer"')
+    );
+    check(
+      "a javascript: link loses its href",
+      !has('<a href="javascript:alert(1)">x</a>', "javascript")
+    );
+    // The one a naive check misses: browsers strip control characters
+    // before resolving a scheme, so "java\tscript:" runs.
+    check(
+      "a javascript: link with a tab in the scheme still loses it",
+      !has('<a href="java\tscript:alert(1)">x</a>', "javascript") &&
+        !has('<a href="java\nscript:alert(1)">x</a>', "javascript")
+    );
+    check(
+      "leading spaces do not smuggle a scheme past",
+      !has('<a href="  javascript:alert(1)">x</a>', "javascript")
+    );
+    check(
+      "a data: link is refused",
+      !has('<a href="data:text/html,<script>1</script>">x</a>', "data:")
+    );
+    check(
+      "a relative link is fine",
+      has('<a href="/campaign/x">y</a>', 'href="/campaign/x"')
+    );
+
+    // ---- images are not markup ----
+    check(
+      "an img is unwrapped, so a note body never fetches anything",
+      !has('<img src="https://tracker.example/pixel.gif">', "img")
+    );
+
+    // ---- structure ----
+    check(
+      "an unknown tag is unwrapped, keeping its words",
+      clean("<marquee>hello</marquee>") === "hello"
+    );
+    check(
+      "a stray closing tag cannot close something it did not open",
+      clean("</b>plain") === "plain"
+    );
+    check(
+      "an unclosed tag is closed rather than left hanging",
+      clean("<b>bold") === "<b>bold</b>"
+    );
+    check(
+      "tags are closed in the right order",
+      clean("<p><b>x") === "<p><b>x</b></p>"
+    );
+    check(
+      "text with a bare < is escaped, not read as a tag",
+      clean("5 < 6 and 7 > 2").includes("&lt;")
+    );
+    check(
+      "an ampersand is escaped once, not twice",
+      clean("Tom & Jerry") === "Tom &amp; Jerry"
+    );
+    check("comments are dropped", clean("<!-- hi -->x") === "x");
+    check(
+      "sanitising is idempotent",
+      clean(clean('<p onclick="x">a<script>b</script></p>')) ===
+        clean('<p onclick="x">a<script>b</script></p>')
+    );
+    check(
+      "a body longer than the limit is cut, not refused",
+      clean("<p>" + "a".repeat(nf.NOTE_LIMITS.body * 2) + "</p>").length <=
+        nf.NOTE_LIMITS.body + 64
+    );
+    check("empty in, empty out", clean("") === "" && clean(null) === "");
+
+    // ---- is there anything in it ----
+    check(
+      "an untouched editor counts as empty",
+      nf.isEmptyNote("<p><br></p>") && nf.isEmptyNote("<div><br></div>")
+    );
+    check(
+      "whitespace and entities count as empty",
+      nf.isEmptyNote("   ") && nf.isEmptyNote("<p>&nbsp;</p>")
+    );
+    check("real words do not", !nf.isEmptyNote("<p>hello</p>"));
+    check(
+      "noteText puts a space where a block ended",
+      nf.noteText("<p>one</p><p>two</p>") === "one two"
+    );
+
+    // ---- when ----
+    const t0 = 1_700_000_000_000;
+    check("seconds read as just now", nf.whenText(t0, t0 + 5_000) === "just now");
+    check(
+      "minutes and hours are counted",
+      nf.whenText(t0, t0 + 5 * 60_000) === "5 minutes ago" &&
+        nf.whenText(t0, t0 + 3 * 3_600_000) === "3 hours ago"
+    );
+    check(
+      "one of something is singular",
+      nf.whenText(t0, t0 + 60_000) === "1 minute ago" &&
+        nf.whenText(t0, t0 + 24 * 3_600_000) === "1 day ago"
+    );
+    check(
+      "past a fortnight it gives a date instead of a count",
+      /\d{4}$/.test(nf.whenText(t0, t0 + 400 * 24 * 3_600_000))
+    );
+    check(
+      "a clock skewed into the future does not read as negative",
+      nf.whenText(t0, t0 - 60_000) === "just now"
+    );
+
     // ---- the sidebar, as its owner arranged it ---------------------
     // Two ways this loses a screen, and both are silent. An item the
     // layout does not mention is not hidden but ABSENT — no entry, and

@@ -371,6 +371,74 @@ export const integrity = {
       }
     }
 
+    // ---- notes: sanitised on the server, owned by their author ------
+    // Three separate failures, all silent, all in one feature.
+    {
+      const src = read("convex", "npcs.ts");
+      const notesAt = src.indexOf("export const addNote");
+      if (notesAt === -1) throw new Error("no addNote in convex/npcs.ts");
+
+      // 1. Sanitising in the editor is a convenience. Sanitising in the
+      //    mutation is the guarantee, because a hand-made call never
+      //    opens an editor. If this moves client-side, a player can put
+      //    a script in the DM's browser.
+      for (const fn of ["addNote", "editNote"]) {
+        const at = src.indexOf(`export const ${fn}`);
+        if (at === -1) throw new Error(`no ${fn} in convex/npcs.ts`);
+        const body = blockAfter(src.slice(at), /handler:/, `${fn} handler`);
+        if (!/sanitizeNoteHtml\(/.test(body)) {
+          problems.push(
+            `npcs.${fn} stores a note body without sanitizing it — the body ` +
+              "is rendered as HTML in every other member's browser"
+          );
+        }
+      }
+
+      // 2. A note says who wrote it. Anyone but the author being able
+      //    to rewrite one would make that attribution a lie.
+      for (const fn of ["editNote", "deleteNote"]) {
+        const at = src.indexOf(`export const ${fn}`);
+        const body = blockAfter(src.slice(at), /handler:/, `${fn} handler`);
+        if (!/note\.authorId !== userId/.test(body)) {
+          problems.push(
+            `npcs.${fn} does not check that the caller wrote the note`
+          );
+        }
+      }
+
+      // 3. The DM channel is filtered server-side, like every other
+      //    DM-only thing here. A client-side filter is a devtools
+      //    console away from being no filter at all.
+      const listAt = src.indexOf("export const listNotes");
+      if (listAt === -1) throw new Error("no listNotes in convex/npcs.ts");
+      const listBody = blockAfter(src.slice(listAt), /handler:/, "listNotes");
+      if (!/isDm \|\| n\.channel === "player"/.test(listBody)) {
+        problems.push(
+          "npcs.listNotes does not filter the DM channel out server-side — " +
+            "a player's browser would receive notes it merely does not render"
+        );
+      }
+      if (!/viewAsPlayer/.test(listBody)) {
+        problems.push(
+          "npcs.listNotes ignores viewAsPlayer, so previewing as a player " +
+            "would still show the DM notes"
+        );
+      }
+
+      // And the only place a body is rendered as HTML must be reading
+      // one that has been through the server.
+      for (const [file, source] of sourceFiles("components")) {
+        if (!/dangerouslySetInnerHTML/.test(source)) continue;
+        if (file.endsWith("NoteThread.tsx")) continue;
+        if (!/sanitize|DOMPurify/.test(source)) {
+          problems.push(
+            `${file} renders raw HTML without any sanitizing in sight — ` +
+              "if that string came from a person, it is a script in a browser"
+          );
+        }
+      }
+    }
+
     // ---- the record template is bounded in two places ---------------
     // The designer clamps so the form behaves; saveTemplate clamps
     // because a mutation is a public API and the client's clamp is not

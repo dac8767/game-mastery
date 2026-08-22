@@ -1,7 +1,13 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Doc } from "./_generated/dataModel";
-import { requireDm, requireMember } from "./auth";
+import { requireDm, requireMember, requireUser } from "./auth";
+import { Id } from "./_generated/dataModel";
+import {
+  NOTE_LIMITS,
+  isEmptyNote,
+  sanitizeNoteHtml,
+} from "../components/noteFormat";
 import { getSettings } from "./settings";
 
 /**
@@ -398,5 +404,203 @@ export const resetTemplate = mutation({
       .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
       .unique();
     if (existing) await ctx.db.delete(existing._id);
+  },
+});
+
+// ---------------------------------------------------------------------
+// Notes
+// ---------------------------------------------------------------------
+
+/**
+ * The notes on one NPC.
+ *
+ * DM notes are filtered out SERVER-SIDE for anyone who is not the DM.
+ * That is the rule the whole app runs on: a player's browser never
+ * receives what it is not allowed to render, so there is nothing for a
+ * devtools console to reveal.
+ *
+ * Author names come from the user documents rather than being stored on
+ * the note, so renaming yourself renames you on everything you wrote.
+ */
+export const listNotes = query({
+  args: { npcId: v.id("npcs") },
+  handler: async (ctx, args) => {
+    const npc = await ctx.db.get(args.npcId);
+    if (!npc) return { notes: [], youId: null, isDm: false };
+
+    const { userId, isDm: isCampaignDm } = await requireMember(
+      ctx,
+      npc.campaignId
+    );
+    const { viewAsPlayer } = await getSettings(ctx, userId);
+    const isDm = isCampaignDm && !viewAsPlayer;
+
+    const rows = await ctx.db
+      .query("npcNotes")
+      .withIndex("by_npc", (q) => q.eq("npcId", args.npcId))
+      .take(NOTE_LIMITS.perThread * 2);
+
+    const visible = rows.filter((n) => isDm || n.channel === "player");
+
+    const names = new Map<string, string>();
+    const out = [];
+    for (const n of visible) {
+      if (!names.has(n.authorId)) {
+        const person = await ctx.db.get(n.authorId);
+        names.set(n.authorId, person?.name ?? person?.email ?? "Someone");
+      }
+      out.push({
+        _id: n._id,
+        _creationTime: n._creationTime,
+        channel: n.channel,
+        body: n.body,
+        editedAt: n.editedAt ?? null,
+        authorId: n.authorId,
+        authorName: names.get(n.authorId) ?? "Someone",
+        // Resolved here because the client must never handle storage
+        // ids directly, the same as portraits.
+        images: (
+          await Promise.all(
+            (n.imageIds ?? []).map(async (id) => ({
+              id,
+              url: await ctx.storage.getUrl(id),
+            }))
+          )
+        ).filter((img) => img.url),
+      });
+    }
+
+    out.sort((a, b) => a._creationTime - b._creationTime);
+    return { notes: out, youId: userId, isDm };
+  },
+});
+
+const channelValidator = v.union(v.literal("player"), v.literal("dm"));
+
+/** Only the DM may write in — or read — the DM channel. */
+async function requireChannel(
+  ctx: Parameters<typeof requireDm>[0],
+  campaignId: Id<"campaigns">,
+  channel: "player" | "dm"
+) {
+  if (channel === "dm") {
+    await requireDm(ctx, campaignId);
+    return;
+  }
+  await requireMember(ctx, campaignId);
+}
+
+export const addNote = mutation({
+  args: {
+    npcId: v.id("npcs"),
+    channel: channelValidator,
+    body: v.string(),
+    imageIds: v.optional(v.array(v.id("_storage"))),
+  },
+  handler: async (ctx, args) => {
+    const npc = await ctx.db.get(args.npcId);
+    if (!npc) throw new Error("NPC not found");
+    await requireChannel(ctx, npc.campaignId, args.channel);
+    const userId = await requireUser(ctx);
+
+    // Sanitised HERE, not in the editor. The editor's version is a
+    // convenience; this one is the guarantee, because a hand-made call
+    // never goes near the editor.
+    const body = sanitizeNoteHtml(args.body);
+    if (isEmptyNote(body) && (args.imageIds ?? []).length === 0) {
+      throw new Error("A note needs something in it");
+    }
+
+    const existing = await ctx.db
+      .query("npcNotes")
+      .withIndex("by_npc", (q) => q.eq("npcId", args.npcId))
+      .take(NOTE_LIMITS.perThread * 2);
+    if (
+      existing.filter((n) => n.channel === args.channel).length >=
+      NOTE_LIMITS.perThread
+    ) {
+      throw new Error("That thread is full — tidy some notes up first");
+    }
+
+    return await ctx.db.insert("npcNotes", {
+      campaignId: npc.campaignId,
+      npcId: args.npcId,
+      authorId: userId,
+      channel: args.channel,
+      body,
+      imageIds: (args.imageIds ?? []).slice(0, NOTE_LIMITS.images),
+    });
+  },
+});
+
+/**
+ * Edit a note you wrote.
+ *
+ * The author, and nobody else — not the DM. A note says who wrote it,
+ * so a DM able to rewrite one would make the attribution a lie.
+ */
+export const editNote = mutation({
+  args: {
+    noteId: v.id("npcNotes"),
+    body: v.string(),
+    imageIds: v.optional(v.array(v.id("_storage"))),
+  },
+  handler: async (ctx, args) => {
+    const note = await ctx.db.get(args.noteId);
+    if (!note) throw new Error("Note not found");
+
+    const userId = await requireUser(ctx);
+    if (note.authorId !== userId) {
+      throw new Error("Only whoever wrote a note can change it");
+    }
+    // Still a member, and still allowed in that channel: a DM who
+    // handed the campaign over keeps their notes but loses the room.
+    await requireChannel(ctx, note.campaignId, note.channel);
+
+    const body = sanitizeNoteHtml(args.body);
+    const images = (args.imageIds ?? note.imageIds ?? []).slice(
+      0,
+      NOTE_LIMITS.images
+    );
+    if (isEmptyNote(body) && images.length === 0) {
+      throw new Error("A note needs something in it");
+    }
+
+    await ctx.db.patch(args.noteId, {
+      body,
+      imageIds: images,
+      editedAt: Date.now(),
+    });
+  },
+});
+
+/** Delete a note you wrote, and the images that were only on it. */
+export const deleteNote = mutation({
+  args: { noteId: v.id("npcNotes") },
+  handler: async (ctx, args) => {
+    const note = await ctx.db.get(args.noteId);
+    if (!note) return;
+
+    const userId = await requireUser(ctx);
+    if (note.authorId !== userId) {
+      throw new Error("Only whoever wrote a note can delete it");
+    }
+    await requireChannel(ctx, note.campaignId, note.channel);
+
+    for (const id of note.imageIds ?? []) {
+      await ctx.storage.delete(id);
+    }
+    await ctx.db.delete(args.noteId);
+  },
+});
+
+/** A short-lived URL for attaching an image to a note. */
+export const generateNoteImageUploadUrl = mutation({
+  args: { npcId: v.id("npcs") },
+  handler: async (ctx, args) => {
+    const npc = await ctx.db.get(args.npcId);
+    if (!npc) throw new Error("NPC not found");
+    await requireMember(ctx, npc.campaignId);
+    return await ctx.storage.generateUploadUrl();
   },
 });
