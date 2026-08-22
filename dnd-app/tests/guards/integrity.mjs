@@ -1705,6 +1705,32 @@ export const integrity = {
       }
     }
 
+    // ---- no component declared inside another component -------------
+    // The symptom is unforgettable and the cause is invisible: you can
+    // type one letter into a field, and then it loses focus and you
+    // have to click it again. A function declared during render is a
+    // NEW component type on every render, so React unmounts the old
+    // tree and mounts a fresh one — new DOM node, no caret.
+    //
+    // Nothing else catches it. It compiles, it typechecks, it builds,
+    // and it renders the right pixels. Top-level declarations start at
+    // column zero, so an indented one is nested by definition.
+    for (const [file, src] of sourceFiles("components", "app")) {
+      if (!file.endsWith(".tsx")) continue;
+      const lines = stripComments(src).split("\n");
+      lines.forEach((line, i) => {
+        const m = line.match(
+          /^[ \t]+(?:function\s+([A-Z][\w$]*)\s*\(|const\s+([A-Z][\w$]*)\s*=\s*\()/
+        );
+        if (!m) return;
+        problems.push(
+          `${file}:${i + 1} declares ${m[1] ?? m[2]} inside another ` +
+            "function — React remounts it every render, so a field in it " +
+            "loses focus after one keystroke. Move it to module level."
+        );
+      });
+    }
+
     // ---- no two modules whose names differ only in case -------------
     // This one is invisible on Linux and fatal on a Mac. Next to
     // lookupFilters.ts sat LookupFilters.tsx; on a case-SENSITIVE disk

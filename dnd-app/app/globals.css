@@ -620,30 +620,6 @@ button {
   padding: 1rem 1.25rem 1.5rem;
 }
 
-.crumbs {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 1rem;
-  margin-bottom: 0.9rem;
-}
-
-.crumbs a {
-  color: var(--text-dim);
-}
-
-.crumbs a:hover {
-  color: var(--text);
-}
-
-.crumbs .sep {
-  color: var(--text-dim);
-}
-
-.crumbs .current {
-  font-weight: 600;
-}
-
 /* ---------- NPC roster ---------- */
 
 .npc-screen {
@@ -743,6 +719,113 @@ button {
   color: var(--text);
   font: inherit;
   font-size: 0.82rem;
+}
+
+/* ---------- toolbar: a name, and a count if there is one ----------
+   Borderless until you touch them. Six outlined buttons in a row read
+   as six things to decide; a plain word with a badge beside it reads as
+   a state, which is what it is. */
+
+.bar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.bar-btn:hover {
+  background: var(--bg-raised);
+}
+
+.bar-btn.open {
+  border-color: var(--border);
+  background: var(--bg-raised);
+}
+
+.bar-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* The count itself. Deliberately quiet — it is a fact about the list,
+   not a warning about it. */
+.bar-count {
+  min-width: 1.35rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 6px;
+  background: var(--bg-inset);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.bar-btn.on .bar-count {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.bar-search-btn {
+  padding: 0.4rem 0.5rem;
+}
+
+.bar-search-icon {
+  flex: none;
+  color: var(--text-dim);
+}
+
+/* Expanded, it takes the room a search field needs and gives it back
+   on Escape or on blur — but only while it is empty. */
+.bar-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: min(22rem, 40vw);
+  padding: 0.34rem 0.5rem;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--bg-inset);
+}
+
+.bar-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.bar-search input:focus {
+  outline: none;
+}
+
+.bar-search-clear {
+  flex: none;
+  width: 1.3rem;
+  height: 1.3rem;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 50%;
+  background: var(--bg-raised);
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.bar-search-clear:hover {
+  color: var(--text);
 }
 
 .npc-substrip {

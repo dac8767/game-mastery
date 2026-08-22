@@ -22,6 +22,17 @@ import { Conjunction, FilterCondition } from "@/components/npcFilters";
 
 const SAVE_DEBOUNCE_MS = 800;
 
+/**
+ * The layout a view starts from.
+ *
+ * Exported because the toolbar has to answer "is a sort applied?" to
+ * decide whether to show a count on the Sort button, and that question
+ * is only meaningful against the default. A literal "name" in the
+ * toolbar would go on reporting "sorted" forever the day this changes.
+ */
+export const DEFAULT_SORT_KEY = "name";
+export const DEFAULT_SORT_ASC = true;
+
 export function useViewPrefs(
   campaignId: Id<"campaigns">,
   view: string,
@@ -33,8 +44,8 @@ export function useViewPrefs(
   const [columns, setColumnsRaw] = useState<ColumnState[]>(() =>
     reconcileColumns(null, isDm)
   );
-  const [sortKey, setSortKeyRaw] = useState("name");
-  const [sortAsc, setSortAscRaw] = useState(true);
+  const [sortKey, setSortKeyRaw] = useState(DEFAULT_SORT_KEY);
+  const [sortAsc, setSortAscRaw] = useState(DEFAULT_SORT_ASC);
   const [groupBy, setGroupByRaw] = useState("");
   const [filters, setFiltersRaw] = useState<FilterCondition[]>([]);
   const [filterConjunction, setFilterConjunctionRaw] =
@@ -52,8 +63,8 @@ export function useViewPrefs(
 
     setColumnsRaw(reconcileColumns(saved?.columns ?? null, isDm));
     if (saved) {
-      setSortKeyRaw(saved.sortKey ?? "name");
-      setSortAscRaw(saved.sortAsc ?? true);
+      setSortKeyRaw(saved.sortKey ?? DEFAULT_SORT_KEY);
+      setSortAscRaw(saved.sortAsc ?? DEFAULT_SORT_ASC);
       setGroupByRaw(saved.groupBy ?? "");
       setFiltersRaw(
         saved.filters.map((f) => ({

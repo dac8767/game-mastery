@@ -1,11 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
-import { useViewPrefs } from "@/components/useViewPrefs";
+import {
+  DEFAULT_SORT_ASC,
+  DEFAULT_SORT_KEY,
+  useViewPrefs,
+} from "@/components/useViewPrefs";
 import { NpcDetail, fromInput } from "@/components/NpcDetail";
 import { FilterPanel } from "@/components/FilterPanel";
 import { matchesAll } from "@/components/npcFilters";
@@ -127,6 +131,147 @@ function compare(a: Npc, b: Npc, key: string): number {
   return as.localeCompare(bs, undefined, { sensitivity: "base" });
 }
 
+/**
+ * A toolbar button that carries a count instead of its setting.
+ *
+ * The count is the whole point: "Filter 2" tells you the list you are
+ * looking at is not the whole list, which is the thing you need from
+ * across the room. WHICH two filters is a question you ask by opening
+ * the panel, and it is the only question the panel exists to answer.
+ *
+ * Zero shows nothing at all rather than a "0" — a badge that is always
+ * there stops being a signal.
+ */
+function BarButton({
+  label,
+  count,
+  open,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  open: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`bar-btn${open ? " open" : ""}${count > 0 ? " on" : ""}`}
+      aria-expanded={open}
+      onClick={onClick}
+    >
+      {label}
+      {count > 0 && <span className="bar-count">{count}</span>}
+    </button>
+  );
+}
+
+/**
+ * Search: an icon until you want it, a field once you do.
+ *
+ * It does NOT collapse while it holds text. A search box that tidied
+ * itself away with a query still in it would leave a shorter list on
+ * screen and nothing saying why — the same failure as a hidden filter,
+ * and the one thing this toolbar is careful about everywhere else.
+ *
+ * Declared at module level, not inside NpcTable: a component defined
+ * during render is a new component type on every render, so React
+ * unmounts the old one and the input loses focus after each keystroke.
+ */
+function SearchBox({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) inputRef.current?.focus();
+  }, [open]);
+
+  if (!open && !value) {
+    return (
+      <button
+        type="button"
+        className="bar-btn bar-search-btn"
+        aria-label="Search NPCs"
+        title="Search NPCs"
+        onClick={() => setOpen(true)}
+      >
+        <SearchIcon />
+      </button>
+    );
+  }
+
+  return (
+    <div className="bar-search">
+      <SearchIcon />
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        placeholder="Search NPCs"
+        aria-label="Search NPCs"
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => {
+          if (!value) setOpen(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key !== "Escape") return;
+          e.preventDefault();
+          onChange("");
+          setOpen(false);
+        }}
+      />
+      <button
+        type="button"
+        className="bar-search-clear"
+        aria-label="Close the search"
+        onClick={() => {
+          onChange("");
+          setOpen(false);
+        }}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg
+      className="bar-search-icon"
+      viewBox="0 0 16 16"
+      width="15"
+      height="15"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle
+        cx="7"
+        cy="7"
+        r="4.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+      <line
+        x1="10.4"
+        y1="10.4"
+        x2="14"
+        y2="14"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const result = useQuery(api.npcs.listForCampaign, { campaignId });
   const isDm = result?.isDm ?? false;
@@ -137,8 +282,19 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const setPlayerNotes = useMutation(api.npcs.setPlayerNotes);
 
   const [search, setSearch] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
-  const [showColumns, setShowColumns] = useState(false);
+  /**
+   * One panel at a time.
+   *
+   * Three independent booleans let Columns, Filter and Sort stack on
+   * top of each other and push the table off the screen — and a toolbar
+   * whose buttons each show a count is a toolbar you open to change one
+   * thing and close again.
+   */
+  const [panel, setPanel] = useState<
+    "columns" | "group" | "filter" | "sort" | null
+  >(null);
+  const togglePanel = (which: typeof panel) =>
+    setPanel((cur) => (cur === which ? null : which));
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Id<"npcs"> | null>(null);
   const [editing, setEditing] = useState<{ id: string; key: string } | null>(
@@ -282,6 +438,26 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const totalWidth = shown.reduce((sum, c) => sum + c.state.width, 0);
 
   const activeFilterCount = prefs.filters.length;
+
+  /**
+   * Whether a sort has been CHOSEN, which is not the same as whether the
+   * list is sorted — it always is. Measured against the shipped default
+   * rather than a literal, so the badge cannot start lying the day the
+   * default changes.
+   */
+  const sortCount =
+    prefs.sortKey !== DEFAULT_SORT_KEY || prefs.sortAsc !== DEFAULT_SORT_ASC
+      ? 1
+      : 0;
+
+  /** Everything the Sort panel may sort on, in the order it offers it. */
+  const sortableFields = useMemo(
+    () => [
+      ...COLUMNS.filter((c) => c.sortable !== false && (isDm || !c.dmOnly)),
+      ...EXTRA_SORTS,
+    ],
+    [isDm]
+  );
 
   /** Fields a condition may target — DM-only columns only for the DM. */
   const filterableFields = useMemo(
@@ -446,20 +622,37 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
         </div>
 
         <div className="toolbar-right">
-          <label className="npc-select">
-            <span>Group</span>
-            <select
-              value={prefs.groupBy}
-              onChange={(e) => prefs.setGroupBy(e.target.value)}
-            >
-              <option value="">None</option>
-              {facetOptions.map((f) => (
-                <option key={f.key} value={f.key}>
-                  {f.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          {/* A count, not the setting. "Group Species · Filter 2 · Sort
+              Last seen ↑" was three settings read out at you every time
+              you looked at the screen; the number is the part you
+              actually need at a glance, and the panel behind the button
+              is where the detail belongs. */}
+          <BarButton
+            label="Group"
+            count={prefs.groupBy ? 1 : 0}
+            open={panel === "group"}
+            onClick={() => togglePanel("group")}
+          />
+          <BarButton
+            label="Filter"
+            count={activeFilterCount}
+            open={panel === "filter"}
+            onClick={() => togglePanel("filter")}
+          />
+          <BarButton
+            label="Sort"
+            count={sortCount}
+            open={panel === "sort"}
+            onClick={() => togglePanel("sort")}
+          />
+          <BarButton
+            label="Columns"
+            count={0}
+            open={panel === "columns"}
+            onClick={() => togglePanel("columns")}
+          />
+
+          <SearchBox value={search} onChange={setSearch} />
 
           <label className="npc-select">
             <span>View</span>
@@ -489,62 +682,6 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
               </select>
             </label>
           )}
-
-          <button
-            type="button"
-            className={`npc-btn${showColumns ? " on" : ""}`}
-            onClick={() => setShowColumns((v) => !v)}
-          >
-            Columns
-          </button>
-
-          <button
-            type="button"
-            className={`npc-btn${
-              showFilters || activeFilterCount ? " on" : ""
-            }`}
-            onClick={() => setShowFilters((v) => !v)}
-          >
-            Filter{activeFilterCount > 0 ? ` ${activeFilterCount}` : ""}
-          </button>
-
-          <label className="npc-select">
-            <span>Sort</span>
-            <select
-              value={prefs.sortKey}
-              onChange={(e) => prefs.setSortKey(e.target.value)}
-            >
-              {COLUMNS.filter(
-                (c) => c.sortable !== false && (isDm || !c.dmOnly)
-              ).map((c) => (
-                <option key={c.key} value={c.key}>
-                  {c.label}
-                </option>
-              ))}
-              {EXTRA_SORTS.map((c) => (
-                <option key={c.key} value={c.key}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <button
-            type="button"
-            className="npc-btn"
-            onClick={() => prefs.setSortAsc((v) => !v)}
-            title={prefs.sortAsc ? "Ascending" : "Descending"}
-          >
-            {prefs.sortAsc ? "↑" : "↓"}
-          </button>
-
-          <input
-            className="npc-search"
-            type="search"
-            placeholder="Search…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
 
           {isDm && (
             <button
@@ -613,7 +750,74 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
         </p>
       )}
 
-      {showColumns && (
+      {panel === "group" && (
+        <div className="filter-panel">
+          <div className="filter-title">Group</div>
+          <label className="npc-select">
+            <span>Group by</span>
+            <select
+              value={prefs.groupBy}
+              onChange={(e) => prefs.setGroupBy(e.target.value)}
+            >
+              <option value="">None</option>
+              {facetOptions.map((f) => (
+                <option key={f.key} value={f.key}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {prefs.groupBy && (
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => prefs.setGroupBy("")}
+            >
+              Remove grouping
+            </button>
+          )}
+        </div>
+      )}
+
+      {panel === "sort" && (
+        <div className="filter-panel">
+          <div className="filter-title">Sort</div>
+          <label className="npc-select">
+            <span>Sort by</span>
+            <select
+              value={prefs.sortKey}
+              onChange={(e) => prefs.setSortKey(e.target.value)}
+            >
+              {sortableFields.map((c) => (
+                <option key={c.key} value={c.key}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="npc-btn"
+            onClick={() => prefs.setSortAsc((v) => !v)}
+          >
+            {prefs.sortAsc ? "↑ First to last" : "↓ Last to first"}
+          </button>
+          {sortCount > 0 && (
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => {
+                prefs.setSortKey(DEFAULT_SORT_KEY);
+                prefs.setSortAsc(DEFAULT_SORT_ASC);
+              }}
+            >
+              Back to the default
+            </button>
+          )}
+        </div>
+      )}
+
+      {panel === "columns" && (
         <div className="column-panel">
           <div className="facet-label">
             Columns — yours alone; nobody else&apos;s view changes
@@ -727,7 +931,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
         </div>
       )}
 
-      {showFilters && (
+      {panel === "filter" && (
         <FilterPanel
           conditions={prefs.filters}
           conjunction={prefs.filterConjunction}

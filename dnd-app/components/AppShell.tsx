@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { ReactNode, useMemo, useState } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import { ThemeSync } from "@/components/ThemeSync";
 import { FeedbackForm } from "@/components/FeedbackForm";
@@ -87,7 +87,14 @@ export function AppShell({
   children,
 }: {
   campaignId: Id<"campaigns">;
-  /** Trailing crumb — the campaign name is prepended automatically. */
+  /**
+   * The screen's name, for the browser tab.
+   *
+   * It used to be a "Moonbrook › NPCs" strip across the top of every
+   * screen, which spent a row of every page telling you the two things
+   * the sidebar already had highlighted. The tab is where a trail is
+   * useful — it is how you find the window again.
+   */
   breadcrumb: string;
   children: ReactNode;
 }) {
@@ -115,6 +122,15 @@ export function AppShell({
   const previewing = Boolean(settings?.viewAsPlayer);
   const isDm = runsThis && !previewing;
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+
+  // The trail, moved to where a trail is worth having. Written in an
+  // effect rather than through Next's metadata because these pages are
+  // client components and the campaign name arrives from a query.
+  useEffect(() => {
+    document.title = campaign?.name
+      ? `${breadcrumb} · ${campaign.name}`
+      : breadcrumb;
+  }, [breadcrumb, campaign?.name]);
 
   /**
    * The sidebar this person arranged, or the shipped grouping.
@@ -237,14 +253,7 @@ export function AppShell({
         </div>
       </nav>
 
-      <main className="workspace">
-        <div className="crumbs">
-          <Link href={base}>{campaign?.name ?? "Campaign"}</Link>
-          <span className="sep">›</span>
-          <span className="current">{breadcrumb}</span>
-        </div>
-        {children}
-      </main>
+      <main className="workspace">{children}</main>
 
       {feedbackOpen && (
         <FeedbackForm onClose={() => setFeedbackOpen(false)} />
