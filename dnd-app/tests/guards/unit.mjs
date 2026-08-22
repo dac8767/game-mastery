@@ -1111,11 +1111,37 @@ export const unit = {
       byTitle("Grappled").breadcrumb ===
         "System Reference Document > Rules Glossary"
     );
-    // The one that goes wrong quietly: a heading stack that is not
-    // truncated carries the last chapter into the next one.
+    check(
+      "a section is filed under the chapter it is actually in",
+      byTitle("Making an Attack").breadcrumb === "System Reference Document > Combat"
+    );
+
+    // The one that goes wrong quietly. A heading stack that is never
+    // truncated only shows it when a document skips a level — and real
+    // documents skip levels. Here the glossary's "Grappled" is still
+    // sitting at depth 3 when "Cover" asks for its trail, so a
+    // condition turns up in the middle of the combat rules.
+    const skipped = srd.chunkMarkdown(
+      [
+        "# SRD",
+        "",
+        "## Rules Glossary",
+        "",
+        "### Grappled",
+        "",
+        "Your Speed is 0.",
+        "",
+        "## Combat",
+        "",
+        "#### Cover",
+        "",
+        "A target can benefit from cover.",
+      ].join("\n"),
+      "T"
+    );
     check(
       "a shallower heading truncates the trail",
-      byTitle("Making an Attack").breadcrumb === "System Reference Document > Combat"
+      skipped.find((c) => c.title === "Cover").breadcrumb === "SRD > Combat"
     );
     check(
       "text before the first heading is kept, not discarded",
