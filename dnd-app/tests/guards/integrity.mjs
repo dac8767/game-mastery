@@ -1705,6 +1705,35 @@ export const integrity = {
       }
     }
 
+    // ---- no two modules whose names differ only in case -------------
+    // This one is invisible on Linux and fatal on a Mac. Next to
+    // lookupFilters.ts sat LookupFilters.tsx; on a case-SENSITIVE disk
+    // each import resolved to the file it named and every guard was
+    // green, including in CI. On Derek's case-INSENSITIVE disk
+    // TypeScript resolved both specifiers to the same file — it tries
+    // `.ts` before `.tsx` — and the build failed with TS1149 on a
+    // branch that had already been called done.
+    //
+    // Extensions are stripped before comparing, because that is what an
+    // import specifier is: `@/components/LookupFilters` names no
+    // extension, so `.ts` and `.tsx` siblings collide even though their
+    // filenames do not.
+    const byLowerName = new Map();
+    for (const [file] of sourceFiles("components", "convex", "app")) {
+      const specifier = file.replace(/\.tsx?$/, "");
+      const key = specifier.toLowerCase();
+      const seen = byLowerName.get(key);
+      if (seen && seen !== file) {
+        problems.push(
+          `${seen} and ${file} differ only in case — an import of ` +
+            `"${specifier}" resolves to whichever one the filesystem ` +
+            "hands over first, so this builds on Linux and fails on macOS"
+        );
+      } else {
+        byLowerName.set(key, file);
+      }
+    }
+
     // ---- Lookup: the kind union is stated twice --------------------
     // lookupFilters.ts cannot import it: the unit guard compiles pure
     // modules in isolation and TypeScript's path mapping is

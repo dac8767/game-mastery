@@ -28,7 +28,7 @@ import {
   applyEdition,
   applyFilters,
 } from "@/components/lookupFilters";
-import { LookupFilters } from "@/components/LookupFilters";
+import { LookupFilterBar } from "@/components/LookupFilterBar";
 import { useLookupLayout } from "@/components/useLookupLayout";
 
 /**
@@ -181,7 +181,7 @@ export function LookupTool({
         </p>
       ) : (
         <>
-          <LookupFilters
+          <LookupFilterBar
             kind={kind}
             state={filters}
             setState={setFilters}

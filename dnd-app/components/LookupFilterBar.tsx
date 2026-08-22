@@ -24,9 +24,14 @@ import { LookupKind } from "@/components/lookupFields";
  * is a round trip to a server; ours is a predicate over a list already
  * in memory, so results follow as you type and a button would only make
  * you press it.
+ *
+ * Named FilterBar, not Filters, because lookupFilters.ts sits next to
+ * it: on a case-insensitive disk a `LookupFilters` import resolves to
+ * whichever of the two TypeScript tries first, and it tries `.ts`
+ * before `.tsx`. The build stays green on Linux and fails on a Mac.
  */
 
-export function LookupFilters({
+export function LookupFilterBar({
   kind,
   state,
   setState,
