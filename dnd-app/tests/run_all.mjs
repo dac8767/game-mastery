@@ -2,8 +2,17 @@
 /**
  * The guard suite. Run it before calling anything done:
  *
- *   npm run guards          all seven
- *   npm run guards -- --fast  skip the slow build guard
+ *   npm run guards               all seven
+ *   npm run guards -- --fast     skip the slow build guard
+ *   npm run guards -- --only unit,integrity   just those two
+ *
+ * --only is the only supported way to run one guard. The guard files
+ * themselves EXPORT a { name, run } object and do nothing when executed
+ * directly, so `node tests/guards/unit.mjs` imports the module, checks
+ * nothing, and exits 0 — which is a green run that tested nothing, the
+ * exact failure this suite exists to prevent. An --only name that
+ * matches no guard is an error rather than an empty run, for the same
+ * reason.
  *
  * Why this exists: the failure mode that costs the most is not a crash,
  * it's a silent one — a reference that no longer resolves, a visibility
@@ -33,21 +42,44 @@ const GUARDS = [
   build,
 ];
 
-const fast = process.argv.includes("--fast");
-const selected = fast ? GUARDS.filter((g) => !g.slow) : GUARDS;
-
 const GREEN = "\x1b[32m";
 const RED = "\x1b[31m";
 const DIM = "\x1b[2m";
 const OFF = "\x1b[0m";
 
-let failed = 0;
+const args = process.argv.slice(2);
+const fast = args.includes("--fast");
+
+/** Names given as `--only unit,build` or `--only unit --only build`. */
+const only = args.flatMap((arg, i) =>
+  args[i - 1] === "--only" ? arg.split(",").map((n) => n.trim()) : []
+);
+
+const unknown = only.filter((n) => !GUARDS.some((g) => g.name === n));
+if (unknown.length > 0) {
+  console.log(
+    `\n${RED}No guard named ${unknown.join(", ")}.${OFF} ` +
+      `Available: ${GUARDS.map((g) => g.name).join(", ")}\n`
+  );
+  process.exit(2);
+}
+
+const selected = GUARDS.filter(
+  (g) => (only.length === 0 || only.includes(g.name)) && !(fast && g.slow)
+);
+
+if (selected.length === 0) {
+  console.log(`\n${RED}Nothing selected to run.${OFF}\n`);
+  process.exit(2);
+}
 
 console.log(
   `\nRunning ${selected.length} guard${selected.length === 1 ? "" : "s"}${
-    fast ? " (fast: build skipped)" : ""
+    fast && only.length === 0 ? " (fast: build skipped)" : ""
   }\n`
 );
+
+let failed = 0;
 
 for (const guard of selected) {
   process.stdout.write(`  ${guard.name.padEnd(18)} `);
@@ -70,7 +102,11 @@ for (const guard of selected) {
 }
 
 if (failed === 0) {
-  console.log(`\n${GREEN}All ${selected.length} guards green.${OFF}\n`);
+  console.log(
+    `\n${GREEN}All ${selected.length} guard${
+      selected.length === 1 ? "" : "s"
+    } green.${OFF}\n`
+  );
   process.exit(0);
 } else {
   console.log(`\n${RED}${failed} guard(s) failed.${OFF}\n`);

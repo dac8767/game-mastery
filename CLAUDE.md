@@ -130,8 +130,11 @@ Why each line is there:
 - **Nothing is done until `npm run guards` is green** (in `dnd-app/`).
   Seven guards: typecheck-app, typecheck-convex, generated-api,
   integrity, dm-visibility, unit, build. `npm run guards -- --fast` skips the slow build
-  guard while iterating. They also run on every push via
-  `.github/workflows/guards.yml`.
+  guard while iterating, and `npm run guards -- --only unit` runs one.
+  They also run on every push via `.github/workflows/guards.yml`.
+- **Never run a guard file directly** — `node tests/guards/unit.mjs`
+  exports a guard and executes nothing, so it exits 0 having checked
+  nothing. Use `--only`.
 - The guards exist because the expensive failures are silent ones — a
   string key that no longer resolves, a visibility rule that quietly
   stopped applying. TypeScript cannot see across those boundaries; the
