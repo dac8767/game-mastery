@@ -1195,7 +1195,7 @@ export const unit = {
       new Set(parts.map((p) => p.title)).size === 1
     );
     check(
-      "a short trailing stub is folded back rather than left alone",
+      "no part before the last is a stub",
       parts.every(
         (p, i) =>
           i === parts.length - 1 ||
@@ -1203,16 +1203,52 @@ export const unit = {
       )
     );
 
+    // Both fixtures below have to be long enough to actually split:
+    // splitLong returns early on anything under the cap, so a short
+    // document proves nothing about either rule. An earlier version of
+    // these two tests used four-line documents and passed with the
+    // behaviour removed.
+    const FILLER =
+      "Filler prose that exists only to push this section past the split cap.";
+    const fillTo = (limit) => {
+      let body = "";
+      while (body.length + FILLER.length + 2 <= limit) {
+        body += (body ? "\n\n" : "") + FILLER;
+      }
+      return body;
+    };
+
     // A table separated from its introduction is a grid of numbers
-    // with no column meanings.
+    // with no column meanings. The filler puts the split boundary right
+    // between the two, which is where it would come apart.
+    const rows = Array.from(
+      { length: 12 },
+      (_, i) => `| Weapon ${i} | ${20 + i * 10} | ${80 + i * 40} |`
+    );
     const tabled = srd.chunkMarkdown(
-      "# Ranges\n\nThe ranges are:\n\n| Weapon | Normal |\n|---|---|\n| Longbow | 150 |",
+      `# Ranges\n\n${fillTo(3900)}\n\nThe ranges are:\n\n${[
+        "| Weapon | Normal | Long |",
+        "|---|---|---|",
+        ...rows,
+      ].join("\n")}`,
       "T"
     );
+    const withTable = tabled.find((c) => c.text.includes("Weapon 11"));
+    check("the table fixture actually splits", tabled.length > 1);
     check(
       "a table stays with the sentence that introduces it",
-      tabled[0].text.includes("ranges are:") &&
-        tabled[0].text.includes("Longbow")
+      Boolean(withTable && withTable.text.includes("The ranges are:"))
+    );
+
+    // A closing paragraph on its own is a chunk that says nothing: the
+    // filler leaves exactly that orphan at the end.
+    const TAIL =
+      "A closing paragraph too short to stand on its own as a section of the rules.";
+    const stubbed = srd.chunkMarkdown(`# Stub\n\n${fillTo(3990)}\n\n${TAIL}`, "T");
+    check(
+      "a short trailing stub is folded back rather than left alone",
+      stubbed.every((c) => c.text.length >= srd.CHUNK_LIMITS.minChars) &&
+        stubbed[stubbed.length - 1].text.endsWith(TAIL)
     );
 
     check("an empty document yields nothing", srd.chunkMarkdown("", "T").length === 0);
