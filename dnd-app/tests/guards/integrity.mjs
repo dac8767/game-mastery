@@ -666,15 +666,34 @@ export const integrity = {
     // footer, so the check is against membership of ALL_NAV_ITEMS
     // rather than against having a slug at all. A hard-coded link to
     // something the designer cannot touch is the fix, not the bug.
-    const arrangedGroups = ["CAMPAIGN_ITEMS", "TOOL_ITEMS", "LOOKUP_ITEMS", "ASSET_ITEMS"];
+    // Read from ALL_NAV_ITEMS, because that is what AppShell hands to
+    // reconcileSidebar — the actual authority on what the sidebar
+    // arranges. Reading the group constants instead looked equivalent
+    // and was not: adding SETTINGS_ITEM back to ALL_NAV_ITEMS alone
+    // re-created the duplicate and the check never noticed.
+    const allAt = navSrc.indexOf("export const ALL_NAV_ITEMS");
+    if (allAt === -1) throw new Error("no ALL_NAV_ITEMS in navItems.ts");
+    const allBody = navSrc.slice(allAt, navSrc.indexOf("];", allAt));
+
+    const slugsOfConst = (name) => {
+      const at = navSrc.indexOf(`export const ${name}`);
+      if (at === -1) throw new Error(`no ${name} in navItems.ts`);
+      const end = navSrc.indexOf(
+        navSrc.slice(at).startsWith(`export const ${name}: NavItem =`) ? "};" : "];",
+        at
+      );
+      return [...navSrc.slice(at, end).matchAll(/\bslug:\s*"([^"]+)"/g)].map(
+        (m) => m[1]
+      );
+    };
+
     const arrangedSlugs = new Set();
-    for (const group of arrangedGroups) {
-      const at = navSrc.indexOf(`export const ${group}`);
-      if (at === -1) throw new Error(`no ${group} in navItems.ts`);
-      const end = navSrc.indexOf("];", at);
-      for (const m of navSrc.slice(at, end).matchAll(/\bslug:\s*"([^"]+)"/g)) {
-        arrangedSlugs.add(m[1]);
-      }
+    // `...GROUP` spreads a list; a bare `NAME,` names one item.
+    for (const m of allBody.matchAll(/\.\.\.(\w+)/g)) {
+      for (const slug of slugsOfConst(m[1])) arrangedSlugs.add(slug);
+    }
+    for (const m of allBody.matchAll(/^\s{2}([A-Z][A-Z0-9_]*),\s*$/gm)) {
+      for (const slug of slugsOfConst(m[1])) arrangedSlugs.add(slug);
     }
     if (arrangedSlugs.size === 0) {
       throw new Error("no arranged slugs found — parser out of date?");
