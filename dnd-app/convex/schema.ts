@@ -376,6 +376,41 @@ export default defineSchema({
       filterFields: ["level", "school"],
     }),
 
+  /**
+   * The rules text, in searchable sections — what Rules Lawyer reads.
+   *
+   * Derived reference data like spells and items: no write path, no
+   * campaign, replaced wholesale by re-importing. Shared across every
+   * campaign, because a rule is a rule in both of Derek's games.
+   *
+   * `text` is what a person reads; `search` is that plus the heading
+   * and its trail, so "grappled condition" finds the Grappled section
+   * even though "condition" appears only in the heading above it. Two
+   * fields rather than one because a search index matches a single
+   * field, and folding the breadcrumb into the displayed text would
+   * put it on screen twice.
+   */
+  rules: defineTable({
+    /** "SRD 5.2" — which document this came from, shown with the rule. */
+    source: v.string(),
+    title: v.string(),
+    /** "Rules Glossary > Conditions", the headings above this one. */
+    breadcrumb: v.string(),
+    text: v.string(),
+    search: v.string(),
+    /** Position in the document, so results can be read in book order. */
+    order: v.number(),
+  })
+    .index("by_source_order", ["source", "order"])
+    .searchIndex("search_title", {
+      searchField: "title",
+      filterFields: ["source"],
+    })
+    .searchIndex("search_text", {
+      searchField: "search",
+      filterFields: ["source"],
+    }),
+
   items: defineTable({
     name: v.string(),
     image: v.optional(v.string()),

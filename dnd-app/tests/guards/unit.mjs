@@ -16,7 +16,7 @@ import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { APP_ROOT, read } from "./lib.mjs";
+import { APP_ROOT, appPath, read } from "./lib.mjs";
 
 function compile(relPath) {
   const out = mkdtempSync(join(tmpdir(), "gm-unit-"));
@@ -1064,6 +1064,228 @@ export const unit = {
         .arrange(["job"])
         .flatMap((s) => s.keys)
         .join() === "job"
+    );
+
+    // ---- Rules Lawyer: cutting a document into sections ------------
+    // The chunker is plain ESM in scripts/, so it imports directly —
+    // no compile step. It runs once per import, which is exactly why it
+    // needs testing: a mistake here is baked into every row and only
+    // shows up as a rule that reads oddly weeks later.
+    const srd = await import(
+      pathToFileURL(appPath("scripts", "srdChunks.mjs")).href
+    );
+
+    const DOC = [
+      "Licensed under CC-BY-4.0.",
+      "",
+      "# System Reference Document",
+      "",
+      "## Rules Glossary",
+      "",
+      "Terms used throughout.",
+      "",
+      "### Grappled",
+      "",
+      "Your Speed is 0 and cannot increase.",
+      "",
+      "### Prone",
+      "",
+      "You can only crawl.",
+      "",
+      "## Combat",
+      "",
+      "### Making an Attack",
+      "",
+      "An attack has a simple structure.",
+    ].join("\n");
+
+    const cut = srd.chunkMarkdown(DOC, "SRD 5.2");
+    const byTitle = (t) => cut.find((c) => c.title === t);
+
+    // Five, not seven: "System Reference Document" and "Combat" are
+    // headings with nothing directly under them, and a heading whose
+    // content is all in its children is a table-of-contents entry.
+    check("every section with text in it is found", cut.length === 5);
+    check(
+      "the breadcrumb is the trail ABOVE a section, not including it",
+      byTitle("Grappled").breadcrumb ===
+        "System Reference Document > Rules Glossary"
+    );
+    // The one that goes wrong quietly: a heading stack that is not
+    // truncated carries the last chapter into the next one.
+    check(
+      "a shallower heading truncates the trail",
+      byTitle("Making an Attack").breadcrumb === "System Reference Document > Combat"
+    );
+    check(
+      "text before the first heading is kept, not discarded",
+      cut[0].text.includes("CC-BY-4.0") && cut[0].title === "SRD 5.2"
+    );
+    check(
+      "a heading with nothing under it is dropped",
+      !cut.some((c) => c.text.trim() === "")
+    );
+    check(
+      "order is contiguous after the empty ones go",
+      cut.map((c) => c.order).join() ===
+        cut.map((_, i) => i).join()
+    );
+    check(
+      "the source is carried onto every section",
+      cut.every((c) => c.source === "SRD 5.2")
+    );
+    check(
+      "searchTextOf folds the heading and trail into the text",
+      srd
+        .searchTextOf(byTitle("Grappled"))
+        .toLowerCase()
+        .includes("rules glossary") &&
+        srd.searchTextOf(byTitle("Grappled")).includes("Speed is 0")
+    );
+
+    // A long section splits at paragraph boundaries and loses nothing.
+    const long =
+      "# Long\n\n" +
+      Array.from(
+        { length: 200 },
+        (_, i) => `Paragraph ${i} with enough words to take up room on the page.`
+      ).join("\n\n");
+    const parts = srd.chunkMarkdown(long, "T");
+    check("a long section is split", parts.length > 1);
+    check(
+      "every part is under the cap",
+      parts.every((p) => p.text.length <= srd.CHUNK_LIMITS.maxChars)
+    );
+    check(
+      "no part begins mid-sentence",
+      parts.every((p) => /^[A-Z#|*]/.test(p.text.trim()))
+    );
+    check(
+      "splitting loses no paragraphs",
+      parts.map((p) => p.text).join("\n\n").split("Paragraph ").length - 1 === 200
+    );
+    check(
+      "every part keeps the section title",
+      new Set(parts.map((p) => p.title)).size === 1
+    );
+    check(
+      "a short trailing stub is folded back rather than left alone",
+      parts.every(
+        (p, i) =>
+          i === parts.length - 1 ||
+          p.text.length >= srd.CHUNK_LIMITS.minChars
+      )
+    );
+
+    // A table separated from its introduction is a grid of numbers
+    // with no column meanings.
+    const tabled = srd.chunkMarkdown(
+      "# Ranges\n\nThe ranges are:\n\n| Weapon | Normal |\n|---|---|\n| Longbow | 150 |",
+      "T"
+    );
+    check(
+      "a table stays with the sentence that introduces it",
+      tabled[0].text.includes("ranges are:") &&
+        tabled[0].text.includes("Longbow")
+    );
+
+    check("an empty document yields nothing", srd.chunkMarkdown("", "T").length === 0);
+    check(
+      "a document that is only headings yields nothing",
+      srd.chunkMarkdown("# A\n\n## B\n\n### C", "T").length === 0
+    );
+
+    // ---- Rules Lawyer: showing a result ----------------------------
+    const rsOut = compile("components/rulesSnippet.ts");
+    const rs = await import(
+      pathToFileURL(join(rsOut, "rulesSnippet.js")).href
+    );
+
+    check(
+      "queryTerms lowercases and splits",
+      rs.queryTerms("Grappled Condition").sort().join() === "condition,grappled"
+    );
+    check(
+      "one-letter words are dropped — they would match everything",
+      !rs.queryTerms("a grappled").includes("a")
+    );
+    check("queryTerms deduplicates", rs.queryTerms("attack attack").length === 1);
+    check("an empty query has no terms", rs.queryTerms("").length === 0);
+
+    // highlight returns SPANS, never markup: this is document text
+    // going onto a page, and building HTML from it is how a file ends
+    // up executing in a browser.
+    const spans = rs.highlight("Your Speed is 0", ["speed"]);
+    check(
+      "highlight rejoins to exactly the original text",
+      spans.map((s) => s.text).join("") === "Your Speed is 0"
+    );
+    check(
+      "the matched run is marked and the rest is not",
+      spans.filter((s) => s.hit).map((s) => s.text).join() === "Speed"
+    );
+    check(
+      "matching is case-insensitive but preserves the original case",
+      rs
+        .highlight("SPEED speed", ["speed"])
+        .filter((s) => s.hit)
+        .map((s) => s.text)
+        .join(",") === "SPEED,speed"
+    );
+    check(
+      "overlapping terms do not produce duplicated text",
+      rs.highlight("attacking", ["attack", "attacking"]).map((s) => s.text).join("") ===
+        "attacking"
+    );
+    check(
+      "no terms leaves the text whole and unmarked",
+      (() => {
+        const s = rs.highlight("plain text", []);
+        return s.length === 1 && !s[0].hit && s[0].text === "plain text";
+      })()
+    );
+    check(
+      "highlight never emits markup of its own",
+      !JSON.stringify(rs.highlight("<b>x</b>", ["x"])).includes("mark")
+    );
+
+    // The snippet opens where the matches are densest, not at the
+    // first passing mention.
+    const passage =
+      "The word appears here once. " +
+      "Filler sentence. ".repeat(30) +
+      "Now the word is explained: the word means the word properly.";
+    const snip = rs.snippet(passage, ["word"], 120);
+    check("a snippet respects its length", snip.length <= 130);
+    check(
+      "a snippet opens on the densest run of matches",
+      snip.includes("explained") || snip.includes("means")
+    );
+    check(
+      "an elision is marked at whichever end was cut",
+      snip.startsWith("…") || snip.endsWith("…")
+    );
+    check(
+      "a short section is returned whole, with no ellipsis",
+      rs.snippet("Short rule.", ["rule"], 120) === "Short rule."
+    );
+    check(
+      "a snippet with no match still shows the opening",
+      rs.snippet(passage, ["absent"], 60).startsWith("The word appears")
+    );
+    check(
+      "a snippet is a contiguous run of the real text",
+      passage.replace(/\s+/g, " ").includes(snip.replace(/^…|…$/g, "").trim())
+    );
+
+    check(
+      "trailOf reads as a path",
+      rs.trailOf("Rules Glossary > Conditions", "Grappled") ===
+        "Rules Glossary › Conditions › Grappled"
+    );
+    check(
+      "a section with no trail is just its title",
+      rs.trailOf("", "Combat") === "Combat"
     );
 
     // ---- what a note is allowed to contain -------------------------

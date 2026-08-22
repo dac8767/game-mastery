@@ -6039,3 +6039,114 @@ button.cal-day:hover {
 .sbd-hidden-col {
   min-height: 10rem;
 }
+
+/* ---------- Rules Lawyer ---------- */
+
+.rules {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 0;
+  flex: 1;
+}
+
+.rules-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.rules-title {
+  margin: 0;
+  font-size: 1.1rem;
+  flex: none;
+}
+
+.rules-search {
+  flex: 1;
+  min-width: 16rem;
+}
+
+.rules-hint {
+  margin: 0;
+}
+
+.rules-hits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+}
+
+.rules-hit {
+  padding: 0.6rem 0.8rem 0.7rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.rules-hit.open {
+  border-color: var(--accent);
+}
+
+.rules-hit-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  text-align: left;
+  color: inherit;
+}
+
+.rules-trail {
+  font-weight: 600;
+  font-size: 0.92rem;
+  min-width: 0;
+}
+
+.rules-source {
+  flex: none;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* The rule itself. `pre-wrap` because the text arrived with its own
+   line breaks — a stat table loses its columns without them. */
+.rules-text {
+  margin-top: 0.4rem;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.rules-text mark {
+  background: var(--accent-soft);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 0.1rem;
+}
+
+/* What comes after the rule you found — often where the answer is. */
+.rules-next {
+  margin-top: 0.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.84rem;
+}
+
+.rules-next p {
+  margin: 0.2rem 0 0;
+  color: var(--text-dim);
+}

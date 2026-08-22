@@ -74,6 +74,7 @@ export const LOOKUP_ITEMS: NavItem[] = [
   { id: "spells", label: "Spells", icon: "✧", slug: "spells" },
   { id: "items", label: "Items", icon: "⚱", slug: "items" },
   { id: "monsters", label: "Monsters", icon: "☠", slug: "monsters" },
+  { id: "rules", label: "Rules Lawyer", icon: "§", slug: "rules" },
 ];
 
 export const ASSET_ITEMS: NavItem[] = [

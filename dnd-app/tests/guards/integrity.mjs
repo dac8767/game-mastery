@@ -394,6 +394,90 @@ export const integrity = {
       }
     }
 
+    // ---- Rules Lawyer quotes; it never paraphrases ------------------
+    // The whole claim of this tool is that what it shows you IS the
+    // rules text. Three things have to hold for that to stay true, and
+    // each fails silently.
+    {
+      const tool = read("components", "RulesLawyerTool.tsx");
+      const snip = read("components", "rulesSnippet.ts");
+
+      // 1. Rules text is document text rendered on a page. The moment
+      //    it is turned into markup to add emphasis, a file is being
+      //    concatenated into a browser. highlight returns spans and
+      //    JSX escapes them.
+      for (const [file, src] of [
+        ["RulesLawyerTool.tsx", tool],
+        ["rulesSnippet.ts", snip],
+      ]) {
+        if (/dangerouslySetInnerHTML/.test(src)) {
+          problems.push(
+            `${file} injects rules text as HTML — it is text out of a ` +
+              "document, and the highlighter returns spans precisely so it " +
+              "never has to be"
+          );
+        }
+      }
+      // Comments stripped first: the file explains that it must NOT
+      // build a <mark> tag, and failing it for saying so would be the
+      // guard punishing the code for documenting itself.
+      if (/<mark|<\/mark|innerHTML/.test(stripComments(snip))) {
+        problems.push(
+          "rulesSnippet builds markup — it must return spans and leave the " +
+            "rendering to JSX, which escapes them"
+        );
+      }
+
+      // 2. A snippet must be a contiguous run of the real text. Joining
+      //    matched fragments with an ellipsis would read as a sentence
+      //    the document never contained.
+      if (!/slice\(from, to\)/.test(snip)) {
+        problems.push(
+          "rulesSnippet no longer takes a single contiguous slice — a " +
+            "snippet stitched from fragments is a sentence the rules do " +
+            "not contain"
+        );
+      }
+
+      // 3. The screen must render the stored text, not a summary of it.
+      //    There is nothing on this screen that generates prose, and a
+      //    check that says so is what stops one appearing quietly.
+      if (!/hit\.text/.test(tool)) {
+        problems.push(
+          "RulesLawyerTool no longer renders the stored rules text"
+        );
+      }
+      if (/api\.\w+\.(ask|explain|summari)/i.test(tool)) {
+        problems.push(
+          "RulesLawyerTool calls something that generates prose. That is " +
+            "the second slice, and it belongs beside the quoted rule with " +
+            "its citations checked — never in place of it"
+        );
+      }
+    }
+
+    // The rules table is derived reference data: imported, never
+    // written from the app. A mutation into it would mean the text on
+    // screen is no longer the text in the document.
+    {
+      const lookupSrc = read("convex", "lookup.ts");
+      if (/mutation\(/.test(lookupSrc)) {
+        problems.push(
+          "convex/lookup.ts defines a mutation — the reference library is " +
+            "loaded by import and has no write path, which is what makes " +
+            "--replace safe"
+        );
+      }
+      for (const fn of ["searchRules", "ruleContext"]) {
+        const at = lookupSrc.indexOf(`export const ${fn}`);
+        if (at === -1) throw new Error(`no ${fn} in convex/lookup.ts`);
+        const body = blockAfter(lookupSrc.slice(at), /handler:/, fn);
+        if (!/requireReader\(/.test(body)) {
+          problems.push(`lookup.${fn} does not go through requireReader`);
+        }
+      }
+    }
+
     // ---- notes: sanitised on the server, owned by their author ------
     // Three separate failures, all silent, all in one feature.
     {

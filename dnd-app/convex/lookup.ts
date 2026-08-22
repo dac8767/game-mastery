@@ -180,3 +180,121 @@ export const getMonster = query({
     return await ctx.db.get(args.id);
   },
 });
+
+// ---------------------------------------------------------------------
+// Rules Lawyer
+// ---------------------------------------------------------------------
+
+/**
+ * Enough results to find what you meant, few enough to read.
+ *
+ * A rules search that returns forty sections has not answered the
+ * question, it has moved it.
+ */
+const MAX_RULE_HITS = 12;
+
+/**
+ * Search the rules text.
+ *
+ * Two indexes, merged. The title index is asked first because a query
+ * that names a rule — "grappled", "opportunity attack" — means the
+ * section with that heading, and a body search would rank it against
+ * every other section that happens to mention the word. The body index
+ * then fills in the questions that are not a heading: "can I move
+ * after attacking".
+ *
+ * `search` carries the heading and its breadcrumb folded in, so a
+ * phrase spanning both — "grappled condition" — matches even though
+ * "condition" appears only in the heading above the rule.
+ *
+ * Deduplicated by id, keeping the earlier (title) hit, so a section
+ * matching both ways appears once, ranked as the stronger match.
+ */
+export const searchRules = query({
+  args: {
+    q: v.string(),
+    source: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireReader(ctx);
+
+    const q = args.q.trim();
+    if (!q) return { hits: [], sources: await ruleSources(ctx) };
+
+    const byTitle = await ctx.db
+      .query("rules")
+      .withSearchIndex("search_title", (s) => {
+        const base = s.search("title", q);
+        return args.source ? base.eq("source", args.source) : base;
+      })
+      .take(MAX_RULE_HITS);
+
+    const byText = await ctx.db
+      .query("rules")
+      .withSearchIndex("search_text", (s) => {
+        const base = s.search("search", q);
+        return args.source ? base.eq("source", args.source) : base;
+      })
+      .take(MAX_RULE_HITS);
+
+    const seen = new Set<string>();
+    const hits = [];
+    for (const row of [...byTitle, ...byText]) {
+      if (seen.has(row._id)) continue;
+      seen.add(row._id);
+      hits.push({
+        _id: row._id,
+        source: row.source,
+        title: row.title,
+        breadcrumb: row.breadcrumb,
+        text: row.text,
+        order: row.order,
+      });
+      if (hits.length >= MAX_RULE_HITS) break;
+    }
+
+    return { hits, sources: await ruleSources(ctx) };
+  },
+});
+
+/** Every document imported, so the filter can offer them. */
+async function ruleSources(ctx: QueryCtx): Promise<string[]> {
+  const rows = await ctx.db.query("rules").withIndex("by_source_order").take(2000);
+  return [...new Set(rows.map((r) => r.source))].sort();
+}
+
+/**
+ * The sections either side of one, for reading on.
+ *
+ * A rule rarely stands alone — "Grappled" is followed by "Incapacitated",
+ * and the sentence you needed is as often in the section after the one
+ * you found. Ordered by position in the document, which is why `order`
+ * is contiguous.
+ */
+export const ruleContext = query({
+  args: { source: v.string(), order: v.number(), before: v.number(), after: v.number() },
+  handler: async (ctx, args) => {
+    await requireReader(ctx);
+    const before = Math.min(5, Math.max(0, Math.round(args.before)));
+    const after = Math.min(5, Math.max(0, Math.round(args.after)));
+
+    const rows = await ctx.db
+      .query("rules")
+      .withIndex("by_source_order", (i) =>
+        i
+          .eq("source", args.source)
+          .gte("order", args.order - before)
+          .lte("order", args.order + after)
+      )
+      .take(before + after + 1);
+
+    return rows.map((r) => ({
+      _id: r._id,
+      source: r.source,
+      title: r.title,
+      breadcrumb: r.breadcrumb,
+      text: r.text,
+      order: r.order,
+    }));
+  },
+});
