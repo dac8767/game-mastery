@@ -1735,6 +1735,8 @@ export const integrity = {
       // written: <UiText id="x" />, useUiText("x"), useUiLayout("x"),
       // and the ternary form <UiText id={cond ? "a" : "b"} />.
       const used = new Set();
+      /** Families rendered from a loop, as the literal part of the id. */
+      const prefixes = [];
       for (const [file, src] of sourceFiles("components", "app")) {
         if (file.endsWith("uiRegistry.ts")) continue;
         const code = stripComments(src);
@@ -1749,10 +1751,36 @@ export const integrity = {
           if (declared.includes(m[1])) used.add(m[1]);
           if (declared.includes(m[2])) used.add(m[2]);
         }
+
+        // A whole family rendered from a loop: <UiText id={`a.b.${x}`} />.
+        // The prefix is all that can be read statically, so it marks the
+        // family as rendered — and the UNIT guard then checks the exact
+        // correspondence against the list being looped over, which is
+        // the part a regex could never do.
+        for (const m of code.matchAll(
+          /(?:UiText\s+id=|useUiText\(|useUiLayout\()\s*\{?\s*`([^`$]+)\$\{/g
+        )) {
+          prefixes.push(m[1]);
+        }
+      }
+
+      // A prefix is only allowed to excuse a family, never the whole
+      // registry. `id.startsWith("")` is true of every id, so a short or
+      // empty prefix would switch the orphan check off without failing
+      // anything — the guard would go on reporting green while checking
+      // nothing, which is the failure this whole suite exists to stop.
+      for (const prefix of prefixes) {
+        if (prefix.length < 4 || !prefix.includes(".")) {
+          problems.push(
+            `edit mode renders a family of ids from the prefix ` +
+              `"${prefix}", which is too broad to tell one family from ` +
+              "another — every registered id would count as rendered"
+          );
+        }
       }
 
       for (const id of declared) {
-        if (!used.has(id)) {
+        if (!used.has(id) && !prefixes.some((p) => id.startsWith(p))) {
           problems.push(
             `uiRegistry declares "${id}" but nothing renders it — edit ` +
               "mode would offer a rename that changes nothing on screen"

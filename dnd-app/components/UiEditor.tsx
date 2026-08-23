@@ -5,6 +5,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -13,6 +14,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import {
+  EMPTY_STASH,
   Entry,
   LAYOUT_BY_ID,
   LAYOUT_PIECES,
@@ -23,8 +25,12 @@ import {
   changedText,
   clampLayout,
   cleanText,
+  decodeStash,
+  encodeStash,
   exportOverrides,
   layoutFor,
+  screens,
+  stashKey,
   textFor,
 } from "@/components/uiRegistry";
 
@@ -62,6 +68,10 @@ interface UiState {
   rename: (id: string, value: string) => void;
   setLayout: (id: string, value: number) => void;
   dirty: boolean;
+  /** Registered pieces mounted on the screen right now. */
+  onScreen: string[];
+  /** Called by each piece as it mounts and unmounts. */
+  present: (id: string, mounted: boolean) => void;
 }
 
 const UiContext = createContext<UiState | null>(null);
@@ -75,6 +85,8 @@ const SHIPPED: UiState = {
   rename: () => {},
   setLayout: () => {},
   dirty: false,
+  onScreen: [],
+  present: () => {},
 };
 
 export function UiProvider({
@@ -93,6 +105,60 @@ export function UiProvider({
   const [draftText, setDraftText] = useState<Entry<string>[] | null>(null);
   const [draftLayout, setDraftLayout] = useState<Entry<number>[] | null>(null);
   const [editing, setEditingRaw] = useState(false);
+
+  /**
+   * Which registered pieces are on the screen right now.
+   *
+   * Every UiText and UiSplitHandle checks in while it is mounted, so
+   * the bar can say "12 labels on this screen" — or say there are none
+   * and point you somewhere there are. Without it, turning edit mode on
+   * from Settings shows a bar and no outlines anywhere, which reads as
+   * a feature that does not work.
+   */
+  const [onScreen, setOnScreen] = useState<string[]>([]);
+  const present = useCallback((id: string, mounted: boolean) => {
+    setOnScreen((cur) => {
+      if (mounted) return cur.includes(id) ? cur : [...cur, id];
+      return cur.filter((x) => x !== id);
+    });
+  }, []);
+
+  /**
+   * Edit mode outlives the screen it was switched on from.
+   *
+   * Every page renders its own AppShell, so navigating unmounts this
+   * provider and mounts a fresh one — React state does not cross that,
+   * and edit mode switched itself off exactly when you walked to the
+   * screen you wanted to edit. The flag and the unsaved drafts go
+   * through sessionStorage, which does.
+   */
+  const hydrated = useRef(false);
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    if (hydrated.current) return;
+    hydrated.current = true;
+    let raw: string | null = null;
+    try {
+      raw = window.sessionStorage.getItem(stashKey(campaignId));
+    } catch {
+      // A browser set to refuse site data. Edit mode still works; it
+      // just forgets itself when you change screens, which is the
+      // behaviour before this existed rather than a broken one.
+      setRestored(true);
+      return;
+    }
+    const stash = decodeStash(raw);
+    if (stash !== EMPTY_STASH) {
+      if (stash.editing) setEditingRaw(true);
+      if (stash.text.length > 0) setDraftText(stash.text);
+      if (stash.layout.length > 0) setDraftLayout(stash.layout);
+    }
+    // Set LAST and in the same batch as the restore, so the write
+    // effect below never runs with the pre-restore values — it would
+    // write `editing: false` over the flag it is in the middle of
+    // reading back.
+    setRestored(true);
+  }, [campaignId]);
 
   const textEntries = draftText ?? stored?.text ?? [];
   const layoutEntries = draftLayout ?? stored?.layout ?? [];
@@ -134,6 +200,22 @@ export function UiProvider({
 
   const setEditing = useCallback((on: boolean) => setEditingRaw(on), []);
 
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      window.sessionStorage.setItem(
+        stashKey(campaignId),
+        encodeStash({
+          editing,
+          text: draftText ?? [],
+          layout: draftLayout ?? [],
+        })
+      );
+    } catch {
+      // Refused storage is not a reason to stop editing.
+    }
+  }, [campaignId, restored, editing, draftText, draftLayout]);
+
   const value: UiState = {
     text,
     layout,
@@ -142,6 +224,8 @@ export function UiProvider({
     rename,
     setLayout: setLayoutValue,
     dirty,
+    onScreen,
+    present,
   };
 
   return (
@@ -151,6 +235,7 @@ export function UiProvider({
         <EditBar
           text={text}
           layout={layout}
+          onScreen={onScreen.length}
           dirty={dirty}
           onDiscard={() => {
             setDraftText(null);
@@ -199,6 +284,14 @@ export function UiText({ id }: { id: string }) {
   const ui = useUi();
   const value = ui.text.get(id) ?? TEXT_BY_ID.get(id)?.value ?? id;
   const [open, setOpen] = useState(false);
+
+  // Check in while on screen, so the bar can say how much of this
+  // screen is editable — and say plainly when the answer is none.
+  const { present } = ui;
+  useEffect(() => {
+    present(id, true);
+    return () => present(id, false);
+  }, [id, present]);
 
   if (!ui.editing) return <>{value}</>;
   if (open) {
@@ -301,6 +394,12 @@ export function UiSplitHandle({
   const holder = useRef<HTMLSpanElement>(null);
   const start = useRef<{ at: number; from: number; size: number } | null>(null);
 
+  const { present } = ui;
+  useEffect(() => {
+    present(id, true);
+    return () => present(id, false);
+  }, [id, present]);
+
   if (!ui.editing || !LAYOUT_BY_ID.has(id)) return null;
   const current = ui.layout.get(id) ?? 0;
 
@@ -342,6 +441,7 @@ export function UiSplitHandle({
 function EditBar({
   text,
   layout,
+  onScreen,
   dirty,
   onDiscard,
   onSave,
@@ -349,6 +449,8 @@ function EditBar({
 }: {
   text: Map<string, string>;
   layout: Map<string, number>;
+  /** How many registered pieces this screen is showing. */
+  onScreen: number;
   dirty: boolean;
   onDiscard: () => void;
   onSave: () => Promise<void>;
@@ -364,9 +466,17 @@ function EditBar({
     <>
       <div className="ui-editbar" role="region" aria-label="Edit mode">
         <strong>Edit mode</strong>
+        {/* The count is the whole difference between "this is broken"
+            and "you are on the wrong screen". Settings has nothing
+            registered, so switching edit mode on there used to show a
+            bar and not one outline anywhere. */}
         <span className="settings-note">
-          Click any outlined label to rename it. Drag a divider to move a
-          split.
+          {onScreen === 0
+            ? `Nothing on this screen can be edited yet. Try ${screens().join(
+                " or "
+              )}.`
+            : `${onScreen} thing${onScreen === 1 ? "" : "s"} on this screen. ` +
+              "Click an outlined label to rename it; drag a divider to move a split."}
         </span>
         <span className="ui-editbar-count">
           {changes} change{changes === 1 ? "" : "s"}

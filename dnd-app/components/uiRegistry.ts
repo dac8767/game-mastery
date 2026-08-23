@@ -135,6 +135,18 @@ export const TEXT_PIECES: TextPiece[] = [
     screen: "NPC record",
     note: "Shown to players only",
   },
+
+  // ---- Settings ---------------------------------------------------
+  // Registered mostly so the screen you turn edit mode ON from has
+  // something to show. A bar that appears over a page with nothing
+  // outlined on it reads as a feature that does not work — which is
+  // exactly how this landed the first time.
+  { id: "settings.tab.system", value: "System", screen: "Settings" },
+  { id: "settings.tab.user", value: "User", screen: "Settings" },
+  { id: "settings.tab.campaign", value: "Campaign", screen: "Settings" },
+  { id: "settings.tab.players", value: "Players", screen: "Settings" },
+  { id: "settings.tab.templates", value: "Templates", screen: "Settings" },
+  { id: "settings.tab.interface", value: "Interface", screen: "Settings" },
 ];
 
 /**
@@ -334,4 +346,83 @@ export function exportOverrides(
  */
 function quote(text: string): string {
   return JSON.stringify(text);
+}
+
+/**
+ * Edit mode, written down so it survives leaving the screen.
+ *
+ * Every page in this app renders its own AppShell, so walking from
+ * Settings to the NPC list UNMOUNTS the provider and mounts a fresh
+ * one. React state does not survive that: edit mode switched itself
+ * off the moment you navigated to the screen you wanted to edit, which
+ * made the whole feature look like it did nothing.
+ *
+ * So the flag and the unsaved drafts are stashed and read back. Keyed
+ * by campaign, because a draft rename belongs to the campaign it was
+ * typed in and carrying it into another one would apply words from a
+ * different table.
+ */
+export interface Stash {
+  editing: boolean;
+  text: Entry<string>[];
+  layout: Entry<number>[];
+}
+
+export const EMPTY_STASH: Stash = { editing: false, text: [], layout: [] };
+
+export function stashKey(campaignId: string): string {
+  return `gm.editmode.${campaignId}`;
+}
+
+export function encodeStash(stash: Stash): string {
+  return JSON.stringify({
+    editing: Boolean(stash.editing),
+    text: stash.text.filter((e) => TEXT_BY_ID.has(e.id)),
+    layout: stash.layout.filter((e) => LAYOUT_BY_ID.has(e.id)),
+  });
+}
+
+/**
+ * Whatever came back out of storage, as something safe to render.
+ *
+ * Anything unreadable is the empty stash rather than a thrown error.
+ * This is a convenience that remembers you were mid-edit; a stale or
+ * hand-edited value in a browser store must never be able to stop the
+ * app from rendering.
+ */
+export function decodeStash(raw: unknown): Stash {
+  if (typeof raw !== "string" || !raw) return EMPTY_STASH;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return EMPTY_STASH;
+  }
+  if (!parsed || typeof parsed !== "object") return EMPTY_STASH;
+
+  const obj = parsed as Record<string, unknown>;
+  const text = Array.isArray(obj.text) ? obj.text : [];
+  const layout = Array.isArray(obj.layout) ? obj.layout : [];
+
+  return {
+    editing: obj.editing === true,
+    text: text
+      .filter(
+        (e): e is Entry<string> =>
+          Boolean(e) &&
+          typeof (e as Entry<string>).id === "string" &&
+          TEXT_BY_ID.has((e as Entry<string>).id) &&
+          typeof (e as Entry<string>).value === "string"
+      )
+      .map((e) => ({ id: e.id, value: cleanText(e.value) ?? "" }))
+      .filter((e) => e.value.length > 0),
+    layout: layout
+      .filter(
+        (e): e is Entry<number> =>
+          Boolean(e) &&
+          typeof (e as Entry<number>).id === "string" &&
+          LAYOUT_BY_ID.has((e as Entry<number>).id)
+      )
+      .map((e) => ({ id: e.id, value: clampLayout(e.id, e.value) ?? 0 })),
+  };
 }

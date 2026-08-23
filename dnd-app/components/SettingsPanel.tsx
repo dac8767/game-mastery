@@ -9,7 +9,7 @@ import { RULES_VERSIONS } from "@/components/lookupFilters";
 import { DATE_FORMATS, formatCardDate } from "@/components/campaignCard";
 import { NpcTemplateDesigner } from "@/components/NpcTemplateDesigner";
 import { SidebarDesigner } from "@/components/SidebarDesigner";
-import { EditModeSwitch } from "@/components/UiEditor";
+import { EditModeSwitch, UiText } from "@/components/UiEditor";
 import { NameField } from "@/components/NameField";
 import { TransferDm } from "@/components/TransferDm";
 import { CampaignDetails } from "@/components/CampaignDetails";
@@ -73,7 +73,7 @@ export function SettingsPanel({
             className={`settings-tab${t.id === tab ? " on" : ""}`}
             onClick={() => setSelected(t.id)}
           >
-            {t.label}
+            <UiText id={`settings.tab.${t.id}`} />
           </button>
         ))}
       </div>

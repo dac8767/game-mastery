@@ -1492,6 +1492,83 @@ export const unit = {
       ui.LAYOUT_PIECES.every((p) => p.value >= p.min && p.value <= p.max)
     );
 
+    // ---- edit mode survives leaving the screen ---------------------
+    // Every page renders its own AppShell, so navigating unmounts the
+    // provider. React state does not cross that: edit mode switched
+    // itself off exactly when you walked to the screen you wanted to
+    // edit, which is how it shipped and how it was reported.
+    const stashed = ui.encodeStash({
+      editing: true,
+      text: [{ id: "record.info.title", value: "Dossier" }],
+      layout: [{ id: "record.split", value: 60 }],
+    });
+    const back = ui.decodeStash(stashed);
+    check("the flag comes back", back.editing === true);
+    check(
+      "an unsaved rename comes back",
+      back.text[0]?.id === "record.info.title" &&
+        back.text[0]?.value === "Dossier"
+    );
+    check("an unsaved drag comes back", back.layout[0]?.value === 60);
+    check(
+      "the key is per campaign, so a draft cannot cross into another",
+      ui.stashKey("aaa") !== ui.stashKey("bbb")
+    );
+
+    // Anything unreadable is the empty stash, never a thrown error. A
+    // stale or hand-edited value in a browser store must not be able to
+    // stop the app from rendering.
+    check("nothing stored is nothing restored", !ui.decodeStash(null).editing);
+    check("junk is not a stash", !ui.decodeStash("{{{").editing);
+    check("a non-string is not a stash", !ui.decodeStash(42).editing);
+    check(
+      "an array where an object belongs is not a stash",
+      ui.decodeStash("[1,2,3]").text.length === 0
+    );
+    check(
+      "a stash of the wrong shape drops what it cannot read",
+      ui.decodeStash('{"editing":"yes","text":[{"id":5}],"layout":null}')
+        .text.length === 0
+    );
+    check(
+      "a stashed id that is no longer registered is dropped",
+      ui.decodeStash('{"text":[{"id":"gone","value":"x"}]}').text.length === 0
+    );
+    check(
+      "a stashed number outside its range comes back clamped",
+      ui.decodeStash('{"layout":[{"id":"record.split","value":999}]}')
+        .layout[0]?.value === 75
+    );
+
+    // The settings tabs render their labels from a loop, so their ids
+    // are built rather than written out — which is the one shape the
+    // integrity guard cannot read. It checks the FAMILY is rendered;
+    // this checks the family is exactly right, in both directions. A
+    // tab added without a registry entry would show its own id as its
+    // label; an entry left behind by a removed tab is a rename of
+    // nothing.
+    // `st` is the settingsTabs module, already compiled and imported
+    // further up — compiling it twice would give two module instances
+    // and quietly compare a thing against itself.
+    const tabIds = st.SETTINGS_TABS.map((t) => `settings.tab.${t.id}`);
+    const registeredTabIds = ui.TEXT_PIECES.map((p) => p.id).filter((id) =>
+      id.startsWith("settings.tab.")
+    );
+    check(
+      "every settings tab has a registry entry",
+      tabIds.every((id) => ui.TEXT_BY_ID.has(id))
+    );
+    check(
+      "no registry entry is left over from a removed tab",
+      registeredTabIds.every((id) => tabIds.includes(id))
+    );
+    check(
+      "each registered tab label matches the tab it names",
+      st.SETTINGS_TABS.every(
+        (t) => ui.TEXT_BY_ID.get(`settings.tab.${t.id}`)?.value === t.label
+      )
+    );
+
     // ---- what a note is allowed to contain -------------------------
     // A player writing a note is handing markup to the DM's browser.
     // Every case below is something that renders as a script, a
