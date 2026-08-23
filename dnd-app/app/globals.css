@@ -6007,19 +6007,20 @@ button.cal-day:hover {
   border-bottom-color: var(--border);
 }
 
-/* Everything below the title band lives inside the same padding the
-   NPC Info body uses, so the two columns line up across the gap. */
-.note-thread > :not(.note-thread-head) {
-  margin-left: 0.9rem;
-  margin-right: 0.9rem;
+/* One padded box below the title band, so the blurb, the notes and the
+   composer share a left edge and line up with the NPC Info column
+   across the gap. Three sibling margin rules did not: the blurb sat
+   fourteen pixels left of the list under it. */
+.note-thread-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0.6rem 0.9rem 0.8rem;
 }
 
-.note-thread > .settings-note {
-  margin-top: 0.6rem;
-}
-
-.note-thread > .note-composer {
-  margin-bottom: 0.8rem;
+.note-thread-body > .settings-note {
+  margin: 0 0 0.4rem;
 }
 
 /* The title reads as a title in both panes. What marks this one as the
@@ -6397,16 +6398,47 @@ button.cal-day:hover {
   outline-style: solid;
 }
 
-.ui-edit-field {
-  display: inline-block;
-  min-width: 6ch;
-  max-width: 100%;
-  padding: 0 0.2em;
+/* The rename field, at the end of <body> rather than inside whatever
+   the label sits in. A button inside a button makes the parser close
+   the outer one; an input in there is invalid too. Portalled out, it
+   is inside nothing and works the same everywhere. */
+.ui-rename {
+  position: fixed;
+  z-index: 70;
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.6rem 0.7rem;
+  background: var(--bg-raised);
   border: 1px solid var(--accent);
-  border-radius: 3px;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.ui-rename .settings-note {
+  margin: 0;
+}
+
+.ui-rename-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.ui-edit-field {
+  width: 100%;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
   background: var(--bg-inset);
   color: var(--text);
   font: inherit;
+  font-size: 0.9rem;
+}
+
+.ui-edit-field:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
 }
 
 /* The grab bars between two panes. Absolutely positioned INSIDE the
@@ -6506,4 +6538,32 @@ button.cal-day:hover {
   line-height: 1.5;
   resize: vertical;
   white-space: pre;
+}
+
+
+/* ---------- arranging the record in place ----------
+   The record's own grid, wearing the designer's handles. Only ever on
+   while edit mode is, so a field cannot be nudged out of position by
+   somebody reading a record. */
+
+.record-fields.tpl-grid .detail-field.tpl-field {
+  position: relative;
+  cursor: grab;
+}
+
+.record-fields.tpl-grid .detail-field.tpl-field:active {
+  cursor: grabbing;
+}
+
+/* The controls are shown at their real size but must not take the
+   pointer — a drag that started in a text box would put a caret in it
+   instead of moving the field. */
+.record-fields.tpl-grid .detail-field.tpl-field .detail-input,
+.record-fields.tpl-grid .detail-field.tpl-field .detail-check {
+  pointer-events: none;
+}
+
+.record-tabs.tpl-tabstrip {
+  flex-wrap: wrap;
+  gap: 0.4rem;
 }

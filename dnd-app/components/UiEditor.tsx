@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -72,6 +73,28 @@ interface UiState {
   onScreen: string[];
   /** Called by each piece as it mounts and unmounts. */
   present: (id: string, mounted: boolean) => void;
+  /**
+   * How a screen contributes its OWN editable structure.
+   *
+   * Renames and split ratios live in the registry, but a screen with a
+   * real layout model — the NPC record has tabs, fields, spans and row
+   * heights, all already stored per campaign — should not have that
+   * model copied into the registry. It registers a saver instead, and
+   * the one Save button and the one Export pick it up. Returns the
+   * function that unregisters it.
+   */
+  registerSaver: (id: string, saver: Saver) => () => void;
+}
+
+/** A screen's own draft, plugged into the edit bar. */
+export interface Saver {
+  dirty: boolean;
+  /** How many changes to count in the bar. */
+  changes: number;
+  save: () => Promise<void>;
+  discard: () => void;
+  /** The change, for the export. Empty string when there is none. */
+  describe: () => string;
 }
 
 const UiContext = createContext<UiState | null>(null);
@@ -87,6 +110,7 @@ const SHIPPED: UiState = {
   dirty: false,
   onScreen: [],
   present: () => {},
+  registerSaver: () => () => {},
 };
 
 export function UiProvider({
@@ -116,6 +140,12 @@ export function UiProvider({
    * a feature that does not work.
    */
   const [onScreen, setOnScreen] = useState<string[]>([]);
+  const [savers, setSavers] = useState<{ id: string; saver: Saver }[]>([]);
+
+  const registerSaver = useCallback((id: string, saver: Saver) => {
+    setSavers((cur) => [...cur.filter((s) => s.id !== id), { id, saver }]);
+    return () => setSavers((cur) => cur.filter((s) => s.id !== id));
+  }, []);
   const present = useCallback((id: string, mounted: boolean) => {
     setOnScreen((cur) => {
       if (mounted) return cur.includes(id) ? cur : [...cur, id];
@@ -226,6 +256,7 @@ export function UiProvider({
     dirty,
     onScreen,
     present,
+    registerSaver,
   };
 
   return (
@@ -235,18 +266,24 @@ export function UiProvider({
         <EditBar
           text={text}
           layout={layout}
+          savers={savers.map((s) => s.saver)}
           onScreen={onScreen.length}
-          dirty={dirty}
+          dirty={dirty || savers.some((s) => s.saver.dirty)}
           onDiscard={() => {
             setDraftText(null);
             setDraftLayout(null);
+            for (const s of savers) s.saver.discard();
           }}
           onSave={async () => {
+            // The registry first, then each screen's own draft. One
+            // button, because "Save" meaning "save some of what you
+            // changed" is how half a layout gets written.
             await save({
               campaignId,
               text: changedText(text),
               layout: changedLayout(layout),
             });
+            for (const s of savers) await s.saver.save();
             setDraftText(null);
             setDraftLayout(null);
           }}
@@ -284,6 +321,7 @@ export function UiText({ id }: { id: string }) {
   const ui = useUi();
   const value = ui.text.get(id) ?? TEXT_BY_ID.get(id)?.value ?? id;
   const [open, setOpen] = useState(false);
+  const [at, setAt] = useState<DOMRect | null>(null);
 
   // Check in while on screen, so the bar can say how much of this
   // screen is editable — and say plainly when the answer is none.
@@ -294,35 +332,58 @@ export function UiText({ id }: { id: string }) {
   }, [id, present]);
 
   if (!ui.editing) return <>{value}</>;
-  if (open) {
-    return (
-      <RenameField
-        id={id}
-        value={value}
-        onDone={(next) => {
-          ui.rename(id, next);
-          setOpen(false);
-        }}
-        onCancel={() => setOpen(false)}
-      />
-    );
-  }
 
   const piece = TEXT_BY_ID.get(id);
+
+  /**
+   * A SPAN, never a button, and the editor opens in a portal.
+   *
+   * Almost every registered label sits inside something clickable — a
+   * tab, a toolbar button, a checkbox label. A <button> inside a
+   * <button> makes the HTML parser close the outer one, which React
+   * then reports as a hydration error and the page renders wrong. An
+   * <input> in there is invalid for the same reason. role="button" on a
+   * span is interactive to a screen reader and inert to the parser,
+   * and the rename field renders at the end of <body> where it is
+   * inside nothing at all.
+   */
   return (
-    <button
-      type="button"
-      className="ui-edit-hit"
-      title={`Rename — ${piece?.note ?? piece?.screen ?? id}`}
-      onClick={(e) => {
-        // The label usually sits inside something clickable of its own.
-        e.preventDefault();
-        e.stopPropagation();
-        setOpen(true);
-      }}
-    >
-      {value}
-    </button>
+    <>
+      <span
+        className="ui-edit-hit"
+        role="button"
+        tabIndex={0}
+        title={`Rename — ${piece?.note ?? piece?.screen ?? id}`}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setAt(e.currentTarget.getBoundingClientRect());
+          setOpen(true);
+        }}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          e.stopPropagation();
+          setAt(e.currentTarget.getBoundingClientRect());
+          setOpen(true);
+        }}
+      >
+        {value}
+      </span>
+
+      {open && at && (
+        <RenamePopover
+          id={id}
+          value={value}
+          at={at}
+          onDone={(next) => {
+            ui.rename(id, next);
+            setOpen(false);
+          }}
+          onCancel={() => setOpen(false)}
+        />
+      )}
+    </>
   );
 }
 
@@ -335,43 +396,74 @@ export function UiText({ id }: { id: string }) {
  * hitting by hand, and it would be a poor showing to ship it inside
  * the editor itself. The integrity guard fails on it now.
  */
-function RenameField({
+function RenamePopover({
   id,
   value,
+  at,
   onDone,
   onCancel,
 }: {
   id: string;
   value: string;
+  /** Where the label is, so the field opens over it. */
+  at: DOMRect;
   onDone: (next: string) => void;
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState(value);
   const piece = TEXT_BY_ID.get(id);
 
-  return (
-    <input
-      className="ui-edit-field"
-      value={draft}
-      autoFocus
-      size={Math.max(8, draft.length + 1)}
-      maxLength={UI_LIMITS.textLength}
-      aria-label={`Rename ${piece?.value ?? id}`}
+  // Kept on screen: a label near the right edge would otherwise open a
+  // field that runs off it.
+  const width = Math.min(360, Math.max(200, value.length * 9 + 40));
+  const left = Math.max(
+    8,
+    Math.min(at.left, window.innerWidth - width - 8)
+  );
+  const top = Math.min(at.bottom + 6, window.innerHeight - 90);
+
+  return createPortal(
+    <div
+      className="ui-rename"
+      style={{ left, top, width }}
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => onDone(draft)}
-      onKeyDown={(e) => {
-        e.stopPropagation();
-        if (e.key === "Enter") {
-          e.preventDefault();
-          onDone(draft);
-        } else if (e.key === "Escape") {
-          e.preventDefault();
-          onCancel();
-        }
-      }}
-    />
+    >
+      <label className="settings-note">
+        {piece?.note ?? `Rename “${piece?.value ?? id}”`}
+      </label>
+      <input
+        className="ui-edit-field"
+        value={draft}
+        autoFocus
+        maxLength={UI_LIMITS.textLength}
+        aria-label={`Rename ${piece?.value ?? id}`}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onDone(draft);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            onCancel();
+          }
+        }}
+      />
+      <div className="ui-rename-actions">
+        <button type="button" className="text-button" onClick={onCancel}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="npc-btn primary"
+          onClick={() => onDone(draft)}
+        >
+          Rename
+        </button>
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -441,6 +533,7 @@ export function UiSplitHandle({
 function EditBar({
   text,
   layout,
+  savers,
   onScreen,
   dirty,
   onDiscard,
@@ -449,6 +542,8 @@ function EditBar({
 }: {
   text: Map<string, string>;
   layout: Map<string, number>;
+  /** Each screen's own draft, contributing to the count and the export. */
+  savers: Saver[];
   /** How many registered pieces this screen is showing. */
   onScreen: number;
   dirty: boolean;
@@ -460,7 +555,10 @@ function EditBar({
   const [error, setError] = useState<string | null>(null);
   const [showExport, setShowExport] = useState(false);
 
-  const changes = changedText(text).length + changedLayout(layout).length;
+  const changes =
+    changedText(text).length +
+    changedLayout(layout).length +
+    savers.reduce((n, s) => n + s.changes, 0);
 
   return (
     <>
@@ -528,6 +626,7 @@ function EditBar({
         <ExportDialog
           text={text}
           layout={layout}
+          savers={savers}
           onClose={() => setShowExport(false)}
         />
       )}
@@ -538,16 +637,19 @@ function EditBar({
 function ExportDialog({
   text,
   layout,
+  savers,
   onClose,
 }: {
   text: Map<string, string>;
   layout: Map<string, number>;
+  savers: Saver[];
   onClose: () => void;
 }) {
   // Stamped once, when the dialog opens: a clock read on every render
   // would make the text change under the cursor while it is selected.
   const [stamp] = useState(() => new Date().toISOString().slice(0, 10));
-  const code = exportOverrides(text, layout, stamp);
+  const own = savers.map((s) => s.describe()).filter(Boolean);
+  const code = [exportOverrides(text, layout, stamp), ...own].join("\n\n");
   const [copied, setCopied] = useState(false);
 
   return (

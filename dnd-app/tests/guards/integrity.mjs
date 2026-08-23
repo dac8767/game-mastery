@@ -1797,6 +1797,42 @@ export const integrity = {
       }
     }
 
+    // ---- edit mode never nests interactive content ------------------
+    // <button> inside <button> makes the HTML PARSER close the outer
+    // one, so React hydrates a different tree than it rendered and the
+    // page comes back wrong. UiText goes inside tabs, toolbar buttons
+    // and checkbox labels, so it must never render a button or an input
+    // of its own — the rename field opens in a portal at the end of
+    // <body> instead, where it is inside nothing.
+    {
+      const src = stripComments(read("components", "UiEditor.tsx"));
+      const uiText = src.slice(
+        src.indexOf("export function UiText"),
+        src.indexOf("function RenamePopover")
+      );
+      if (uiText.length < 100) {
+        throw new Error("could not find UiText in UiEditor.tsx");
+      }
+      for (const tag of ["<button", "<input", "<select", "<textarea", "<a "]) {
+        if (uiText.includes(tag)) {
+          problems.push(
+            `UiText renders ${tag}> — it is rendered inside buttons and ` +
+              "labels, and interactive content nested there makes the " +
+              "parser restructure the tree and React fail to hydrate"
+          );
+        }
+      }
+      // The CALL, inside RenamePopover — not the import, which an
+      // unused import satisfies while the field renders inline.
+      const popover = src.slice(src.indexOf("function RenamePopover"));
+      if (!/return createPortal\(/.test(popover)) {
+        problems.push(
+          "the rename field is no longer portalled to <body> — inside a " +
+            "<button> it is invalid content and will not take a click"
+        );
+      }
+    }
+
     // ---- no component declared inside another component -------------
     // The symptom is unforgettable and the cause is invisible: you can
     // type one letter into a field, and then it loses focus and you

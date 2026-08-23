@@ -1,27 +1,17 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { COLUMN_BY_KEY } from "@/components/npcColumns";
 import { BODY_KEYS, resolveTemplate } from "@/components/NpcDetail";
+import { NpcTemplate, templateKeys } from "@/components/npcTemplate";
 import {
-  MAX_ROWS,
-  MAX_SPAN,
-  MIN_ROWS,
-  MIN_SPAN,
-  NpcTemplate,
-  TEMPLATE_LIMITS,
-  addTab,
-  moveField,
-  removeTab,
-  renameTab,
-  setRows,
-  setSpan,
-  shiftTab,
-  templateKeys,
-} from "@/components/npcTemplate";
+  ResizeHandles,
+  TabStripEditor,
+  useTemplateEditing,
+} from "@/components/RecordEditing";
 
 /**
  * The NPC record layout, edited as the record.
@@ -44,9 +34,6 @@ import {
  * and a dozen re-renders under the pointer.
  */
 
-/** The record grid is four columns; a span is meaningless without it. */
-const COLUMNS = 4;
-
 export function NpcTemplateDesigner({
   campaignId,
 }: {
@@ -60,32 +47,6 @@ export function NpcTemplateDesigner({
   const [tabId, setTabId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [newTab, setNewTab] = useState("");
-
-  /** The field being dragged, and where the pointer last suggested. */
-  const dragging = useRef<string | null>(null);
-  const [dropAt, setDropAt] = useState<{ tab: string; index: number } | null>(
-    null
-  );
-
-  /** Live resize: which field, and what span the pointer is asking for. */
-  const resizing = useRef<{
-    key: string;
-    axis: "x" | "y" | "both";
-    startX: number;
-    startY: number;
-    startSpan: number;
-    startRows: number;
-    columnWidth: number;
-    rowHeight: number;
-  } | null>(null);
-  const [resizeTo, setResizeTo] = useState<{
-    key: string;
-    span: number;
-    rows: number;
-  } | null>(null);
-
-  const gridRef = useRef<HTMLDivElement>(null);
 
   if (stored === undefined) {
     return (
@@ -97,6 +58,10 @@ export function NpcTemplateDesigner({
 
   const template = draft ?? resolveTemplate(stored ?? null);
   const dirty = draft !== null;
+  const editing = useTemplateEditing(template, (next) => {
+    setDraft(next);
+    setError(null);
+  });
   const openTab =
     template.tabs.find((t) => t.id === tabId) ?? template.tabs[0] ?? null;
 
@@ -119,97 +84,6 @@ export function NpcTemplateDesigner({
     }
   };
 
-  // ---- resizing ----------------------------------------------------
-
-  const beginResize = (
-    e: React.PointerEvent,
-    key: string,
-    axis: "x" | "y" | "both",
-    span: number,
-    rows: number
-  ) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const grid = gridRef.current;
-    if (!grid) return;
-
-    // Measured rather than assumed, on both axes: the grid is fluid, so
-    // a step read off a guessed column width jumps by two where it
-    // should jump by one. The row height is a fixed track — that is what
-    // makes "two rows" mean the same height everywhere and lets a
-    // two-row field line up with two one-row fields beside it.
-    const style = getComputedStyle(grid);
-    const colGap = parseFloat(style.columnGap || "0") || 0;
-    const rowGap = parseFloat(style.rowGap || "0") || 0;
-    const columnWidth = (grid.clientWidth - colGap * (COLUMNS - 1)) / COLUMNS;
-    const rowHeight =
-      (parseFloat(style.gridAutoRows || "0") || 0) + rowGap;
-
-    resizing.current = {
-      key,
-      axis,
-      startX: e.clientX,
-      startY: e.clientY,
-      startSpan: span,
-      startRows: rows,
-      columnWidth,
-      rowHeight,
-    };
-    setResizeTo({ key, span, rows });
-    (e.target as Element).setPointerCapture?.(e.pointerId);
-  };
-
-  const moveResize = (e: React.PointerEvent) => {
-    const r = resizing.current;
-    if (!r) return;
-
-    const span =
-      r.axis === "y" || r.columnWidth <= 0
-        ? r.startSpan
-        : Math.min(
-            MAX_SPAN,
-            Math.max(
-              MIN_SPAN,
-              r.startSpan + Math.round((e.clientX - r.startX) / r.columnWidth)
-            )
-          );
-    const rows =
-      r.axis === "x" || r.rowHeight <= 0
-        ? r.startRows
-        : Math.min(
-            MAX_ROWS,
-            Math.max(
-              MIN_ROWS,
-              r.startRows + Math.round((e.clientY - r.startY) / r.rowHeight)
-            )
-          );
-
-    setResizeTo({ key: r.key, span, rows });
-  };
-
-  const endResize = () => {
-    const r = resizing.current;
-    const asked = resizeTo;
-    resizing.current = null;
-    setResizeTo(null);
-    if (!r || !asked) return;
-
-    let next = template;
-    if (asked.span !== r.startSpan) next = setSpan(next, r.key, asked.span);
-    if (asked.rows !== r.startRows) next = setRows(next, r.key, asked.rows);
-    if (next !== template) edit(next);
-  };
-
-  // ---- dragging ----------------------------------------------------
-
-  const dropField = (toTabId: string, index: number) => {
-    const key = dragging.current;
-    dragging.current = null;
-    setDropAt(null);
-    if (!key) return;
-    edit(moveField(template, key, toTabId, index));
-  };
-
   const placed = templateKeys(template);
 
   return (
@@ -227,7 +101,7 @@ export function NpcTemplateDesigner({
 
       {error && <p className="form-error">{error}</p>}
 
-      <div className="tpl-wys" onPointerMove={moveResize} onPointerUp={endResize}>
+      <div className="tpl-wys" {...editing.gridProps}>
         {/* The record's own top bar, inert. Drawn because leaving it out
             would put the tab strip at the top of the preview and an inch
             lower in the record. */}
@@ -274,97 +148,16 @@ export function NpcTemplateDesigner({
           </div>
 
         <div className="record-tabbar">
-          <div className="record-tabs" role="tablist">
-            {template.tabs.map((tab, ti) => (
-              <div
-                key={tab.id}
-                className={`tpl-tabchip${
-                  tab.id === openTab?.id ? " on" : ""
-                }${dropAt?.tab === tab.id && dropAt.index < 0 ? " over" : ""}`}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDropAt({ tab: tab.id, index: -1 });
-                }}
-                onDragLeave={() => setDropAt(null)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  dropField(tab.id, Number.MAX_SAFE_INTEGER);
-                }}
-              >
-                <input
-                  className="tpl-tabchip-name"
-                  value={tab.title}
-                  maxLength={TEMPLATE_LIMITS.titleLength}
-                  aria-label={`Name of tab ${ti + 1}`}
-                  size={Math.max(4, tab.title.length)}
-                  onFocus={() => setTabId(tab.id)}
-                  onChange={(e) =>
-                    edit(renameTab(template, tab.id, e.target.value))
-                  }
-                />
-                <button
-                  type="button"
-                  className="tpl-tabchip-btn"
-                  title="Move this tab left"
-                  disabled={ti === 0}
-                  onClick={() => edit(shiftTab(template, tab.id, -1))}
-                >
-                  ‹
-                </button>
-                <button
-                  type="button"
-                  className="tpl-tabchip-btn"
-                  title="Move this tab right"
-                  disabled={ti === template.tabs.length - 1}
-                  onClick={() => edit(shiftTab(template, tab.id, 1))}
-                >
-                  ›
-                </button>
-                <button
-                  type="button"
-                  className="tpl-tabchip-btn"
-                  title="Remove this tab — its fields move to the one beside it"
-                  disabled={template.tabs.length <= 1}
-                  onClick={() => edit(removeTab(template, tab.id))}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-
-            <span className="tpl-newtab">
-              <input
-                className="tpl-tabchip-name"
-                value={newTab}
-                placeholder="New tab"
-                size={8}
-                maxLength={TEMPLATE_LIMITS.titleLength}
-                aria-label="New tab name"
-                onChange={(e) => setNewTab(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key !== "Enter" || !newTab.trim()) return;
-                  e.preventDefault();
-                  edit(addTab(template, newTab));
-                  setNewTab("");
-                }}
-              />
-              <button
-                type="button"
-                className="tpl-tabchip-btn"
-                title="Add this tab"
-                disabled={
-                  !newTab.trim() ||
-                  template.tabs.length >= TEMPLATE_LIMITS.tabs
-                }
-                onClick={() => {
-                  edit(addTab(template, newTab));
-                  setNewTab("");
-                }}
-              >
-                +
-              </button>
-            </span>
-          </div>
+          <TabStripEditor
+            template={template}
+            editing={editing}
+            openTabId={openTab?.id ?? null}
+            onChange={(next) => {
+              setDraft(next);
+              setError(null);
+            }}
+            onOpen={setTabId}
+          />
 
           <span className="settings-note">
             {placed.length} of {BODY_KEYS.length} fields placed
@@ -374,21 +167,20 @@ export function NpcTemplateDesigner({
         {/* The grid, at the record's own proportions. */}
         <div
           className="record-fields tpl-grid"
-          ref={gridRef}
+          ref={editing.gridRef}
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => {
             e.preventDefault();
-            if (openTab) dropField(openTab.id, Number.MAX_SAFE_INTEGER);
+            if (openTab) editing.dropField(openTab.id, Number.MAX_SAFE_INTEGER);
           }}
         >
           {openTab?.fields.map((f, fi) => {
             const col = COLUMN_BY_KEY.get(f.key);
             if (!col) return null;
-            const live = resizeTo?.key === f.key ? resizeTo : null;
-            const span = live ? live.span : f.span;
-            const rows = live ? live.rows : f.rows;
+            const span = editing.liveSpan(f.key, f.span);
+            const rows = editing.liveRows(f.key, f.rows);
             const isDropTarget =
-              dropAt?.tab === openTab.id && dropAt.index === fi;
+              editing.dropAt?.tab === openTab.id && editing.dropAt.index === fi;
 
             return (
               <div
@@ -398,25 +190,15 @@ export function NpcTemplateDesigner({
                 }${col.dmOnly ? " dm-field" : ""}${
                   isDropTarget ? " over" : ""
                 }`}
-                draggable
-                onDragStart={(e) => {
-                  dragging.current = f.key;
-                  e.dataTransfer.effectAllowed = "move";
-                  // Firefox will not start a drag without payload.
-                  e.dataTransfer.setData("text/plain", f.key);
-                }}
-                onDragEnd={() => {
-                  dragging.current = null;
-                  setDropAt(null);
-                }}
+                {...editing.dragProps(f.key)}
                 onDragOver={(e) => {
                   e.preventDefault();
-                  setDropAt({ tab: openTab.id, index: fi });
+                  editing.setDropAt({ tab: openTab.id, index: fi });
                 }}
                 onDrop={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  dropField(openTab.id, fi);
+                  editing.dropField(openTab.id, fi);
                 }}
               >
                 <div className="detail-label">
@@ -447,29 +229,11 @@ export function NpcTemplateDesigner({
                   />
                 )}
 
-                {/* Three handles, because width and height are
-                    different decisions: the right edge widens, the
-                    bottom edge makes it taller, the corner does both. */}
-                <span
-                  className="tpl-resize tpl-resize-x"
-                  title="Drag to set how wide this field is"
-                  onPointerDown={(e) =>
-                    beginResize(e, f.key, "x", f.span, f.rows)
-                  }
-                />
-                <span
-                  className="tpl-resize tpl-resize-y"
-                  title="Drag to set how many rows this field takes"
-                  onPointerDown={(e) =>
-                    beginResize(e, f.key, "y", f.span, f.rows)
-                  }
-                />
-                <span
-                  className="tpl-resize tpl-resize-xy"
-                  title="Drag to set width and height"
-                  onPointerDown={(e) =>
-                    beginResize(e, f.key, "both", f.span, f.rows)
-                  }
+                <ResizeHandles
+                  editing={editing}
+                  fieldKey={f.key}
+                  span={f.span}
+                  rows={f.rows}
                 />
                 <span className="tpl-span">
                   {span}×{rows}

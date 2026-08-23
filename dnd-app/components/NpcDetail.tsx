@@ -14,7 +14,13 @@ import {
   arrange,
 } from "@/components/npcSections";
 import { NoteThread } from "@/components/NoteThread";
-import { UiSplitHandle, UiText, useUiLayout } from "@/components/UiEditor";
+import {
+  Saver,
+  UiSplitHandle,
+  UiText,
+  useUi,
+  useUiLayout,
+} from "@/components/UiEditor";
 import {
   LooseTemplate,
   NpcTemplate,
@@ -22,6 +28,11 @@ import {
   reconcileTemplate,
   templateFor,
 } from "@/components/npcTemplate";
+import {
+  ResizeHandles,
+  TabStripEditor,
+  useTemplateEditing,
+} from "@/components/RecordEditing";
 
 /**
  * The expanded record: every field, editable in place.
@@ -120,6 +131,7 @@ export function NpcDetail({
   isDm: boolean;
   onClose: () => void;
 }) {
+  const ui = useUi();
   const updateNpc = useMutation(api.npcs.updateNpc);
   const setPlayerNotes = useMutation(api.npcs.setPlayerNotes);
   const stored = useQuery(api.npcs.getTemplate, { campaignId });
@@ -134,6 +146,16 @@ export function NpcDetail({
    */
   const [showEmpty, setShowEmpty] = useState(isDm);
   const [tabId, setTabId] = useState<string | null>(null);
+
+  // ---- arranging the record, in the record ------------------------
+  // The same drag, the same resize and the same tab strip as the
+  // designer in Settings, on the real thing. Drafted here and saved by
+  // the edit bar's one Save, so arranging the layout and renaming a
+  // heading are one act rather than two screens and two buttons.
+  const saveTemplate = useMutation(api.npcs.saveTemplate);
+  const [draftTabs, setDraftTabs] = useState<NpcTemplate | null>(null);
+  const arranging = ui.editing && isDm;
+
 
   // Escape closes it. Ignored while a field has focus, where Escape
   // already means "put that value back" — losing an edit and the whole
@@ -176,10 +198,14 @@ export function NpcDetail({
   // the campaign's template says. The header shows its own fields, so
   // they are held back from the tabs rather than repeated in one.
   const allowed = COLUMNS.filter((c) => isDm || !c.dmOnly).map((c) => c.key);
+
+  /** The whole template, including anything being arranged right now. */
+  const template = draftTabs ?? resolveTemplate(stored ?? null);
+
   const tabs = useMemo(
     () =>
       templateFor(
-        resolveTemplate(stored ?? null),
+        template,
         allowed.filter(
           (k) => !HEADER_KEYS.includes(k) && !PINNED_KEYS.includes(k)
         )
@@ -187,10 +213,76 @@ export function NpcDetail({
     // `allowed` is derived from a module constant and isDm, so its
     // identity churns every render while its contents do not.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stored, isDm]
+    [template, isDm]
   );
 
-  const openTab = tabs.find((t) => t.id === tabId) ?? tabs[0] ?? null;
+  /**
+   * While arranging, the record shows the WHOLE template rather than
+   * the filtered view. You cannot drag a field onto a tab you cannot
+   * see, and a DM arranging a layout is deciding where a field goes,
+   * not reading the record — so the DM-only fields and the empty ones
+   * are all present and all draggable.
+   */
+  const shownTabs = arranging ? template.tabs : tabs;
+  const openTab =
+    shownTabs.find((t) => t.id === tabId) ?? shownTabs[0] ?? null;
+
+  const editing = useTemplateEditing(template, (next) => setDraftTabs(next));
+
+  /**
+   * The layout draft, plugged into the edit bar.
+   *
+   * Registered rather than given its own Save button: "Save" that meant
+   * "save the renames but not the layout" is how half an arrangement
+   * gets written and the other half thrown away on the next
+   * navigation.
+   */
+  const { registerSaver } = ui;
+  const templateChanges = draftTabs ? countTemplateChanges(
+    resolveTemplate(stored ?? null),
+    draftTabs
+  ) : 0;
+  const saver: Saver = {
+    dirty: draftTabs !== null,
+    changes: templateChanges,
+    save: async () => {
+      if (!draftTabs) return;
+      await saveTemplate({ campaignId, tabs: draftTabs.tabs });
+      setDraftTabs(null);
+    },
+    discard: () => setDraftTabs(null),
+    describe: () =>
+      draftTabs
+        ? [
+            `/* NPC record layout — ${templateChanges} change${
+              templateChanges === 1 ? "" : "s"
+            }.`,
+            "   Already saved per campaign; this is here so the same",
+            "   arrangement can ship as the default. */",
+            "",
+            "NPC_RECORD_TABS:",
+            JSON.stringify(draftTabs.tabs, null, 2),
+          ].join("\n")
+        : "",
+  };
+  const saverRef = useRef(saver);
+  saverRef.current = saver;
+  useEffect(
+    () =>
+      registerSaver("npc.template", {
+        get dirty() {
+          return saverRef.current.dirty;
+        },
+        get changes() {
+          return saverRef.current.changes;
+        },
+        save: () => saverRef.current.save(),
+        discard: () => saverRef.current.discard(),
+        describe: () => saverRef.current.describe(),
+      }),
+    // Re-registered when the counts change so the bar's total follows.
+    [registerSaver, templateChanges, draftTabs]
+  );
 
   // The header's own fields, minus the portrait, which has its own
   // control. An empty one is dropped only when it is also read-only —
@@ -320,20 +412,30 @@ export function NpcDetail({
         {error && <p className="form-error">{error}</p>}
 
           <div className="record-tabbar">
-        <div className="record-tabs" role="tablist">
-          {tabs.map((t) => (
-            <button
-              type="button"
-              key={t.id}
-              role="tab"
-              aria-selected={t.id === openTab?.id}
-              className={`record-tab${t.id === openTab?.id ? " on" : ""}`}
-              onClick={() => setTabId(t.id)}
-            >
-              {t.title}
-            </button>
-          ))}
-        </div>
+        {arranging ? (
+          <TabStripEditor
+            template={template}
+            editing={editing}
+            openTabId={openTab?.id ?? null}
+            onChange={setDraftTabs}
+            onOpen={setTabId}
+          />
+        ) : (
+          <div className="record-tabs" role="tablist">
+            {tabs.map((t) => (
+              <button
+                type="button"
+                key={t.id}
+                role="tab"
+                aria-selected={t.id === openTab?.id}
+                className={`record-tab${t.id === openTab?.id ? " on" : ""}`}
+                onClick={() => setTabId(t.id)}
+              >
+                {t.title}
+              </button>
+            ))}
+          </div>
+        )}
 
         <label className="record-empty-toggle">
           <input
@@ -349,24 +451,73 @@ export function NpcDetail({
 
       <div className="record-body">
         {openTab && (
-          <div className="record-fields">
-            {openTab.fields.map((f) => {
+          <div
+            className={`record-fields${arranging ? " tpl-grid" : ""}`}
+            ref={editing.gridRef}
+            {...(arranging ? editing.gridProps : {})}
+            onDragOver={arranging ? (e) => e.preventDefault() : undefined}
+            onDrop={
+              arranging
+                ? (e) => {
+                    e.preventDefault();
+                    editing.dropField(openTab.id, Number.MAX_SAFE_INTEGER);
+                  }
+                : undefined
+            }
+          >
+            {openTab.fields.map((f, fi) => {
               const col = COLUMN_BY_KEY.get(f.key);
               if (!col) return null;
               const value = toInput(npc, col);
               // Empty and read-only is a label and a blank, always
               // noise. Empty and editable is where the work is, so it
-              // is the toggle that decides.
-              if (!value && (!canEdit(col) || !showEmpty)) return null;
+              // is the toggle that decides. While arranging, everything
+              // shows: you cannot move a field you cannot see.
+              if (!arranging && !value && (!canEdit(col) || !showEmpty)) {
+                return null;
+              }
               return (
                 <RecordField
                   key={col.key}
                   col={col}
                   value={value}
-                  editable={canEdit(col)}
+                  editable={canEdit(col) && !arranging}
                   dmOnly={Boolean(col.dmOnly)}
-                  span={f.span}
-                  rows={f.rows}
+                  span={editing.liveSpan(f.key, f.span)}
+                  rows={editing.liveRows(f.key, f.rows)}
+                  arranging={arranging}
+                  over={
+                    editing.dropAt?.tab === openTab.id &&
+                    editing.dropAt.index === fi
+                  }
+                  dragProps={arranging ? editing.dragProps(f.key) : undefined}
+                  onDragOver={
+                    arranging
+                      ? (e) => {
+                          e.preventDefault();
+                          editing.setDropAt({ tab: openTab.id, index: fi });
+                        }
+                      : undefined
+                  }
+                  onDrop={
+                    arranging
+                      ? (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          editing.dropField(openTab.id, fi);
+                        }
+                      : undefined
+                  }
+                  handles={
+                    arranging ? (
+                      <ResizeHandles
+                        editing={editing}
+                        fieldKey={f.key}
+                        span={f.span}
+                        rows={f.rows}
+                      />
+                    ) : null
+                  }
                   onCommit={(text) => commit(col, text)}
                 />
               );
@@ -441,6 +592,41 @@ export function NpcDetail({
   );
 }
 
+/**
+ * How much of the layout was actually changed.
+ *
+ * Counted as tabs plus fields whose position or size differs, so the
+ * edit bar can say "4 changes" rather than "the layout is dirty" —
+ * which tells you nothing about whether you moved one field or
+ * rebuilt the record.
+ */
+function countTemplateChanges(before: NpcTemplate, after: NpcTemplate): number {
+  let n = 0;
+  const beforeTabs = new Map(before.tabs.map((t) => [t.id, t]));
+  const afterTabs = new Map(after.tabs.map((t) => [t.id, t]));
+
+  for (const tab of after.tabs) {
+    const was = beforeTabs.get(tab.id);
+    if (!was || was.title !== tab.title) n++;
+  }
+  for (const tab of before.tabs) if (!afterTabs.has(tab.id)) n++;
+
+  const place = (t: NpcTemplate) => {
+    const m = new Map<string, string>();
+    for (const tab of t.tabs) {
+      tab.fields.forEach((f, i) =>
+        m.set(f.key, `${tab.id}:${i}:${f.span}:${f.rows}`)
+      );
+    }
+    return m;
+  };
+  const wasPlaced = place(before);
+  for (const [key, now] of place(after)) {
+    if (wasPlaced.get(key) !== now) n++;
+  }
+  return n;
+}
+
 /** How many of a tab's fields will actually render, for the empty note. */
 function visibleCount(
   npc: Npc,
@@ -467,6 +653,12 @@ function RecordField({
   span,
   rows,
   tall,
+  arranging,
+  over,
+  dragProps,
+  onDragOver,
+  onDrop,
+  handles,
   onCommit,
 }: {
   col: ColumnDef;
@@ -481,6 +673,18 @@ function RecordField({
   rows?: number;
   /** The notes rail: fill whatever height it is given. */
   tall?: boolean;
+  /** Edit mode: this field is being moved and resized, not filled in. */
+  arranging?: boolean;
+  /** The pointer is over this field, suggesting a drop here. */
+  over?: boolean;
+  dragProps?: {
+    draggable: true;
+    onDragStart: (e: React.DragEvent) => void;
+    onDragEnd: () => void;
+  };
+  onDragOver?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent) => void;
+  handles?: React.ReactNode;
   onCommit: (text: string) => void;
 }) {
   const [draft, setDraft] = useState(value);
@@ -495,9 +699,48 @@ function RecordField({
     !variant && span ? `sp-${span}` : "",
     !variant && rows && rows > 1 ? `rw-${rows}` : "",
     tall ? "tall" : "",
+    arranging ? "tpl-field" : "",
+    over ? "over" : "",
   ]
     .filter(Boolean)
     .join(" ");
+
+  const frame = { ...(dragProps ?? {}), onDragOver, onDrop };
+
+  /**
+   * While arranging, the field is a SHAPE rather than a control.
+   *
+   * Its own input stays on screen at its real size — that is the whole
+   * point of arranging in place — but disabled, so a drag that starts
+   * on a text box moves the field instead of putting a caret in it.
+   */
+  if (arranging) {
+    return (
+      <div className={className} {...frame}>
+        <div className="detail-label">
+          <span className="tpl-grip" aria-hidden="true">
+            ⠿
+          </span>
+          {col.label}
+          {dmOnly && <span className="dm-tag">DM only</span>}
+        </div>
+        {col.kind === "longtext" ? (
+          <textarea className="detail-input" rows={4} disabled value={value} readOnly />
+        ) : col.kind === "boolean" ? (
+          <label className="detail-check">
+            <input type="checkbox" disabled checked={value === "true"} readOnly />
+            <span>{value === "true" ? "Yes" : "No"}</span>
+          </label>
+        ) : (
+          <input className="detail-input" disabled value={value} readOnly />
+        )}
+        {handles}
+        <span className="tpl-span">
+          {span ?? 1}×{rows ?? 1}
+        </span>
+      </div>
+    );
+  }
 
   // A checkbox says its own state; a label above it saying the same
   // thing twice, and a "Yes" beside it saying it a third time, is three

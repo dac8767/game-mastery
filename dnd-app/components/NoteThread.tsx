@@ -99,6 +99,12 @@ export function NoteThread({
         </h3>
         {channel === "dm" && <span className="dm-tag">DM only</span>}
       </header>
+      {/* One padded box for everything below the title band, so the
+          blurb, the notes and the composer share a left edge. They used
+          to be three siblings with three margin rules, which put the
+          blurb fourteen pixels left of the notes under it — visible the
+          moment edit mode outlined the blurb and not the list. */}
+      <div className="note-thread-body">
       <p className="settings-note">
         <UiText id={blurbId} />
       </p>
@@ -132,6 +138,7 @@ export function NoteThread({
           onSubmit={submit}
         />
       )}
+      </div>
     </section>
   );
 }
