@@ -2056,6 +2056,28 @@ export const integrity = {
       }
     }
 
+    // ---- no state updater used for its side effect ------------------
+    // `setPos((p) => { onChange(...); return p; })` reads as "give me
+    // the current value", and it does — but React runs an updater
+    // during the RENDER phase, so whatever it calls updates state while
+    // another component is rendering. React says so at runtime and
+    // nothing says so before then.
+    //
+    // The tell is precise: an updater that hands its argument straight
+    // back is not updating anything, so it is only there for what it
+    // does on the way. Read the value from a ref or a closure and call
+    // the side effect from the event handler instead.
+    for (const [file, src] of sourceFiles("components", "app")) {
+      if (!file.endsWith(".tsx")) continue;
+      for (const hit of sideEffectUpdaters(file, src)) {
+        problems.push(
+          `${file}:${hit.line} calls ${hit.setter} with an updater that ` +
+            "returns its argument unchanged — React runs updaters during " +
+            "render, so its side effect is a state update mid-render"
+        );
+      }
+    }
+
     // ---- no hook an early return can skip ---------------------------
     // React counts hooks by POSITION. A hook below a conditional return
     // runs on some renders and not others, and the component throws
@@ -2390,5 +2412,64 @@ function conditionalHooks(fileName, source) {
   };
   ts.forEachChild(sf, top);
 
+  return found;
+}
+
+/**
+ * State updaters that exist only for their side effect.
+ *
+ * `setX((v) => { doSomething(); return v; })` returns the value it was
+ * given, so it updates nothing — it is a way to READ current state. But
+ * React runs updaters during the render phase, so `doSomething()` runs
+ * mid-render, and if it touches state anywhere the whole tree complains.
+ * Found in NotebookTool, where dragging a scrapbook box wrote its new
+ * position from inside one.
+ */
+function sideEffectUpdaters(fileName, source) {
+  const sf = ts.createSourceFile(
+    fileName,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX
+  );
+  const found = [];
+
+  const visit = (node) => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      /^set[A-Z]/.test(node.expression.text) &&
+      node.arguments.length === 1
+    ) {
+      const arg = node.arguments[0];
+      if (
+        ts.isArrowFunction(arg) &&
+        arg.parameters.length === 1 &&
+        ts.isIdentifier(arg.parameters[0].name) &&
+        arg.body &&
+        ts.isBlock(arg.body)
+      ) {
+        const param = arg.parameters[0].name.text;
+        const statements = arg.body.statements;
+        const last = statements[statements.length - 1];
+        // More than one statement, and the last hands the argument back
+        // untouched: the others are the point, and they are the bug.
+        if (
+          statements.length > 1 &&
+          last &&
+          ts.isReturnStatement(last) &&
+          last.expression &&
+          ts.isIdentifier(last.expression) &&
+          last.expression.text === param
+        ) {
+          const { line } = sf.getLineAndCharacterOfPosition(node.getStart(sf));
+          found.push({ line: line + 1, setter: node.expression.text });
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(sf, visit);
   return found;
 }

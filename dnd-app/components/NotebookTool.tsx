@@ -547,30 +547,46 @@ function BoxView({
     const startY = e.clientY;
     const from = { ...pos };
 
+    // The live position, kept in the closure. It is what `onUp` writes,
+    // and keeping it here is the whole fix for the bug below.
+    let latest = from;
+
     const onMove = (ev: PointerEvent) => {
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
-      setPos(
+      latest =
         mode === "move"
           ? { ...from, x: Math.max(0, from.x + dx), y: Math.max(0, from.y + dy) }
           : {
               ...from,
               w: Math.max(80, from.w + dx),
               h: Math.max(60, from.h + dy),
-            }
-      );
+            };
+      setPos(latest);
     };
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       dragging.current = false;
-      // One write at the end of the gesture, not one per pixel.
-      setPos((p) => {
-        onChange(
-          mode === "move" ? { x: p.x, y: p.y } : { w: p.w, h: p.h }
-        );
-        return p;
-      });
+
+      /**
+       * One write at the end of the gesture, not one per pixel — and
+       * called from HERE rather than from inside a setPos updater.
+       *
+       * `setPos((p) => { onChange(...); return p; })` reads as "give me
+       * the current position", and it does. But React runs an updater
+       * during the RENDER phase, so onChange — which sets error state up
+       * in NotebookTool — ran while React was rendering this component:
+       * "Cannot update a component while rendering a different one."
+       *
+       * An updater that returns its argument unchanged is only ever
+       * there for its side effect, which is the tell.
+       */
+      onChange(
+        mode === "move"
+          ? { x: latest.x, y: latest.y }
+          : { w: latest.w, h: latest.h }
+      );
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
