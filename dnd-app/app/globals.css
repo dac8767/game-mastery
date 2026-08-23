@@ -1216,11 +1216,85 @@ body.col-resizing {
   border-bottom: 1px solid var(--border);
 }
 
+/* Bigger, and square. A portrait is the fastest way to know whose
+   record you are on, and the old 12rem tile with a row of text buttons
+   under it read as a thumbnail with some controls rather than as the
+   picture of a person. */
 .record-portrait {
-  display: grid;
-  gap: 0.4rem;
-  width: 12rem;
+  position: relative;
+  width: 15rem;
+  aspect-ratio: 1;
   flex: none;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+}
+
+.record-portrait .portrait-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border: none;
+  border-radius: 0;
+}
+
+.record-portrait .portrait-empty {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+/* On the picture, along the bottom. Always visible rather than on
+   hover — a control you find by waving the pointer at it is one a touch
+   screen never finds at all. */
+.record-portrait .portrait-actions {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.4rem;
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.72),
+    rgba(0, 0, 0, 0)
+  );
+}
+
+.portrait-btn {
+  padding: 0.25rem 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.portrait-btn:hover {
+  background: rgba(0, 0, 0, 0.75);
+  border-color: #fff;
+}
+
+.portrait-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* The record's own error line and the imported-path note sat inside the
+   frame once it became a fixed square; they belong under it. */
+.record-portrait .form-error,
+.record-portrait .settings-note {
+  display: none;
 }
 
 .record-titles {
@@ -6723,4 +6797,132 @@ button.cal-day:hover {
 .invite-facts {
   margin: 0;
   white-space: nowrap;
+}
+
+/* ---------- the toolbar, rebuilt ----------
+   + New NPC on the left, everything that changes the list on the right,
+   in the order you reach for them: Reset, Fields, Filter, Group, Sort,
+   View, Search. */
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bar-icon {
+  flex: none;
+  color: var(--text-dim);
+}
+
+.bar-btn.open .bar-icon,
+.bar-btn:hover .bar-icon {
+  color: inherit;
+}
+
+.bar-caret {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+/* The view chip and its menu. Relative so the menu hangs off it rather
+   than off the page. */
+.view-picker {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Catches the click that closes the menu, without a listener on the
+   document that would also fire on the button that opened it. */
+.view-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.view-menu {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  z-index: 41;
+  min-width: 11rem;
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.3rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.view-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.view-option:hover {
+  background: var(--bg-inset);
+}
+
+.view-option.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.view-option.on .bar-icon {
+  color: inherit;
+}
+
+/* Tiles-per-row belongs to the tiles view, so it lives inside the menu
+   under it rather than beside it in the bar — where it was a control
+   for something you could not see. */
+.view-perrow {
+  padding: 0.35rem 0.5rem 0.15rem;
+  border-top: 1px solid var(--border);
+  margin-top: 0.15rem;
+}
+
+/* ---------- names that lead somewhere ---------- */
+
+.name-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0 0 0.35rem;
+}
+
+.name-link {
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-inset);
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.name-link:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* ---------- notes open on request ---------- */
+
+/* A toolbar and an empty box under every thread, always, took half the
+   height of both panes for nothing. */
+.note-add {
+  align-self: flex-start;
+  margin-top: 0.5rem;
 }

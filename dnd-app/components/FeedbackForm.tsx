@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  applyContinuation,
+  continueList,
+} from "@/components/listContinue";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
@@ -87,9 +91,14 @@ export function FeedbackForm({ onClose }: { onClose: () => void }) {
         <p className="settings-note">
           Your feedback has been sent. Thank you!
         </p>
-        <button type="button" className="npc-btn primary" onClick={onClose}>
-          Close
-        </button>
+        {/* The button sat directly under the message with nothing
+            between them, so the two read as one block and the Close in
+            the header looked like the only way out. */}
+        <div className="feedback-actions">
+          <button type="button" className="npc-btn primary" onClick={onClose}>
+            Close
+          </button>
+        </div>
       </FeedbackShell>
     );
   }
@@ -125,6 +134,32 @@ export function FeedbackForm({ onClose }: { onClose: () => void }) {
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder="What you did, what you expected, what happened instead."
+            onKeyDown={(e) => {
+              // "1. the toolbar is wrong" + Enter gives you "2. ".
+              // Enter on an empty item ends the list instead of adding
+              // another empty one, which is the only way out that does
+              // not mean deleting the marker by hand.
+              if (e.key !== "Enter" || e.shiftKey) return;
+              const el = e.currentTarget;
+              const caret = el.selectionStart ?? 0;
+              // A selection means Enter REPLACES something, which is a
+              // different edit from carrying a list on.
+              if (caret !== (el.selectionEnd ?? caret)) return;
+
+              const step = continueList(el.value.slice(0, caret));
+              if (!step) return;
+
+              e.preventDefault();
+              const next = applyContinuation(el.value, caret, step);
+              setMessage(next.value);
+              // After React has painted the new value: setting the text
+              // alone puts the caret at the end of the field, which on a
+              // six-line report is nowhere near where you were typing.
+              requestAnimationFrame(() => {
+                el.selectionStart = next.caret;
+                el.selectionEnd = next.caret;
+              });
+            }}
           />
         </label>
 

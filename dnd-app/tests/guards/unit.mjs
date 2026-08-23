@@ -1569,6 +1569,108 @@ export const unit = {
       )
     );
 
+    // ---- carrying a list on when you press Enter -------------------
+    const lcOut = compile("components/listContinue.ts");
+    const lc = await import(
+      pathToFileURL(join(lcOut, "listContinue.js")).href
+    );
+
+    check(
+      "a numbered item gives the next number",
+      lc.continueList("1. the toolbar is wrong")?.insert === "\n2. "
+    );
+    check(
+      "it counts on from the number that is there, not from one",
+      lc.continueList("6. and another thing")?.insert === "\n7. "
+    );
+    check(
+      "a paren marker stays a paren marker",
+      lc.continueList("3) like this")?.insert === "\n4) "
+    );
+    check(
+      "a bullet stays a bullet",
+      lc.continueList("- first")?.insert === "\n- " &&
+        lc.continueList("* first")?.insert === "\n* "
+    );
+    check(
+      "indentation carries, so a nested list stays nested",
+      lc.continueList("   2. nested")?.insert === "\n   3. "
+    );
+
+    // Only the line the caret is ON. A list two paragraphs up is not
+    // the thing Enter should continue.
+    check(
+      "a plain line is left alone",
+      lc.continueList("just a sentence") === null
+    );
+    check(
+      "an empty field is left alone",
+      lc.continueList("") === null
+    );
+    check(
+      "only the last line counts",
+      lc.continueList("1. first\n\nplain prose now") === null
+    );
+    // The one that discriminates: reading the WHOLE field instead of
+    // the caret's line matches nothing here and quietly stops
+    // continuing lists that do not start at the top of the box.
+    check(
+      "a list that starts partway down still continues",
+      lc.continueList("some intro\n2. second")?.insert === "\n3. "
+    );
+    check(
+      "a number that is not a marker is left alone",
+      lc.continueList("1985 was a good year") === null &&
+        lc.continueList("3.5 inches") === null
+    );
+
+    // Enter on an EMPTY item ends the list. It is the only way out that
+    // does not mean deleting the marker by hand.
+    const ended = lc.continueList("2. ");
+    check("an empty item ends the list", ended?.insert === "\n");
+    check("and takes its marker with it", ended?.remove === 3);
+    check(
+      "an empty bullet ends the list too",
+      lc.continueList("- ")?.remove === 2
+    );
+
+    check(
+      "markerOf reads the parts it needs",
+      lc.markerOf("  4. words").number === 4 &&
+        lc.markerOf("  4. words").indent === "  " &&
+        lc.markerOf("- words").number === null
+    );
+
+    // The whole edit, caret included: setting the text without moving
+    // the caret puts it at the end of the field, which on a six-line
+    // report is nowhere near where you were typing.
+    const applied = lc.applyContinuation(
+      "1. first",
+      8,
+      lc.continueList("1. first")
+    );
+    check(
+      "applying inserts at the caret",
+      applied.value === "1. first\n2. "
+    );
+    check("and the caret follows it", applied.caret === applied.value.length);
+
+    const mid = lc.applyContinuation(
+      "1. first\ntail",
+      8,
+      lc.continueList("1. first")
+    );
+    check(
+      "text after the caret survives",
+      mid.value === "1. first\n2. \ntail" && mid.caret === 12
+    );
+
+    const cleared = lc.applyContinuation("1. a\n2. ", 8, lc.continueList("2. "));
+    check(
+      "ending a list removes the empty marker",
+      cleared.value === "1. a\n\n"
+    );
+
     // ---- invite links: three independent ways to die ---------------
     // An invite is an UNAUTHENTICATED door into a campaign — anyone
     // holding the link is anyone at all until they sign in. So the

@@ -22,7 +22,6 @@ import {
   EXTRA_SORTS,
   FACET_KEYS,
   MATURITY_ORDER,
-  QUICK_FILTER_KEYS,
   portraitSrc,
 } from "@/components/npcColumns";
 
@@ -165,6 +164,130 @@ function BarButton({
       <UiText id={labelId} />
       {count > 0 && <span className="bar-count">{count}</span>}
     </button>
+  );
+}
+
+/**
+ * How the roster is drawn, as a chip rather than a labelled dropdown.
+ *
+ * "View  [Grid ⌄]" spent two words and a form control saying what one
+ * word and a caret say. The icon carries the meaning across the room —
+ * rows for a grid, squares for tiles — and the name is there for when
+ * it does not.
+ *
+ * Tiles-per-row lives INSIDE it rather than beside it, because it is a
+ * setting of one view. On the grid it was a control for something you
+ * could not see.
+ */
+function ViewPicker({
+  mode,
+  perRow,
+  setMode,
+  setPerRow,
+}: {
+  mode: "grid" | "tiles";
+  perRow: number;
+  setMode: (next: "grid" | "tiles") => void;
+  setPerRow: (next: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <span className="view-picker">
+      <button
+        type="button"
+        className={`bar-btn${open ? " open" : ""}`}
+        aria-expanded={open}
+        aria-label={`View: ${mode === "grid" ? "Grid" : "Tiles"}`}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {mode === "grid" ? <GridIcon /> : <TilesIcon />}
+        <UiText id={mode === "grid" ? "npc.view.grid" : "npc.view.tiles"} />
+        <span className="bar-caret" aria-hidden="true">
+          ⌄
+        </span>
+      </button>
+
+      {open && (
+        <>
+          {/* Closes on a click anywhere else, which is the gesture
+              everybody already tries. */}
+          <span className="view-scrim" onClick={() => setOpen(false)} />
+          <div className="view-menu" role="menu">
+            <button
+              type="button"
+              className={`view-option${mode === "grid" ? " on" : ""}`}
+              onClick={() => {
+                setMode("grid");
+                setOpen(false);
+              }}
+            >
+              <GridIcon />
+              <UiText id="npc.view.grid" />
+            </button>
+            <button
+              type="button"
+              className={`view-option${mode === "tiles" ? " on" : ""}`}
+              onClick={() => setMode("tiles")}
+            >
+              <TilesIcon />
+              <UiText id="npc.view.tiles" />
+            </button>
+
+            {mode === "tiles" && (
+              <label className="npc-select view-perrow">
+                <UiText id="npc.view.perRow" />
+                <select
+                  value={perRow}
+                  onChange={(e) => setPerRow(Number(e.target.value))}
+                >
+                  {[2, 3, 4, 5, 6, 7, 8].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+        </>
+      )}
+    </span>
+  );
+}
+
+function GridIcon() {
+  return (
+    <svg
+      className="bar-icon"
+      viewBox="0 0 16 16"
+      width="14"
+      height="14"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect x="1.5" y="2.5" width="13" height="3" rx="1" fill="currentColor" />
+      <rect x="1.5" y="6.75" width="13" height="3" rx="1" fill="currentColor" />
+      <rect x="1.5" y="11" width="13" height="3" rx="1" fill="currentColor" />
+    </svg>
+  );
+}
+
+function TilesIcon() {
+  return (
+    <svg
+      className="bar-icon"
+      viewBox="0 0 16 16"
+      width="14"
+      height="14"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1" fill="currentColor" />
+      <rect x="9" y="1.5" width="5.5" height="5.5" rx="1" fill="currentColor" />
+      <rect x="1.5" y="9" width="5.5" height="5.5" rx="1" fill="currentColor" />
+      <rect x="9" y="9" width="5.5" height="5.5" rx="1" fill="currentColor" />
+    </svg>
   );
 }
 
@@ -475,30 +598,6 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const canEdit = (def: ColumnDef) =>
     isDm ? Boolean(def.editable) : Boolean(def.playerEditable);
 
-  /**
-   * The quick dropdowns are a shortcut for a single condition. Which
-   * operator depends on how the field is stored: `has any of` for a real
-   * array, `is` for a scalar that merely renders as a pill.
-   */
-  function quickOperator(key: string): string {
-    return COLUMN_BY_KEY.get(key)?.kind === "chips" ? "hasAnyOf" : "is";
-  }
-
-  function quickFilterValue(key: string): string {
-    const op = quickOperator(key);
-    const c = prefs.filters.find((f) => f.field === key && f.operator === op);
-    return c?.values[0] ?? "";
-  }
-
-  function setSingleFilter(key: string, value: string) {
-    const op = quickOperator(key);
-    prefs.setFilters((cur) => {
-      const rest = cur.filter((f) => !(f.field === key && f.operator === op));
-      if (!value) return rest;
-      return [...rest, { field: key, operator: op, values: [value] }];
-    });
-  }
-
   function sortOn(def: ColumnDef) {
     if (def.sortable === false) return;
     if (def.key === prefs.sortKey) prefs.setSortAsc((v) => !v);
@@ -605,40 +704,58 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
 
   return (
     <div className="npc-screen">
+      {!selectedNpc && (
       <div className="npc-toolbar">
-        <div className="quick-filters">
-          {facetOptions
-            .filter((f) => QUICK_FILTER_KEYS.includes(f.key))
-            .map((f) => (
-              <select
-                key={f.key}
-                className={`quick-select${
-                  quickFilterValue(f.key) ? " on" : ""
-                }`}
-                value={quickFilterValue(f.key)}
-                onChange={(e) => setSingleFilter(f.key, e.target.value)}
-              >
-                <option value="">{f.label}</option>
-                {f.options.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.value} ({o.count})
-                  </option>
-                ))}
-              </select>
-            ))}
+        {/* + New NPC on the left, everything that CHANGES the list on
+            the right. The three quick-filter dropdowns that used to sit
+            here are gone: Filter does the same job with every field
+            rather than three, and three permanently open selects made
+            the row read as a form. */}
+        <div className="toolbar-left">
+          <button
+            type="button"
+            className="npc-btn primary"
+            onClick={async () => {
+              try {
+                setError(null);
+                const id = await createNpc({ campaignId });
+                // Open it straight away — a blank row is only useful
+                // once you're typing into it.
+                setSelected(id);
+              } catch (e) {
+                setError(
+                  e instanceof Error ? e.message : "Could not create an NPC."
+                );
+              }
+            }}
+          >
+            <UiText id="npc.bar.new" />
+          </button>
         </div>
 
         <div className="toolbar-right">
-          {/* A count, not the setting. "Group Species · Filter 2 · Sort
-              Last seen ↑" was three settings read out at you every time
-              you looked at the screen; the number is the part you
-              actually need at a glance, and the panel behind the button
-              is where the detail belongs. */}
+          {/* Reset, Fields, Filter, Group, Sort, View, Search — the
+              order runs from "start over" through "what is shown" to
+              "which of it", which is the order you reach for them in.
+
+              A count, not the setting. "Group Species · Filter 2 · Sort
+              Last seen" was three settings read out at you every time
+              you looked at the screen; the number is the part you need
+              at a glance, and the panel behind the button is where the
+              detail belongs. */}
+          <button
+            type="button"
+            className="bar-btn"
+            title="Put the columns, widths and order back to the defaults"
+            onClick={prefs.resetLayout}
+          >
+            <UiText id="npc.bar.reset" />
+          </button>
           <BarButton
-            labelId="npc.bar.group"
-            count={prefs.groupBy ? 1 : 0}
-            open={panel === "group"}
-            onClick={() => togglePanel("group")}
+            labelId="npc.bar.columns"
+            count={0}
+            open={panel === "columns"}
+            onClick={() => togglePanel("columns")}
           />
           <BarButton
             labelId="npc.bar.filter"
@@ -647,77 +764,31 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
             onClick={() => togglePanel("filter")}
           />
           <BarButton
+            labelId="npc.bar.group"
+            count={prefs.groupBy ? 1 : 0}
+            open={panel === "group"}
+            onClick={() => togglePanel("group")}
+          />
+          <BarButton
             labelId="npc.bar.sort"
             count={sortCount}
             open={panel === "sort"}
             onClick={() => togglePanel("sort")}
           />
-          <BarButton
-            labelId="npc.bar.columns"
-            count={0}
-            open={panel === "columns"}
-            onClick={() => togglePanel("columns")}
+
+          <ViewPicker
+            mode={prefs.viewMode}
+            perRow={prefs.tilesPerRow}
+            setMode={prefs.setViewMode}
+            setPerRow={prefs.setTilesPerRow}
           />
 
           <SearchBox value={search} onChange={setSearch} />
-
-          <label className="npc-select">
-            <span>View</span>
-            <select
-              value={prefs.viewMode}
-              onChange={(e) =>
-                prefs.setViewMode(e.target.value as "grid" | "tiles")
-              }
-            >
-              <option value="grid">Grid</option>
-              <option value="tiles">Tiles</option>
-            </select>
-          </label>
-
-          {prefs.viewMode === "tiles" && (
-            <label className="npc-select">
-              <span>Per row</span>
-              <select
-                value={prefs.tilesPerRow}
-                onChange={(e) => prefs.setTilesPerRow(Number(e.target.value))}
-              >
-                {[2, 3, 4, 5, 6, 7, 8].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-
-          {/* Anyone at the table can add one. A player meeting somebody
-              the DM has not written down should be able to write them
-              down; the NPC they make is theirs to fill in, and only the
-              DM can delete it. */}
-          {(
-            <button
-              type="button"
-              className="npc-btn primary"
-              onClick={async () => {
-                try {
-                  setError(null);
-                  const id = await createNpc({ campaignId });
-                  // Open it straight away — a blank row is only useful
-                  // once you're typing into it.
-                  setSelected(id);
-                } catch (e) {
-                  setError(
-                    e instanceof Error ? e.message : "Could not create an NPC."
-                  );
-                }
-              }}
-            >
-              <UiText id="npc.bar.new" />
-            </button>
-          )}
         </div>
       </div>
+      )}
 
+      {!selectedNpc && (
       <div className="npc-substrip">
         <span className="npc-count">
           {sorted.length === all.length
@@ -742,14 +813,8 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
             Clear filters
           </button>
         )}
-        <button
-          type="button"
-          className="text-button reset-layout"
-          onClick={prefs.resetLayout}
-        >
-          Reset layout
-        </button>
       </div>
+      )}
 
       {error && <p className="form-error">{error}</p>}
 
@@ -968,6 +1033,18 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
           npc={selectedNpc}
           campaignId={campaignId}
           isDm={isDm}
+          /* Resolved here because the roster lives here. Case- and
+             space-insensitive: these names were typed by hand into
+             Airtable, and "Kelja  Ironfist" should still find her. */
+          onOpenNamed={(name) => {
+            const want = name.replace(/\s+/g, " ").trim().toLowerCase();
+            const found = all.find(
+              (n) => n.name.replace(/\s+/g, " ").trim().toLowerCase() === want
+            );
+            if (!found) return false;
+            setSelected(found._id);
+            return true;
+          }}
           onClose={() => setSelected(null)}
         />
       ) : prefs.viewMode === "tiles" ? (

@@ -157,17 +157,6 @@ export const integrity = {
         problems.push(`FACET_KEYS names \`${key}\`, which is not a column`);
       }
     }
-    for (const key of constArrayStrings(
-      colsSrc,
-      "QUICK_FILTER_KEYS",
-      "npcColumns"
-    )) {
-      if (!columnKeySet.has(key)) {
-        problems.push(
-          `QUICK_FILTER_KEYS names \`${key}\`, which is not a column`
-        );
-      }
-    }
 
     // Extra sorts address fields directly rather than columns.
     const extraBlock = colsSrc.slice(colsSrc.indexOf("export const EXTRA_SORTS"));

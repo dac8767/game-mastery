@@ -69,6 +69,7 @@ export function NoteThread({
   const addNote = useMutation(api.npcs.addNote);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [composing, setComposing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // Recomputed per render rather than stored: "5 minutes ago" is a fact
@@ -131,13 +132,33 @@ export function NoteThread({
         ))}
       </ul>
 
-      {canWrite && (
-        <NoteComposer
-          npcId={npcId}
-          busy={busy}
-          onSubmit={submit}
-        />
-      )}
+      {canWrite &&
+        (composing ? (
+          <NoteComposer
+            npcId={npcId}
+            busy={busy}
+            onSubmit={async (body, images) => {
+              const ok = await submit(body, images);
+              // Closed only on success: a note that failed to send is
+              // still in the box, which is where you want it.
+              if (ok) setComposing(false);
+              return ok;
+            }}
+            onCancel={() => setComposing(false)}
+          />
+        ) : (
+          /* A toolbar and an empty box sat under every thread whether
+             or not anybody was writing, which on the DM's split column
+             is two editors taking half the height of both panes for
+             nothing. */
+          <button
+            type="button"
+            className="npc-btn note-add"
+            onClick={() => setComposing(true)}
+          >
+            <UiText id="record.notes.add" />
+          </button>
+        ))}
       </div>
     </section>
   );

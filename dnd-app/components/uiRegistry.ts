@@ -61,7 +61,21 @@ export const TEXT_PIECES: TextPiece[] = [
   { id: "npc.bar.group", value: "Group", screen: "NPC list" },
   { id: "npc.bar.filter", value: "Filter", screen: "NPC list" },
   { id: "npc.bar.sort", value: "Sort", screen: "NPC list" },
-  { id: "npc.bar.columns", value: "Columns", screen: "NPC list" },
+  { id: "npc.bar.columns", value: "Fields", screen: "NPC list" },
+  {
+    id: "npc.bar.reset",
+    value: "Reset",
+    screen: "NPC list",
+    note: "Puts the columns, widths and order back to the defaults",
+  },
+  { id: "npc.view.grid", value: "Grid", screen: "NPC list" },
+  { id: "npc.view.tiles", value: "Tiles", screen: "NPC list" },
+  {
+    id: "npc.view.perRow",
+    value: "Per row",
+    screen: "NPC list",
+    note: "How many tiles fit across, inside the View menu",
+  },
   {
     id: "npc.bar.search",
     value: "Search NPCs",
@@ -122,6 +136,12 @@ export const TEXT_PIECES: TextPiece[] = [
     value: "Yours. Never sent to a player.",
     screen: "NPC record",
     note: "The helper line under the DM Notes title",
+  },
+  {
+    id: "record.notes.add",
+    value: "Add note",
+    screen: "NPC record",
+    note: "Opens the editor under a notes pane",
   },
   {
     id: "record.notes.empty",

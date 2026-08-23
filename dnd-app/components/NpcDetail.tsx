@@ -126,11 +126,17 @@ export function NpcDetail({
   campaignId,
   isDm,
   onClose,
+  onOpenNamed,
 }: {
   npc: Npc;
   campaignId: Id<"campaigns">;
   isDm: boolean;
   onClose: () => void;
+  /**
+   * Open another NPC by name, or null if the roster has nobody by that
+   * name. The roster lives in NpcTable, so resolving happens there.
+   */
+  onOpenNamed?: (name: string) => boolean;
 }) {
   const ui = useUi();
   const updateNpc = useMutation(api.npcs.updateNpc);
@@ -293,7 +299,20 @@ export function NpcDetail({
   const headerFields = HEADER_KEYS.filter((k) => k !== "portraitPath")
     .map((k) => COLUMN_BY_KEY.get(k))
     .filter((c): c is ColumnDef => Boolean(c))
-    .filter((c) => (isDm || !c.dmOnly) && (canEdit(c) || toInput(npc, c)));
+    .filter((c) => isDm || !c.dmOnly)
+    .filter((c) => {
+      // The name always shows — it is what the record IS, and an NPC
+      // with no name still needs somewhere to be given one.
+      if (c.key === "name") return canEdit(c) || toInput(npc, c);
+      /**
+       * Everything else in the header shows only when it has something
+       * in it. An empty "Nickname" under every name in the campaign is
+       * a word repeated 198 times that says nothing about any of them —
+       * and it is not lost, because the field is on a tab like the rest
+       * and the header picks it up the moment it is filled in.
+       */
+      return Boolean(toInput(npc, c));
+    });
 
   const hiddenCol = COLUMN_BY_KEY.get("hidden") ?? null;
   const isHidden = hiddenCol ? toInput(npc, hiddenCol) === "true" : false;
@@ -570,6 +589,7 @@ export function NpcDetail({
                         }
                       : undefined
                   }
+                  onOpenNamed={onOpenNamed}
                   handles={
                     arranging ? (
                       <>
@@ -725,6 +745,7 @@ function RecordField({
   tall,
   arranging,
   hidden,
+  onOpenNamed,
   over,
   dragProps,
   onDragOver,
@@ -748,6 +769,8 @@ function RecordField({
   arranging?: boolean;
   /** The layout keeps this field off the record. */
   hidden?: boolean;
+  /** For a field whose values name other NPCs. */
+  onOpenNamed?: (name: string) => boolean;
   /** The pointer is over this field, suggesting a drop here. */
   over?: boolean;
   dragProps?: {
@@ -845,9 +868,13 @@ function RecordField({
     return (
       <div className={className}>
         {!variant && <div className="detail-label">{col.label}</div>}
-        <div className="detail-value">
-          {variant === "subtitle" ? `“${value}”` : value}
-        </div>
+        {col.namesNpcs && onOpenNamed && value ? (
+          <NameLinks value={value} onOpenNamed={onOpenNamed} />
+        ) : (
+          <div className="detail-value">
+            {variant === "subtitle" ? `“${value}”` : value}
+          </div>
+        )}
       </div>
     );
   }
@@ -863,6 +890,15 @@ function RecordField({
           {col.label}
           {dmOnly && <span className="dm-tag">DM only</span>}
         </div>
+      )}
+
+      {/* The values name other NPCs, so each one that matches somebody
+          on the roster becomes a way to get to them. Under the input
+          rather than instead of it: the field is still a list you edit
+          by typing, and a name nobody has written up yet stays plain
+          text rather than becoming a link to nothing. */}
+      {col.namesNpcs && onOpenNamed && value && (
+        <NameLinks value={value} onOpenNamed={onOpenNamed} />
       )}
 
       {col.kind === "longtext" ? (
@@ -895,6 +931,45 @@ function RecordField({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * A list of names, each a way to reach that NPC.
+ *
+ * Split on the same commas the field is edited with, so what you typed
+ * and what you can click are the same thing. A name the roster does not
+ * have renders as plain text: the field came out of Airtable full of
+ * relatives who were never written up, and a link to nothing is worse
+ * than no link.
+ */
+function NameLinks({
+  value,
+  onOpenNamed,
+}: {
+  value: string;
+  onOpenNamed: (name: string) => boolean;
+}) {
+  const names = value
+    .split(",")
+    .map((n) => n.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  if (names.length === 0) return null;
+
+  return (
+    <p className="name-links">
+      {names.map((name, i) => (
+        <button
+          key={`${name}-${i}`}
+          type="button"
+          className="name-link"
+          title={`Open ${name}`}
+          onClick={() => onOpenNamed(name)}
+        >
+          {name}
+        </button>
+      ))}
+    </p>
   );
 }
 
@@ -949,7 +1024,7 @@ function PortraitField({ npc, editable }: { npc: Npc; editable: boolean }) {
   }
 
   return (
-    <div className="record-portrait">
+    <div className={`record-portrait${editable ? " editable" : ""}`}>
       {src ? (
         /* eslint-disable-next-line @next/next/no-img-element */
         <img className="portrait-preview" src={src} alt={npc.name} />
@@ -959,10 +1034,16 @@ function PortraitField({ npc, editable }: { npc: Npc; editable: boolean }) {
 
       {editable && (
         <>
+          {/* On the picture, not under it. A row of text buttons below
+              the frame reads as two things — a picture, and some
+              controls — where this reads as one thing you can change.
+              Always visible rather than on hover: a control you have to
+              discover by waving the pointer at it is one a touch screen
+              never finds at all. */}
           <div className="portrait-actions">
             <button
               type="button"
-              className="text-button"
+              className="portrait-btn"
               disabled={busy}
               onClick={() => input.current?.click()}
             >
@@ -971,8 +1052,9 @@ function PortraitField({ npc, editable }: { npc: Npc; editable: boolean }) {
             {npc.portraitUrl && (
               <button
                 type="button"
-                className="text-button"
+                className="portrait-btn"
                 disabled={busy}
+                title="Remove this picture"
                 onClick={() =>
                   void setPortrait({ npcId: npc._id, storageId: null })
                 }

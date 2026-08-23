@@ -39,6 +39,16 @@ export type ColumnDef = {
   editable?: boolean;
   /** The one field any campaign member may write. */
   playerEditable?: boolean;
+  /**
+   * The values name OTHER NPCs, so the record turns each one into a
+   * link to that NPC's own page.
+   *
+   * Names, not ids: the field came out of Airtable as free text, and
+   * plenty of the names in it are relatives who were never written up.
+   * So a value that matches nobody stays plain text rather than
+   * becoming a link to nothing.
+   */
+  namesNpcs?: boolean;
 };
 
 export const COLUMNS: ColumnDef[] = [
@@ -65,6 +75,7 @@ export const COLUMNS: ColumnDef[] = [
     defaultWidth: 200,
     defaultVisible: true,
     editable: true,
+    namesNpcs: true,
   },
   { key: "groups", label: "Groups", kind: "chips", defaultWidth: 170, defaultVisible: true, editable: true },
   { key: "place", label: "Place", kind: "chips", defaultWidth: 150, defaultVisible: true, editable: true },
@@ -147,9 +158,6 @@ export const FACET_KEYS = [
   "alignment",
   "sexuality",
 ];
-
-/** The three facets promoted to always-visible dropdowns. */
-export const QUICK_FILTER_KEYS = ["status", "species", "gender"];
 
 /** Sort keys that aren't columns. */
 export const EXTRA_SORTS = [
