@@ -8,6 +8,7 @@ import { ReactNode, useEffect, useMemo, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import { ThemeSync } from "@/components/ThemeSync";
 import { FeedbackForm } from "@/components/FeedbackForm";
+import { UiProvider } from "@/components/UiEditor";
 import { Id } from "@/convex/_generated/dataModel";
 import {
   ALL_NAV_ITEMS,
@@ -159,6 +160,10 @@ export function AppShell({
   const restSections = sections.slice(1);
 
   return (
+    /* The provider wraps the whole shell, not one screen: edit mode has
+       to survive walking to another screen to change that one, and the
+       bar it puts along the bottom is mounted here so it does. */
+    <UiProvider campaignId={campaignId} canEdit={isDm}>
     <div className="shell">
       <ThemeSync />
       <nav className="sidebar">
@@ -259,5 +264,6 @@ export function AppShell({
         <FeedbackForm onClose={() => setFeedbackOpen(false)} />
       )}
     </div>
+    </UiProvider>
   );
 }

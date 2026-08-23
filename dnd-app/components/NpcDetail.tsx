@@ -14,6 +14,7 @@ import {
   arrange,
 } from "@/components/npcSections";
 import { NoteThread } from "@/components/NoteThread";
+import { UiSplitHandle, UiText, useUiLayout } from "@/components/UiEditor";
 import {
   LooseTemplate,
   NpcTemplate,
@@ -202,6 +203,12 @@ export function NpcDetail({
   const hiddenCol = COLUMN_BY_KEY.get("hidden") ?? null;
   const isHidden = hiddenCol ? toInput(npc, hiddenCol) === "true" : false;
 
+  // What edit mode has been told about this layout. Percentages, so a
+  // saved value reads as a sentence rather than as CSS.
+  const split = useUiLayout("record.split");
+  const notesSplit = useUiLayout("record.notesSplit");
+  const dmNotesFirst = useUiLayout("record.dmNotesFirst") === 1;
+
   // The notes rail: read beside whatever tab is open, never behind
   // one. You read the fields and write in the notes at the same time,
   // and putting them on a tab means losing your place to check an age.
@@ -222,7 +229,7 @@ export function NpcDetail({
           from the fields, because neither is a fact about the NPC. */}
       <div className="record-bar">
         <button type="button" className="npc-btn primary" onClick={onClose}>
-          Back to NPC List
+          <UiText id="record.bar.back" />
         </button>
 
         {/* A toggle that says which way it is currently set. The old
@@ -244,7 +251,7 @@ export function NpcDetail({
             }
             onClick={() => void commit(hiddenCol, isHidden ? "false" : "true")}
           >
-            {isHidden ? "Hidden from Players" : "Hide Character from Players"}
+            <UiText id={isHidden ? "record.bar.hidden" : "record.bar.hide"} />
           </button>
         )}
       </div>
@@ -254,10 +261,23 @@ export function NpcDetail({
           beside. You read a record and write in its notes at the same
           time, and a tab that hid them would mean losing your place to
           check an age. */}
-      <div className="record-split">
+      <div
+        className="record-split"
+        style={{
+          // The one number the two columns are: edit mode drags it, the
+          // grid reads it. Written as a custom property rather than a
+          // full grid-template so the media query that collapses to one
+          // column below 1000px still wins — an inline template would
+          // beat any stylesheet rule and the record would stay in two
+          // columns on a phone.
+          ["--record-split" as string]: `${split}`,
+        }}
+      >
         <section className="record-pane record-left">
           <header className="pane-head">
-            <h2>NPC Info</h2>
+            <h2>
+              <UiText id="record.info.title" />
+            </h2>
           </header>
           <div className="pane-body">
         <header className="record-head">
@@ -290,7 +310,7 @@ export function NpcDetail({
             )}
             {!isDm && (
               <p className="settings-note">
-                You can edit Player Notes. Everything else is the DM&apos;s.
+                <UiText id="record.playerBlurb" />
               </p>
             )}
           </div>
@@ -321,7 +341,9 @@ export function NpcDetail({
             checked={showEmpty}
             onChange={(e) => setShowEmpty(e.target.checked)}
           />
-          <span>Show empty fields</span>
+          <span>
+            <UiText id="record.showEmpty" />
+          </span>
         </label>
       </div>
 
@@ -353,7 +375,7 @@ export function NpcDetail({
         )}
         {openTab && visibleCount(npc, openTab.fields, canEdit, showEmpty) === 0 && (
           <p className="settings-note">
-            Nothing filled in on this tab.
+            <UiText id="record.empty" />
             {!showEmpty && " Tick “Show empty fields” to add something."}
           </p>
         )}
@@ -364,23 +386,32 @@ export function NpcDetail({
         {/* A player gets the whole column for the table pad. A DM gets
             it split, because they keep two sets of notes and need both
             beside the record at once. */}
-        <aside className={`record-notes${isDm ? " split" : ""}`}>
+        <UiSplitHandle id="record.split" axis="x" />
+
+        <aside
+          className={`record-notes${isDm ? " split" : ""}${
+            dmNotesFirst ? " dm-first" : ""
+          }`}
+          style={{ ["--notes-split" as string]: `${notesSplit}` }}
+        >
           <NoteThread
             npcId={npc._id}
             channel="player"
-            title="Player Notes"
-            blurb="Everyone at the table writes here and everyone reads it."
+            titleId="record.notes.player.title"
+            blurbId="record.notes.player.blurb"
             notes={noteData?.notes ?? []}
             youId={noteData?.youId ?? null}
             canWrite={Boolean(noteData)}
           />
 
+          {isDm && <UiSplitHandle id="record.notesSplit" axis="y" />}
+
           {isDm && (
             <NoteThread
               npcId={npc._id}
               channel="dm"
-              title="DM Notes"
-              blurb="Yours. Never sent to a player."
+              titleId="record.notes.dm.title"
+              blurbId="record.notes.dm.blurb"
               notes={noteData?.notes ?? []}
               youId={noteData?.youId ?? null}
               canWrite={Boolean(noteData)}

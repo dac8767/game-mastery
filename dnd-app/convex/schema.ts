@@ -917,4 +917,24 @@ export default defineSchema({
     showHpToPlayers: v.boolean(), // false → players see status bucket only
     dmNotes: v.optional(v.string()), // never sent to players
   }).index("by_encounter", ["encounterId"]),
+
+  /**
+   * What edit mode changed about the interface, for one campaign.
+   *
+   * Per campaign rather than per person: renaming "Player Notes" to
+   * "Table Notes" is a decision about this game's table, and one that
+   * only reached the DM's own browser would leave everyone else reading
+   * different words for the same box. The DM writes it; everyone reads
+   * it, the way the NPC template already works.
+   *
+   * Ids are free strings and are NOT validated against the registry
+   * here — convex/ and components/ are separate compilations. The
+   * client drops any id it does not know, which is the same thing
+   * normalizeRibbon does with a retired toolbar token.
+   */
+  uiOverrides: defineTable({
+    campaignId: v.id("campaigns"),
+    text: v.array(v.object({ id: v.string(), value: v.string() })),
+    layout: v.array(v.object({ id: v.string(), value: v.number() })),
+  }).index("by_campaign", ["campaignId"]),
 });

@@ -1690,10 +1690,18 @@ export const integrity = {
     // behaviour, and a file the tools quietly stop being able to read.
     // Tab, newline and carriage return are the only control characters
     // source has any business containing.
+    //
+    // DEL (0x7f) counts. It sits ABOVE the printable range rather than
+    // below it, so a "code > 31" test waves it through — which it did:
+    // a DEL reached components/uiRegistry.ts and was found by hand,
+    // days after this guard was written to catch exactly that.
     for (const [file, src] of sourceFiles("components", "convex", "app")) {
       for (let i = 0; i < src.length; i++) {
         const code = src.charCodeAt(i);
-        if (code > 31 || code === 9 || code === 10 || code === 13) continue;
+        const control =
+          (code < 32 && code !== 9 && code !== 10 && code !== 13) ||
+          code === 127;
+        if (!control) continue;
         const line = src.slice(0, i).split("\n").length;
         problems.push(
           `${file}:${line} contains a control character (0x${code
@@ -1702,6 +1710,62 @@ export const integrity = {
             "to grep and to diffs"
         );
         break;
+      }
+    }
+
+    // ---- edit mode: the registry and the screens agree --------------
+    // Both directions, because both fail silently and differently.
+    //
+    // A registered id nothing renders is a row in the editor that does
+    // nothing when you rename it — you type a new heading, save, and
+    // the screen keeps the old one, with no error anywhere.
+    //
+    // An id rendered but not registered is worse: useUiText falls back
+    // to the id itself, so the button reads "npc.bar.sort".
+    {
+      const registry = read("components", "uiRegistry.ts");
+      const declared = [
+        ...registry.matchAll(/\{\s*id:\s*"([^"]+)"/g),
+      ].map((m) => m[1]);
+      if (declared.length === 0) {
+        throw new Error("no ids found in uiRegistry.ts — parser out of date?");
+      }
+
+      // Every id mentioned anywhere else in the app, however it is
+      // written: <UiText id="x" />, useUiText("x"), useUiLayout("x"),
+      // and the ternary form <UiText id={cond ? "a" : "b"} />.
+      const used = new Set();
+      for (const [file, src] of sourceFiles("components", "app")) {
+        if (file.endsWith("uiRegistry.ts")) continue;
+        const code = stripComments(src);
+        for (const m of code.matchAll(
+          /(?:UiText\s+id=|useUiText\(|useUiLayout\(|UiSplitHandle\s+id=|labelId=|titleId=|blurbId=)\s*\{?\s*"([^"]+)"/g
+        )) {
+          used.add(m[1]);
+        }
+        // The ternary picks between two ids; the regex above catches the
+        // first, this catches the second.
+        for (const m of code.matchAll(/\?\s*"([^"]+)"\s*:\s*"([^"]+)"/g)) {
+          if (declared.includes(m[1])) used.add(m[1]);
+          if (declared.includes(m[2])) used.add(m[2]);
+        }
+      }
+
+      for (const id of declared) {
+        if (!used.has(id)) {
+          problems.push(
+            `uiRegistry declares "${id}" but nothing renders it — edit ` +
+              "mode would offer a rename that changes nothing on screen"
+          );
+        }
+      }
+      for (const id of used) {
+        if (!declared.includes(id)) {
+          problems.push(
+            `"${id}" is rendered through edit mode but is not in ` +
+              "uiRegistry — it would show up on screen as its own id"
+          );
+        }
       }
     }
 

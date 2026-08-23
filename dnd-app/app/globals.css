@@ -5755,7 +5755,16 @@ button.cal-day:hover {
    rather than pixels, so the ratio survives any window width. */
 .record-split {
   display: grid;
-  grid-template-columns: minmax(0, 52fr) minmax(0, 47fr);
+  /* The ratio is a variable so edit mode can drag it. The fallback is
+     the shipped 52, and the media query below still collapses this to
+     one column — which an inline grid-template could not have done,
+     since a style attribute beats every stylesheet rule.
+     A PERCENTAGE, not a multiplied fr: calc() has no fr unit, so
+     `calc(52 * 1fr)` makes the whole declaration invalid and the grid
+     silently falls back to one column. It rendered that way once. */
+  grid-template-columns:
+    minmax(0, calc(var(--record-split, 52) * 1%))
+    minmax(0, 1fr);
   gap: 0.6rem;
   /* stretch, not start: the notes column runs top to bottom beside
      everything on the left, which is the point of it being a column. */
@@ -5940,9 +5949,30 @@ button.cal-day:hover {
    DM Notes the taller of the two because that is where a DM writes. */
 .record-notes.split {
   display: grid;
-  grid-template-rows: minmax(0, 33fr) minmax(0, 41fr);
+  grid-template-rows:
+    minmax(0, calc(var(--notes-split, 45) * 1%))
+    minmax(0, 1fr);
   gap: 0.6rem;
   min-height: 0;
+}
+
+/* DM Notes on top, when the DM would rather write than read. Order
+   rather than a different DOM: the panes keep their identity, so the
+   split handle between them still means the same thing. */
+.record-notes.split.dm-first .note-player {
+  order: 2;
+}
+
+.record-notes.split.dm-first .note-dm {
+  order: 1;
+}
+
+/* With the order swapped the first ROW is DM Notes, so the ratio has to
+   swap with it or dragging the handle would resize the wrong pane. */
+.record-notes.split.dm-first {
+  grid-template-rows:
+    minmax(0, calc((100 - var(--notes-split, 45)) * 1%))
+    minmax(0, 1fr);
 }
 
 /* Each thread is its own framed pane, matching NPC Info beside it. */
@@ -6335,4 +6365,145 @@ button.cal-day:hover {
 .rules-next p {
   margin: 0.2rem 0 0;
   color: var(--text-dim);
+}
+
+/* ---------- edit mode ----------
+   Everything here only ever renders while edit mode is on. With it off
+   the labels are bare text and the handles render nothing at all, so
+   none of this can affect how a screen lays out for anybody reading. */
+
+.ui-edit-hit {
+  display: inline;
+  margin: 0;
+  padding: 0 0.15em;
+  border: none;
+  border-radius: 3px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  /* A dotted underline rather than a box: a box around a word inside a
+     button makes the button look broken, and every one of these sits
+     inside something else. */
+  box-shadow: inset 0 -1px 0 0 var(--accent);
+  outline: 1px dashed var(--accent);
+  outline-offset: 1px;
+  cursor: text;
+}
+
+.ui-edit-hit:hover,
+.ui-edit-hit:focus-visible {
+  background: var(--accent-soft);
+  outline-style: solid;
+}
+
+.ui-edit-field {
+  display: inline-block;
+  min-width: 6ch;
+  max-width: 100%;
+  padding: 0 0.2em;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: var(--bg-inset);
+  color: var(--text);
+  font: inherit;
+}
+
+/* The grab bars between two panes. Absolutely positioned INSIDE the
+   grid gap, which is the one place a handle can sit without taking a
+   grid cell of its own and pushing the panes around the moment edit
+   mode comes on. */
+.ui-split {
+  position: absolute;
+  z-index: 5;
+  background: var(--accent);
+  border-radius: 3px;
+  opacity: 0.35;
+  touch-action: none;
+}
+
+.ui-split:hover,
+.ui-split:active {
+  opacity: 1;
+}
+
+.ui-split-x {
+  top: 0;
+  bottom: 0;
+  left: calc(var(--record-split, 52) * 1%);
+  width: 6px;
+  margin-left: -3px;
+  cursor: col-resize;
+}
+
+.ui-split-y {
+  left: 0;
+  right: 0;
+  top: calc(var(--notes-split, 45) * 1%);
+  height: 6px;
+  margin-top: -3px;
+  cursor: row-resize;
+}
+
+/* The handles measure themselves against their offset parent, so the
+   two containers they sit in have to BE that parent. */
+.record-split,
+.record-notes {
+  position: relative;
+}
+
+.ui-editbar {
+  position: fixed;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  max-width: min(60rem, 94vw);
+  padding: 0.6rem 0.9rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+}
+
+.ui-editbar .settings-note {
+  margin: 0;
+}
+
+.ui-editbar-count {
+  padding: 0.05rem 0.4rem;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ui-editswitch {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.ui-editswitch .settings-note {
+  margin: 0;
+}
+
+.ui-export-code {
+  width: 100%;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-inset);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  resize: vertical;
+  white-space: pre;
 }

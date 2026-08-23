@@ -13,6 +13,7 @@ import {
 import { NpcDetail, fromInput } from "@/components/NpcDetail";
 import { FilterPanel } from "@/components/FilterPanel";
 import { matchesAll } from "@/components/npcFilters";
+import { UiText, useUiText } from "@/components/UiEditor";
 import {
   COLUMNS,
   COLUMN_BY_KEY,
@@ -143,12 +144,13 @@ function compare(a: Npc, b: Npc, key: string): number {
  * there stops being a signal.
  */
 function BarButton({
-  label,
+  labelId,
   count,
   open,
   onClick,
 }: {
-  label: string;
+  /** A registry id, so edit mode can rename it in place. */
+  labelId: string;
   count: number;
   open: boolean;
   onClick: () => void;
@@ -160,7 +162,7 @@ function BarButton({
       aria-expanded={open}
       onClick={onClick}
     >
-      {label}
+      <UiText id={labelId} />
       {count > 0 && <span className="bar-count">{count}</span>}
     </button>
   );
@@ -187,6 +189,11 @@ function SearchBox({
 }) {
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // A placeholder is an attribute, not a child, so it reads the text
+  // through the hook rather than rendering <UiText>. Renaming it in
+  // edit mode still works — you rename it on the collapsed button,
+  // which is the same registry entry.
+  const label = useUiText("npc.bar.search");
 
   useEffect(() => {
     if (open) inputRef.current?.focus();
@@ -197,8 +204,8 @@ function SearchBox({
       <button
         type="button"
         className="bar-btn bar-search-btn"
-        aria-label="Search NPCs"
-        title="Search NPCs"
+        aria-label={label}
+        title={label}
         onClick={() => setOpen(true)}
       >
         <SearchIcon />
@@ -213,8 +220,8 @@ function SearchBox({
         ref={inputRef}
         type="text"
         value={value}
-        placeholder="Search NPCs"
-        aria-label="Search NPCs"
+        placeholder={label}
+        aria-label={label}
         onChange={(e) => onChange(e.target.value)}
         onBlur={() => {
           if (!value) setOpen(false);
@@ -628,25 +635,25 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
               actually need at a glance, and the panel behind the button
               is where the detail belongs. */}
           <BarButton
-            label="Group"
+            labelId="npc.bar.group"
             count={prefs.groupBy ? 1 : 0}
             open={panel === "group"}
             onClick={() => togglePanel("group")}
           />
           <BarButton
-            label="Filter"
+            labelId="npc.bar.filter"
             count={activeFilterCount}
             open={panel === "filter"}
             onClick={() => togglePanel("filter")}
           />
           <BarButton
-            label="Sort"
+            labelId="npc.bar.sort"
             count={sortCount}
             open={panel === "sort"}
             onClick={() => togglePanel("sort")}
           />
           <BarButton
-            label="Columns"
+            labelId="npc.bar.columns"
             count={0}
             open={panel === "columns"}
             onClick={() => togglePanel("columns")}
@@ -701,7 +708,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
                 }
               }}
             >
-              + New NPC
+              <UiText id="npc.bar.new" />
             </button>
           )}
         </div>
@@ -754,7 +761,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
         <div className="filter-panel">
           <div className="filter-title">Group</div>
           <label className="npc-select">
-            <span>Group by</span>
+            <span><UiText id="npc.panel.groupBy" /></span>
             <select
               value={prefs.groupBy}
               onChange={(e) => prefs.setGroupBy(e.target.value)}
@@ -783,7 +790,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
         <div className="filter-panel">
           <div className="filter-title">Sort</div>
           <label className="npc-select">
-            <span>Sort by</span>
+            <span><UiText id="npc.panel.sortBy" /></span>
             <select
               value={prefs.sortKey}
               onChange={(e) => prefs.setSortKey(e.target.value)}
@@ -800,7 +807,13 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
             className="npc-btn"
             onClick={() => prefs.setSortAsc((v) => !v)}
           >
-            {prefs.sortAsc ? "↑ First to last" : "↓ Last to first"}
+            <UiText
+              id={
+                prefs.sortAsc
+                  ? "npc.panel.ascending"
+                  : "npc.panel.descending"
+              }
+            />
           </button>
           {sortCount > 0 && (
             <button

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { UiText } from "@/components/UiEditor";
 import { Id } from "@/convex/_generated/dataModel";
 import {
   NOTE_EXEC,
@@ -50,16 +51,17 @@ const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 export function NoteThread({
   npcId,
   channel,
-  title,
-  blurb,
+  titleId,
+  blurbId,
   notes,
   youId,
   canWrite,
 }: {
   npcId: Id<"npcs">;
   channel: "player" | "dm";
-  title: string;
-  blurb: string;
+  /** Registry ids, so edit mode can rename the pane in place. */
+  titleId: string;
+  blurbId: string;
   notes: Note[];
   youId: string | null;
   canWrite: boolean;
@@ -92,16 +94,22 @@ export function NoteThread({
   return (
     <section className={`note-thread note-${channel}`}>
       <header className="note-thread-head">
-        <h3>{title}</h3>
+        <h3>
+          <UiText id={titleId} />
+        </h3>
         {channel === "dm" && <span className="dm-tag">DM only</span>}
       </header>
-      <p className="settings-note">{blurb}</p>
+      <p className="settings-note">
+        <UiText id={blurbId} />
+      </p>
 
       {error && <p className="form-error">{error}</p>}
 
       <ul className="note-list">
         {mine.length === 0 && (
-          <li className="note-empty settings-note">Nothing here yet.</li>
+          <li className="note-empty settings-note">
+            <UiText id="record.notes.empty" />
+          </li>
         )}
         {mine.map((note) => (
           <NoteCard

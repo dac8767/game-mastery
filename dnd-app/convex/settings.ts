@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query, QueryCtx } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
-import { isAdminEligible, requireUser } from "./auth";
+import { isAdminEligible, requireDm, requireMember, requireUser } from "./auth";
 
 /**
  * Personal app settings.
@@ -206,5 +206,97 @@ export const me = query({
       email: user?.email ?? null,
       name: profile?.displayName ?? user?.name ?? null,
     };
+  },
+});
+
+/* ---------- edit mode: what the interface says and how it splits -----
+ *
+ * NOT personal, unlike everything above it in this file. The rest of
+ * this module is "your theme, your sidebar, nobody else's"; this is the
+ * words on the screen for one campaign, so the DM writes it and every
+ * member reads it. It lives here because a new convex/ module cannot be
+ * added without running codegen, which the sandbox has no network for.
+ */
+
+/** Longest a renamed label may be, matching components/uiRegistry.ts. */
+const UI_TEXT_LENGTH = 400;
+/** Longest an id may be, so one bad write cannot bloat the document. */
+const UI_ID_LENGTH = 80;
+/** Most overrides one campaign may store. */
+const UI_ENTRIES = 500;
+
+/**
+ * The overrides for a campaign, for anyone who is in it.
+ *
+ * Not DM-gated: the words on the screen are not a secret, and a player
+ * who could not read them would see the shipped labels while the DM saw
+ * their own — two people describing different buttons to each other.
+ */
+export const getUiOverrides = query({
+  args: { campaignId: v.id("campaigns") },
+  handler: async (ctx, args) => {
+    await requireMember(ctx, args.campaignId);
+    const row = await ctx.db
+      .query("uiOverrides")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
+      .unique();
+    return {
+      text: row?.text ?? [],
+      layout: row?.layout ?? [],
+    };
+  },
+});
+
+/**
+ * Replace a campaign's overrides. DM only, like every other decision
+ * about how this campaign's screens are laid out.
+ *
+ * The whole set at once rather than one entry at a time: edit mode
+ * drafts locally and saves on the way out, so a partial write is never
+ * a state the client asks for, and a replace cannot leave a half-renamed
+ * screen behind.
+ */
+export const saveUiOverrides = mutation({
+  args: {
+    campaignId: v.id("campaigns"),
+    text: v.array(v.object({ id: v.string(), value: v.string() })),
+    layout: v.array(v.object({ id: v.string(), value: v.number() })),
+  },
+  handler: async (ctx, args) => {
+    await requireDm(ctx, args.campaignId);
+
+    if (args.text.length + args.layout.length > UI_ENTRIES) {
+      throw new Error("Too many interface changes to save at once");
+    }
+    for (const e of [...args.text, ...args.layout]) {
+      if (!e.id || e.id.length > UI_ID_LENGTH) {
+        throw new Error("An interface change has a bad id");
+      }
+    }
+
+    // Trimmed and capped here as well as on the client. The client caps
+    // it so the editor cannot produce something too long; the server
+    // caps it because a mutation is a public API and the client is not
+    // the only thing that can call it.
+    const text = args.text
+      .map((e) => ({ id: e.id, value: e.value.trim().slice(0, UI_TEXT_LENGTH) }))
+      .filter((e) => e.value.length > 0);
+
+    const layout = args.layout.filter((e) => Number.isFinite(e.value));
+
+    const existing = await ctx.db
+      .query("uiOverrides")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
+      .unique();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, { text, layout });
+      return;
+    }
+    await ctx.db.insert("uiOverrides", {
+      campaignId: args.campaignId,
+      text,
+      layout,
+    });
   },
 });

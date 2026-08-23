@@ -9,6 +9,7 @@ import { RULES_VERSIONS } from "@/components/lookupFilters";
 import { DATE_FORMATS, formatCardDate } from "@/components/campaignCard";
 import { NpcTemplateDesigner } from "@/components/NpcTemplateDesigner";
 import { SidebarDesigner } from "@/components/SidebarDesigner";
+import { EditModeSwitch } from "@/components/UiEditor";
 import { NameField } from "@/components/NameField";
 import { TransferDm } from "@/components/TransferDm";
 import { CampaignDetails } from "@/components/CampaignDetails";
@@ -280,6 +281,21 @@ export function SettingsPanel({
 
       {tab === "interface" && (
         <>
+          <section className="settings-block">
+            <h2>Edit mode</h2>
+            <p className="settings-note">
+              Turn this on and every label in the app you are allowed to
+              change grows a dotted outline — click one to rename it in
+              place — and every split you are allowed to move grows a
+              handle. Walk to any screen with it on and edit it there;
+              the bar along the bottom follows you. Save applies it for
+              everyone in this campaign, and Export gives you the whole
+              set of changes to send back so they can ship as the
+              defaults.
+            </p>
+            <EditModeSwitch />
+          </section>
+
           <SidebarDesigner />
 
           <section className="settings-block">

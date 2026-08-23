@@ -1354,6 +1354,144 @@ export const unit = {
       rs.trailOf("", "Combat") === "Combat"
     );
 
+    // ---- edit mode: the registry, merged and exported --------------
+    const uiOut = compile("components/uiRegistry.ts");
+    const ui = await import(pathToFileURL(join(uiOut, "uiRegistry.js")).href);
+
+    check(
+      "with nothing saved you get the shipped wording",
+      ui.textFor([]).get("record.info.title") === "NPC Info"
+    );
+    check(
+      "a saved rename replaces it",
+      ui.textFor([{ id: "record.info.title", value: "Who They Are" }]).get(
+        "record.info.title"
+      ) === "Who They Are"
+    );
+    // A rename of something that no longer exists is a rename of
+    // nothing. Kept, it would appear in the export as a change to a
+    // part of the app that is gone.
+    check(
+      "an id that is not in the registry is dropped",
+      !ui.textFor([{ id: "gone.away", value: "x" }]).has("gone.away")
+    );
+    check(
+      "an empty rename leaves the shipped wording alone",
+      ui.textFor([{ id: "record.info.title", value: "   " }]).get(
+        "record.info.title"
+      ) === "NPC Info"
+    );
+    check(
+      "a rename is trimmed",
+      ui.cleanText("  Spaced  Out  ") === "Spaced Out"
+    );
+    check("a non-string is not a rename", ui.cleanText(42) === null);
+    check(
+      "a rename is capped",
+      (ui.cleanText("x".repeat(9999)) ?? "").length ===
+        ui.UI_LIMITS.textLength
+    );
+
+    // Labels are single-line by definition: one that breaks a line
+    // rearranges the row it sits in.
+    check(
+      "a newline in a rename collapses to a space",
+      ui.cleanText("Two\nLines") === "Two Lines"
+    );
+    // The one that the whitespace pass does NOT cover, and the reason
+    // there are two passes. A NUL or a DEL is not whitespace, survives
+    // /\s+/ untouched, and ends up in the file this rename is exported
+    // into — where it makes the whole file binary to grep. A DEL got
+    // into uiRegistry.ts exactly this way while it was being written.
+    check(
+      "a NUL in a rename is stripped, not passed through",
+      ui.cleanText(`A${String.fromCharCode(0)}B`) === "A B"
+    );
+    check(
+      "a DEL in a rename is stripped too",
+      ui.cleanText(`A${String.fromCharCode(127)}B`) === "A B"
+    );
+
+    check(
+      "a layout number outside its range is clamped, not refused",
+      ui.clampLayout("record.split", 999) === 75 &&
+        ui.clampLayout("record.split", -10) === 25
+    );
+    check(
+      "a layout id that is not registered has no value",
+      ui.clampLayout("nope", 50) === null
+    );
+    check(
+      "a dragged fraction lands on a whole step",
+      ui.clampLayout("record.split", 52.4) === 52
+    );
+    check(
+      "text that is not a number leaves the shipped value",
+      ui.layoutFor([{ id: "record.split", value: NaN }]).get("record.split") ===
+        52
+    );
+
+    // Only differences are stored and only differences are exported —
+    // a value that happens to equal the default is not a change.
+    check(
+      "a rename back to the shipped wording is not a change",
+      ui.changedText(
+        ui.textFor([{ id: "record.info.title", value: "NPC Info" }])
+      ).length === 0
+    );
+    check(
+      "a real rename is a change",
+      ui.changedText(
+        ui.textFor([{ id: "record.info.title", value: "Dossier" }])
+      ).length === 1
+    );
+
+    const exported = ui.exportOverrides(
+      ui.textFor([{ id: "record.info.title", value: "Dossier" }]),
+      ui.layoutFor([{ id: "record.split", value: 60 }]),
+      "2026-08-23"
+    );
+    check(
+      "the export names the id, the new value and the old one",
+      exported.includes("record.info.title") &&
+        exported.includes('"Dossier"') &&
+        exported.includes('"NPC Info"')
+    );
+    check(
+      "the export carries the layout change too",
+      exported.includes("record.split") &&
+        exported.includes("60") &&
+        exported.includes("was 52")
+    );
+    check(
+      "an export with nothing changed says so instead of emitting a patch",
+      ui.exportOverrides(ui.textFor([]), ui.layoutFor([]), "d").includes(
+        "Nothing has been changed"
+      )
+    );
+    // A heading containing a quote mark would close the string literal
+    // early and paste as code that does not parse.
+    check(
+      "a quote mark in a rename is escaped in the export",
+      ui
+        .exportOverrides(
+          ui.textFor([{ id: "record.info.title", value: 'The "Real" Story' }]),
+          ui.layoutFor([]),
+          "d"
+        )
+        .includes('\\"Real\\"')
+    );
+
+    check(
+      "every registered id is unique",
+      new Set([...ui.TEXT_PIECES, ...ui.LAYOUT_PIECES].map((p) => p.id)).size ===
+        ui.TEXT_PIECES.length + ui.LAYOUT_PIECES.length
+    );
+    check(
+      "every layout default sits inside its own range",
+      ui.LAYOUT_PIECES.every((p) => p.value >= p.min && p.value <= p.max)
+    );
+
     // ---- what a note is allowed to contain -------------------------
     // A player writing a note is handing markup to the DM's browser.
     // Every case below is something that renders as a script, a
