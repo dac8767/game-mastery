@@ -14,6 +14,7 @@ import { NameField } from "@/components/NameField";
 import { TransferDm } from "@/components/TransferDm";
 import { CampaignDetails } from "@/components/CampaignDetails";
 import { CampaignRoster } from "@/components/CampaignRoster";
+import { InvitePanel } from "@/components/InvitePanel";
 import { resolveTab, visibleTabs } from "@/components/settingsTabs";
 
 /**
@@ -277,7 +278,12 @@ export function SettingsPanel({
       )}
 
 
-      {tab === "players" && <CampaignRoster campaignId={campaignId} />}
+      {tab === "players" && (
+        <>
+          <CampaignRoster campaignId={campaignId} />
+          <InvitePanel campaignId={campaignId} />
+        </>
+      )}
 
       {tab === "interface" && (
         <>

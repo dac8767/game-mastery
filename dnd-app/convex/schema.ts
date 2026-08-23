@@ -99,6 +99,45 @@ export default defineSchema({
     nextSessionDate: v.optional(v.string()),
   }).index("by_dm", ["dmId"]),
 
+  /**
+   * A link that puts someone in a campaign.
+   *
+   * The gap this fills: addMemberByEmail can only add an account that
+   * already exists, so inviting somebody who has never signed up was a
+   * conversation ("make an account, tell me the address, then I'll add
+   * you") rather than a link. The invite carries the campaign, so
+   * signing up THROUGH it lands you in the game.
+   *
+   * The token is the credential. It is unguessable, it expires, it can
+   * be spent a fixed number of times and it can be revoked — because a
+   * link that never dies is a permanent unauthenticated door into a
+   * campaign, and links end up in group chats.
+   */
+  campaignInvites: defineTable({
+    campaignId: v.id("campaigns"),
+    /** URL-safe, unguessable, and the only thing that grants entry. */
+    token: v.string(),
+    createdBy: v.id("users"),
+    /** Epoch ms. Past this the link is dead however many uses are left. */
+    expiresAt: v.number(),
+    /** How many people may still come through it. */
+    usesLeft: v.number(),
+    /** Set the moment the DM revokes it, so a spent link reads as spent. */
+    revokedAt: v.optional(v.number()),
+    /**
+     * The character this invite hands over, if the DM built the roster
+     * first. Claiming it sets `characters.playerId`, which is what turns
+     * "a name the DM typed" into "an account that owns this sheet".
+     */
+    characterId: v.optional(v.id("characters")),
+  })
+    // Unique in practice, not by constraint: Convex has no unique index,
+    // so createInvite checks before writing and acceptInvite reads the
+    // first match. A collision on 122 bits of randomness is not the
+    // failure mode worth designing around.
+    .index("by_token", ["token"])
+    .index("by_campaign", ["campaignId"]),
+
   campaignMembers: defineTable({
     campaignId: v.id("campaigns"),
     userId: v.id("users"),

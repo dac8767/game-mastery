@@ -1910,6 +1910,112 @@ export const integrity = {
       }
     }
 
+    // ---- invites: the two copies of the rules agree -----------------
+    // The limits are stated twice — inviteModel.ts for the screen,
+    // constants in convex/campaigns.ts for the mutation — because
+    // convex/ and components/ are separate compilations. Two copies
+    // that disagree means the UI offers 90 days and the server issues
+    // 14, silently.
+    {
+      const modelSrc = read("components", "inviteModel.ts");
+      const serverSrc = read("convex", "campaigns.ts");
+
+      const modelLimits = blockAfter(
+        modelSrc,
+        /export const INVITE_LIMITS =/,
+        "INVITE_LIMITS"
+      );
+      const numberIn = (src, name) => {
+        const m = src.match(new RegExp(`${name}:?\\s*=?\\s*(\\d+)`));
+        if (!m) throw new Error(`no ${name} in the invite limits`);
+        return Number(m[1]);
+      };
+
+      const pairs = [
+        ["defaultDays", "INVITE_DEFAULT_DAYS"],
+        ["maxDays", "INVITE_MAX_DAYS"],
+        ["defaultUses", "INVITE_DEFAULT_USES"],
+        ["maxUses", "INVITE_MAX_USES"],
+      ];
+      for (const [modelName, serverName] of pairs) {
+        const a = numberIn(modelLimits, modelName);
+        const b = numberIn(serverSrc, serverName);
+        if (a !== b) {
+          problems.push(
+            `invite limit ${modelName} is ${a} on the screen and ` +
+              `${serverName} is ${b} on the server — the DM would be ` +
+              "offered one thing and issued another"
+          );
+        }
+      }
+
+      // The gate is acceptInvite, not peekInvite. peek exists so a
+      // stranger can see what they were invited to; if it were the only
+      // check, the minutes spent creating an account would be minutes
+      // in which a revoked link still worked.
+      const accept = serverSrc.slice(serverSrc.indexOf("export const acceptInvite"));
+      for (const [needle, what] of [
+        ["requireUser", "require a signed-in caller"],
+        ["revokedAt !== undefined", "refuse a revoked link"],
+        ["expiresAt <= Date.now()", "refuse an expired link"],
+        ["usesLeft <= 0", "refuse a spent link"],
+      ]) {
+        if (!accept.includes(needle)) {
+          problems.push(
+            `acceptInvite does not ${what} — peekInvite checking it is ` +
+              "not enough, they are minutes apart in a flow that includes " +
+              "creating an account"
+          );
+        }
+      }
+
+      // peekInvite answers to nobody by design, so what it returns is
+      // the whole of what a stranger can learn.
+      const peek = serverSrc.slice(
+        serverSrc.indexOf("export const peekInvite"),
+        serverSrc.indexOf("export const acceptInvite")
+      );
+      if (peek.includes("requireUser") || peek.includes("requireMember")) {
+        problems.push(
+          "peekInvite now requires an account — the person clicking an " +
+            "invite does not have one yet, which is the entire point of it"
+        );
+      }
+      // What it RETURNS, not what it reads. It has to read
+      // invite.campaignId to find the campaign at all; the question is
+      // only what leaves the server.
+      const allowed = [
+        "ok",
+        "problem",
+        "campaignName",
+        "dmName",
+        "characterName",
+      ];
+      const returned = new Set();
+      for (const m of peek.matchAll(/return \{/g)) {
+        const body = blockAfter(
+          peek.slice(m.index),
+          /return /,
+          "a peekInvite return"
+        );
+        for (const key of body.matchAll(/^\s*([a-zA-Z_$][\w$]*)\s*:/gm)) {
+          returned.add(key[1]);
+        }
+      }
+      if (returned.size === 0) {
+        throw new Error("could not read what peekInvite returns");
+      }
+      for (const key of returned) {
+        if (!allowed.includes(key)) {
+          problems.push(
+            `peekInvite returns \`${key}\` — it answers to nobody, so it ` +
+              "must hand a stranger the campaign's name, the DM's and the " +
+              "character's, and nothing else"
+          );
+        }
+      }
+    }
+
     // ---- a player who may write cannot write the DM's fields --------
     // Players can create NPCs and keep editing the ones they made, so
     // updateNpc is no longer DM-only — which makes the DM-only field

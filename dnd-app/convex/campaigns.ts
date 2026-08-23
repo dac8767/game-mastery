@@ -11,9 +11,10 @@ import {
 /**
  * Campaigns, membership, and characters.
  *
- * Two campaigns = your two groups. Members are added by the DM by email
- * lookup after players have created their accounts (no invite-link system
- * needed at this scale).
+ * Two campaigns = your two groups. A DM adds a member either by the
+ * email they already signed up with, or — for somebody with no account
+ * yet — by handing them an invite link, which is the only path that
+ * works before the person exists in the database at all.
  */
 
 /** The picker shows every campaign you are in; admins see a bounded set. */
@@ -466,6 +467,12 @@ export const purgeCampaign = internalMutation({
       .take(left);
     if (await sweep(prefs)) return await more();
 
+    const invites = await ctx.db
+      .query("campaignInvites")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
+      .take(left);
+    if (await sweep(invites)) return await more();
+
     const uiOverrides = await ctx.db
       .query("uiOverrides")
       .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
@@ -716,5 +723,229 @@ export const listCharacters = query({
         portraitUrl: c.portraitId ? await ctx.storage.getUrl(c.portraitId) : null,
       }))
     );
+  },
+});
+
+/* ---------- invites: the way into a campaign -------------------------
+ *
+ * addMemberByEmail above can only add an account that already exists,
+ * so inviting someone who has never signed up was a conversation rather
+ * than a link. These four functions are the link.
+ *
+ * The rules — how long, how many, revoked — live in
+ * components/inviteModel.ts and are duplicated here as constants rather
+ * than imported: convex/ and components/ are separate compilations, and
+ * the integrity guard compares the two copies.
+ */
+
+/** Matches INVITE_LIMITS in components/inviteModel.ts. */
+const INVITE_DEFAULT_DAYS = 14;
+const INVITE_MAX_DAYS = 90;
+const INVITE_DEFAULT_USES = 1;
+const INVITE_MAX_USES = 50;
+
+/** DM: mint a link. */
+export const createInvite = mutation({
+  args: {
+    campaignId: v.id("campaigns"),
+    days: v.optional(v.number()),
+    uses: v.optional(v.number()),
+    characterId: v.optional(v.id("characters")),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireDm(ctx, args.campaignId);
+
+    // A character from ANOTHER campaign would hand a stranger a sheet in
+    // a game they were never invited to.
+    if (args.characterId) {
+      const character = await ctx.db.get(args.characterId);
+      if (!character || character.campaignId !== args.campaignId) {
+        throw new Error("That character is not in this campaign");
+      }
+    }
+
+    const days = Math.min(
+      INVITE_MAX_DAYS,
+      Math.max(1, Math.round(args.days ?? INVITE_DEFAULT_DAYS) || INVITE_DEFAULT_DAYS)
+    );
+    const uses = Math.min(
+      INVITE_MAX_USES,
+      Math.max(1, Math.round(args.uses ?? INVITE_DEFAULT_USES) || INVITE_DEFAULT_USES)
+    );
+
+    const token = crypto.randomUUID().replace(/-/g, "");
+
+    await ctx.db.insert("campaignInvites", {
+      campaignId: args.campaignId,
+      token,
+      createdBy: userId,
+      expiresAt: Date.now() + days * 24 * 60 * 60 * 1000,
+      usesLeft: uses,
+      characterId: args.characterId,
+    });
+
+    return token;
+  },
+});
+
+/** DM: the links that exist, so they can be copied or killed. */
+export const listInvites = query({
+  args: { campaignId: v.id("campaigns") },
+  handler: async (ctx, args) => {
+    await requireDm(ctx, args.campaignId);
+    const invites = await ctx.db
+      .query("campaignInvites")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
+      .collect();
+
+    return await Promise.all(
+      invites.map(async (i) => ({
+        _id: i._id,
+        token: i.token,
+        expiresAt: i.expiresAt,
+        usesLeft: i.usesLeft,
+        revokedAt: i.revokedAt,
+        characterName: i.characterId
+          ? (await ctx.db.get(i.characterId))?.name ?? null
+          : null,
+      }))
+    );
+  },
+});
+
+/** DM: kill a link. Kept rather than deleted, so it reads as cancelled. */
+export const revokeInvite = mutation({
+  args: { inviteId: v.id("campaignInvites") },
+  handler: async (ctx, args) => {
+    const invite = await ctx.db.get(args.inviteId);
+    if (!invite) return;
+    await requireDm(ctx, invite.campaignId);
+    await ctx.db.patch(args.inviteId, { revokedAt: Date.now() });
+  },
+});
+
+/**
+ * What a link is for, WITHOUT being signed in.
+ *
+ * This is the only function in the app that answers to nobody, because
+ * it has to: the person clicking has no account yet, and "sign up to
+ * find out what you are joining" is not an invitation.
+ *
+ * So it returns the campaign's NAME, the DM's display name, and the
+ * character being offered — and nothing else. Not the id, not the
+ * roster, not the description. A stranger guessing tokens learns
+ * whether a guess hit, which unguessable tokens already concede, and
+ * one campaign name.
+ *
+ * A dead link and a token that never existed return the same shape with
+ * different reasons; the client says the same words for both.
+ */
+export const peekInvite = query({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    const invite = await ctx.db
+      .query("campaignInvites")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+
+    if (!invite) return { ok: false as const, problem: "unknown" as const };
+    if (invite.revokedAt !== undefined) {
+      return { ok: false as const, problem: "revoked" as const };
+    }
+    if (invite.expiresAt <= Date.now()) {
+      return { ok: false as const, problem: "expired" as const };
+    }
+    if (invite.usesLeft <= 0) {
+      return { ok: false as const, problem: "spent" as const };
+    }
+
+    const campaign = await ctx.db.get(invite.campaignId);
+    if (!campaign) return { ok: false as const, problem: "unknown" as const };
+
+    const dmProfile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", campaign.dmId))
+      .unique();
+    const character = invite.characterId
+      ? await ctx.db.get(invite.characterId)
+      : null;
+
+    return {
+      ok: true as const,
+      campaignName: campaign.name,
+      dmName: dmProfile?.displayName ?? "the DM",
+      characterName: character?.name ?? null,
+    };
+  },
+});
+
+/**
+ * Spend a link and join the campaign.
+ *
+ * Signed in, necessarily — this is the step that needs an account to
+ * attach the membership to, which is why the join page signs you up
+ * first and calls this second.
+ *
+ * Every check from peekInvite runs AGAIN here. peek is a courtesy for
+ * the screen; this is the gate, and the two are minutes apart in a flow
+ * that includes creating an account.
+ */
+export const acceptInvite = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    const userId = await requireUser(ctx);
+
+    const invite = await ctx.db
+      .query("campaignInvites")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+
+    if (!invite) throw new Error("This invite link is not valid");
+    if (invite.revokedAt !== undefined) {
+      throw new Error("This invite was cancelled");
+    }
+    if (invite.expiresAt <= Date.now()) {
+      throw new Error("This invite has expired");
+    }
+    if (invite.usesLeft <= 0) {
+      throw new Error("This invite has already been used");
+    }
+
+    const campaign = await ctx.db.get(invite.campaignId);
+    if (!campaign) throw new Error("This invite link is not valid");
+
+    // Already in? Then the link is not spent on them — walking into a
+    // room you are already in should not use up somebody else's seat.
+    const existing = await ctx.db
+      .query("campaignMembers")
+      .withIndex("by_campaign_user", (q) =>
+        q.eq("campaignId", invite.campaignId).eq("userId", userId)
+      )
+      .unique();
+    const alreadyIn = existing !== null || campaign.dmId === userId;
+
+    if (!alreadyIn) {
+      await ctx.db.insert("campaignMembers", {
+        campaignId: invite.campaignId,
+        userId,
+      });
+      await ctx.db.patch(invite._id, { usesLeft: invite.usesLeft - 1 });
+    }
+
+    // The character, if this link carried one and nobody has claimed it.
+    // Not reassigned if someone already has it: two people following the
+    // same link must not end up fighting over one sheet.
+    if (invite.characterId) {
+      const character = await ctx.db.get(invite.characterId);
+      if (
+        character &&
+        character.campaignId === invite.campaignId &&
+        character.playerId === undefined
+      ) {
+        await ctx.db.patch(invite.characterId, { playerId: userId });
+      }
+    }
+
+    return invite.campaignId;
   },
 });

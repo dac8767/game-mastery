@@ -1569,6 +1569,125 @@ export const unit = {
       )
     );
 
+    // ---- invite links: three independent ways to die ---------------
+    // An invite is an UNAUTHENTICATED door into a campaign — anyone
+    // holding the link is anyone at all until they sign in. So the
+    // clock, the counter and the DM's Cancel are each checked on the
+    // way in, and the reasons are ordered so the message names what
+    // actually happened.
+    const invOut = compile("components/inviteModel.ts");
+    const inv = await import(pathToFileURL(join(invOut, "inviteModel.js")).href);
+
+    const NOW = 1_700_000_000_000;
+    const live = { expiresAt: NOW + 1000, usesLeft: 1 };
+
+    check("a live invite has no problem", inv.inviteProblem(live, NOW) === null);
+    check(
+      "a token nobody issued is unknown",
+      inv.inviteProblem(null, NOW) === "unknown"
+    );
+    check(
+      "an expired invite is expired",
+      inv.inviteProblem({ ...live, expiresAt: NOW - 1 }, NOW) === "expired"
+    );
+    check(
+      "expiry is inclusive — the instant it lands, it is dead",
+      inv.inviteProblem({ ...live, expiresAt: NOW }, NOW) === "expired"
+    );
+    check(
+      "a spent invite is spent",
+      inv.inviteProblem({ ...live, usesLeft: 0 }, NOW) === "spent"
+    );
+    check(
+      "a negative counter is spent, not live",
+      inv.inviteProblem({ ...live, usesLeft: -3 }, NOW) === "spent"
+    );
+
+    // Revoked beats expired beats spent: a link the DM killed on Monday
+    // should not report itself as having expired on Friday.
+    check(
+      "revoking wins over expiry",
+      inv.inviteProblem(
+        { expiresAt: NOW - 1, usesLeft: 0, revokedAt: NOW - 2 },
+        NOW
+      ) === "revoked"
+    );
+    check(
+      "expiry wins over the counter",
+      inv.inviteProblem({ expiresAt: NOW - 1, usesLeft: 0 }, NOW) === "expired"
+    );
+
+    // A token that never existed and one that died must read the same
+    // to a stranger: telling somebody which of their guesses was a real
+    // campaign is telling them something.
+    check(
+      "an unknown token does not admit it is unknown",
+      !inv.inviteMessage("unknown").toLowerCase().includes("exist") &&
+        !inv.inviteMessage("unknown").toLowerCase().includes("wrong")
+    );
+    check(
+      "every reason gets words of its own",
+      new Set(
+        ["unknown", "revoked", "expired", "spent"].map((p) =>
+          inv.inviteMessage(p)
+        )
+      ).size === 4
+    );
+
+    check(
+      "days are clamped to what the app will issue",
+      inv.clampDays(99999) === inv.INVITE_LIMITS.maxDays &&
+        inv.clampDays(0) === inv.INVITE_LIMITS.defaultDays &&
+        inv.clampDays(-5) === inv.INVITE_LIMITS.defaultDays &&
+        inv.clampDays("nonsense") === inv.INVITE_LIMITS.defaultDays
+    );
+    check(
+      "uses are clamped the same way",
+      inv.clampUses(99999) === inv.INVITE_LIMITS.maxUses &&
+        inv.clampUses(0) === inv.INVITE_LIMITS.defaultUses &&
+        inv.clampUses(2) === 2
+    );
+    check(
+      "an expiry is in the future and inside the cap",
+      inv.expiryFrom(NOW, 7) === NOW + 7 * 86400000 &&
+        inv.expiryFrom(NOW, 99999) ===
+          NOW + inv.INVITE_LIMITS.maxDays * 86400000
+    );
+
+    // The token is the whole credential.
+    const token = inv.tokenFrom(
+      Uint8Array.from({ length: 16 }, (_, i) => i * 7)
+    );
+    check(
+      "a token is hex of the full length",
+      token.length === inv.INVITE_LIMITS.tokenLength && /^[0-9a-f]+$/.test(token)
+    );
+    check(
+      "different bytes make different tokens",
+      inv.tokenFrom(Uint8Array.from({ length: 16 }, () => 1)) !==
+        inv.tokenFrom(Uint8Array.from({ length: 16 }, () => 2))
+    );
+    check(
+      "a byte under 16 is padded, not shortened",
+      inv.tokenFrom(Uint8Array.from([1, 255])).startsWith("01ff")
+    );
+
+    check(
+      "the link is built from the origin it is shown on",
+      inv.inviteUrl("https://x.test", "abc") === "https://x.test/join/abc"
+    );
+    check(
+      "a trailing slash does not double up",
+      inv.inviteUrl("https://x.test/", "abc") === "https://x.test/join/abc"
+    );
+
+    check(
+      "expiry reads as a sentence",
+      inv.expiryText(NOW + 13 * 86400000, NOW) === "expires in 13 days" &&
+        inv.expiryText(NOW + 86400000, NOW) === "expires tomorrow" &&
+        inv.expiryText(NOW - 1, NOW) === "expired"
+    );
+
     // ---- what a note is allowed to contain -------------------------
     // A player writing a note is handing markup to the DM's browser.
     // Every case below is something that renders as a script, a
