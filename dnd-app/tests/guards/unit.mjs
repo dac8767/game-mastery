@@ -2439,6 +2439,60 @@ export const unit = {
         base.tabs[0].fields[0].rows === 1
     );
 
+    // ---- hiding a field, which is not removing it ------------------
+    // A field the template does not MENTION is one reconcileTemplate
+    // puts straight back on the next load, so removal cannot hide
+    // anything — and it would leave the field with no row in the
+    // editor, which is a field nobody can bring back. Hidden keeps its
+    // tab, its place and its size.
+    const hiddenField = tpl.setFieldHidden(base, "c", true);
+    check(
+      "hiding marks the field",
+      hiddenField.tabs[1].fields.find((f) => f.key === "c").hidden === true
+    );
+    check(
+      "hiding leaves it exactly where it was",
+      tpl.templateKeys(hiddenField).join() === tpl.templateKeys(base).join()
+    );
+    check(
+      "hiding touches nothing else",
+      hiddenField.tabs[1].fields.filter((f) => f.hidden).length === 1
+    );
+    check("hiddenKeys names it", tpl.hiddenKeys(hiddenField).join() === "c");
+    check("and nothing when nothing is hidden", tpl.hiddenKeys(base).length === 0);
+
+    // Un-hiding drops the flag rather than storing `false` on every
+    // field of every layout forever.
+    const shownAgain = tpl.setFieldHidden(hiddenField, "c", false);
+    check(
+      "un-hiding clears the flag entirely",
+      shownAgain.tabs[1].fields.find((f) => f.key === "c").hidden === undefined
+    );
+    check("un-hiding is a real round trip", tpl.hiddenKeys(shownAgain).length === 0);
+
+    check(
+      "hiding a key the layout does not hold changes nothing",
+      tpl.hiddenKeys(tpl.setFieldHidden(base, "nope", true)).length === 0
+    );
+
+    // The one that would look like the hide silently failing to save.
+    check(
+      "hidden survives a round trip through reconcile",
+      tpl
+        .hiddenKeys(tpl.reconcileTemplate(hiddenField, KEYS))
+        .join() === "c"
+    );
+    check(
+      "a hidden field is not treated as missing and re-added",
+      tpl.reconcileTemplate(hiddenField, KEYS).tabs.flatMap((t) => t.fields)
+        .filter((f) => f.key === "c").length === 1
+    );
+    check(
+      "hiding still keeps it out of nobody's way — it stays placed",
+      tpl.templateKeys(tpl.reconcileTemplate(hiddenField, KEYS)).sort().join() ===
+        KEYS.slice().sort().join()
+    );
+
     // ---- rows ------------------------------------------------------
     // The point of a row span is alignment: a two-row field beside two
     // one-row fields. That only works if rows are a fixed track, which

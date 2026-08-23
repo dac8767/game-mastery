@@ -168,6 +168,18 @@ export default defineSchema({
   npcs: defineTable({
     campaignId: v.id("campaigns"),
 
+    /**
+     * Who added this NPC, when it was not the DM.
+     *
+     * Players can create NPCs — someone the party met that the DM has
+     * not written down yet — and the creator may keep editing the
+     * ordinary fields on the one they made. Absent on every NPC the DM
+     * created and on everything imported from Airtable, which is why it
+     * is optional and why "no creator" must never read as "anyone may
+     * edit this": updateNpc checks for the DM first.
+     */
+    createdBy: v.optional(v.id("users")),
+
     // Identity
     name: v.string(), // full display name, whitespace-normalized
     prefix: v.optional(v.string()), // "King", "Queen"
@@ -635,6 +647,26 @@ export default defineSchema({
             key: v.string(),
             /** 1–4 columns of the record's grid. */
             span: v.number(),
+            /**
+             * 1–6 rows of the record's grid.
+             *
+             * Optional because documents written before two-axis
+             * resizing exist and are still valid — but note that this
+             * validator went missing for a while AFTER saveTemplate
+             * started writing the field, which made every save of a
+             * layout fail validation at write time. The guard in
+             * tests/guards/integrity.mjs now compares the two.
+             */
+            rows: v.optional(v.number()),
+            /**
+             * Hidden fields stay IN the template rather than being
+             * removed from it. A field the template does not mention
+             * is one reconcileTemplate puts back under "More" on the
+             * next load, so removal is not a way to hide anything —
+             * and a hidden field you cannot find is a field you cannot
+             * un-hide.
+             */
+            hidden: v.optional(v.boolean()),
           })
         ),
       })

@@ -327,7 +327,11 @@ export const integrity = {
     // The header's fields are the exception the check has to allow, so
     // it demands they go through the same RecordField the sections use.
     // Rendering one as `{npc.name}` is exactly the regression above.
-    const detailSrc = read("components", "NpcDetail.tsx");
+    // Comments stripped: a comment explaining that `{npc.name}` as a
+    // JSX child is forbidden is the rule being written down, not broken.
+    // The same thing tripped the "never build a <mark>" guard, which is
+    // how that one learned to strip them too.
+    const detailSrc = stripComments(read("components", "NpcDetail.tsx"));
     if (!/headerFields\.map\(/.test(detailSrc)) {
       problems.push(
         "NpcDetail no longer maps the header's fields through RecordField — " +
@@ -1830,6 +1834,118 @@ export const integrity = {
         problems.push(
           "the rename field is no longer portalled to <body> — inside a " +
             "<button> it is invalid content and will not take a click"
+        );
+      }
+    }
+
+    // ---- a hidden field is actually off the record ------------------
+    // The model can mark it hidden all it likes; if the record does not
+    // read the flag, hiding is a switch that does nothing. Unit tests
+    // cover the model and cannot see the rendering, so this is the half
+    // that needs saying here.
+    {
+      const src = stripComments(read("components", "NpcDetail.tsx"));
+      if (!/if \(!arranging && f\.hidden\) return null;/.test(src)) {
+        problems.push(
+          "NpcDetail does not skip hidden fields — the hide switch would " +
+            "mark them in the layout and change nothing on the record"
+        );
+      }
+      // And the other half: while arranging they must NOT be skipped,
+      // or a hidden field is one nobody can ever un-hide.
+      if (!/arranging \? " tpl-field" : ""|tpl-hidden/.test(src)) {
+        problems.push(
+          "NpcDetail no longer marks hidden fields while arranging — a " +
+            "hidden field you cannot see is one you cannot bring back"
+        );
+      }
+    }
+
+    // ---- the template writer and its table agree --------------------
+    // saveTemplate wrote `rows` for weeks while the npcTemplates
+    // validator declared only { key, span }. Convex objects are STRICT,
+    // so every save of a layout failed validation at write time — the
+    // designer's Save button had never worked, and nothing said so
+    // because the failure is a thrown mutation nobody was watching.
+    {
+      const npcsSrc = read("convex", "npcs.ts");
+      const schemaSrc = read("convex", "schema.ts");
+
+      const written = [
+        ...blockAfter(npcsSrc, /fields: t\.fields\.map\(\(f\) => \(/, "the saveTemplate field writer")
+          .matchAll(/^\s*(?:\.\.\.\(f\.)?([a-zA-Z]\w*)\s*[:?]/gm),
+      ].map((m) => m[1]);
+      if (written.length === 0) {
+        throw new Error("could not read saveTemplate's field writer");
+      }
+
+      // Sliced from the table first, THEN the field object. blockAfter
+      // anchors on where its pattern STARTS, so a pattern spanning from
+      // the table name to the field object hands back the table's own
+      // braces — which read as a field list of { campaignId, tabs } and
+      // reported every real field as undeclared.
+      const templateTable = schemaSrc.slice(
+        schemaSrc.indexOf("npcTemplates: defineTable")
+      );
+      if (!templateTable) {
+        throw new Error("no npcTemplates table in schema.ts");
+      }
+      const declared = topLevelKeys(
+        blockAfter(
+          templateTable,
+          /fields: v\.array\(\s*v\.object\(/,
+          "the npcTemplates field validator"
+        ),
+        "the npcTemplates field validator"
+      );
+
+      for (const key of written) {
+        if (!declared.includes(key)) {
+          problems.push(
+            `saveTemplate writes \`${key}\` but the npcTemplates validator ` +
+              "does not declare it — Convex objects are strict, so every " +
+              "save of a layout would fail validation"
+          );
+        }
+      }
+    }
+
+    // ---- a player who may write cannot write the DM's fields --------
+    // Players can create NPCs and keep editing the ones they made, so
+    // updateNpc is no longer DM-only — which makes the DM-only field
+    // list load-bearing. A fourth DM-only column added to the schema
+    // and not to that list is a field a player could write.
+    {
+      const npcsSrc = stripComments(read("convex", "npcs.ts"));
+      const listed = constArrayStrings(
+        npcsSrc,
+        "DM_ONLY_FIELDS",
+        "convex/npcs.ts"
+      );
+      const dmColumns = stringProps(
+        stripComments(read("components", "npcColumns.ts")),
+        "key",
+        "npcColumns.ts"
+      );
+      // Every DM-only column that updateNpc actually accepts has to be
+      // on the refusal list.
+      for (const key of ["hidden", "dmNotes", "secret"]) {
+        if (!listed.includes(key)) {
+          problems.push(
+            `updateNpc accepts \`${key}\` but DM_ONLY_FIELDS does not list ` +
+              "it — a player editing an NPC they created could write it"
+          );
+        }
+        if (!dmColumns.includes(key)) {
+          problems.push(
+            `DM_ONLY_FIELDS names \`${key}\`, which is not a column`
+          );
+        }
+      }
+      if (!/if \(!isDm && !isCreator\)/.test(npcsSrc)) {
+        problems.push(
+          "updateNpc no longer refuses a caller who is neither the DM nor " +
+            "the NPC's creator"
         );
       }
     }

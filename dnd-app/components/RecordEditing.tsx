@@ -12,6 +12,7 @@ import {
   moveField,
   removeTab,
   renameTab,
+  setFieldHidden,
   setRows,
   setSpan,
   shiftTab,
@@ -219,6 +220,7 @@ export function ResizeHandles({
 }) {
   return (
     <>
+
       <span
         className="tpl-resize tpl-resize-x"
         title="Drag to set how wide this field is"
@@ -358,5 +360,52 @@ export function TabStripEditor({
         </button>
       </span>
     </div>
+  );
+}
+
+/**
+ * Take a field off the record, or put it back.
+ *
+ * Hidden rather than removed: a field the template does not mention
+ * comes straight back on the next load, and one with no row in the
+ * editor is one nobody can un-hide. So it keeps its tab, its place and
+ * its size, and shows here greyed with the switch flipped.
+ *
+ * DM-only fields are worth hiding too — a table that never uses
+ * "Secret" should not have it taking a quarter of a row — and hiding
+ * one changes nothing about who may READ it. That is decided on the
+ * server, and a hidden field is withheld from a player exactly as
+ * before.
+ */
+export function FieldHideToggle({
+  template,
+  fieldKey,
+  hidden,
+  onChange,
+}: {
+  template: NpcTemplate;
+  fieldKey: string;
+  hidden: boolean;
+  onChange: (next: NpcTemplate) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`tpl-hide${hidden ? " on" : ""}`}
+      aria-pressed={hidden}
+      title={
+        hidden
+          ? "Hidden from the record — click to show it again"
+          : "Hide this field from the record"
+      }
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onChange(setFieldHidden(template, fieldKey, !hidden));
+      }}
+    >
+      {hidden ? "Hidden" : "Hide"}
+    </button>
   );
 }

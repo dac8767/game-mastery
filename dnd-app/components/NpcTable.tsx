@@ -690,7 +690,11 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
             </label>
           )}
 
-          {isDm && (
+          {/* Anyone at the table can add one. A player meeting somebody
+              the DM has not written down should be able to write them
+              down; the NPC they make is theirs to fill in, and only the
+              DM can delete it. */}
+          {(
             <button
               type="button"
               className="npc-btn primary"

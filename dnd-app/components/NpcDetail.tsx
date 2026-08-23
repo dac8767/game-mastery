@@ -29,6 +29,7 @@ import {
   templateFor,
 } from "@/components/npcTemplate";
 import {
+  FieldHideToggle,
   ResizeHandles,
   TabStripEditor,
   useTemplateEditing,
@@ -153,6 +154,8 @@ export function NpcDetail({
   // the edit bar's one Save, so arranging the layout and renaming a
   // heading are one act rather than two screens and two buttons.
   const saveTemplate = useMutation(api.npcs.saveTemplate);
+  const deleteNpc = useMutation(api.npcs.deleteNpc);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [draftTabs, setDraftTabs] = useState<NpcTemplate | null>(null);
   const arranging = ui.editing && isDm;
 
@@ -329,6 +332,59 @@ export function NpcDetail({
             cannot tell "hide this" from "this is hidden" without going
             to look at the list. The server withholds a hidden NPC from
             players regardless of what this button says. */}
+        {/* DM only, and behind a confirmation. Deleting takes the notes
+            and the portrait with it and nothing here can undo it, which
+            is a different weight of action from every other button on
+            this bar. */}
+        {isDm &&
+          (confirmDelete ? (
+            <span className="record-confirm">
+              {/* "this NPC", not the name interpolated: rendering
+                  {npc.name} as bare text is the pattern that made the
+                  name read-only in the header once, and the guard
+                  rightly refuses it anywhere in this file. The record
+                  you are looking at says whose it is. */}
+              <span className="settings-note">
+                Delete this NPC and every note on it?
+              </span>
+              <button
+                type="button"
+                className="npc-btn"
+                onClick={() => setConfirmDelete(false)}
+              >
+                Keep
+              </button>
+              <button
+                type="button"
+                className="npc-btn danger"
+                onClick={async () => {
+                  try {
+                    setError(null);
+                    await deleteNpc({ npcId: npc._id });
+                    // Closed rather than left open on a record that no
+                    // longer exists.
+                    onClose();
+                  } catch (e) {
+                    setConfirmDelete(false);
+                    setError(
+                      e instanceof Error ? e.message : "Could not delete it."
+                    );
+                  }
+                }}
+              >
+                Delete
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="npc-btn record-delete"
+              onClick={() => setConfirmDelete(true)}
+            >
+              Delete NPC
+            </button>
+          ))}
+
         {isDm && hiddenCol && (
           <button
             type="button"
@@ -473,6 +529,11 @@ export function NpcDetail({
               // noise. Empty and editable is where the work is, so it
               // is the toggle that decides. While arranging, everything
               // shows: you cannot move a field you cannot see.
+              // Hidden is hidden — off the record entirely for anyone
+              // reading it. While arranging it stays put, greyed, with
+              // the switch flipped, because a hidden field you cannot
+              // find is a field you cannot bring back.
+              if (!arranging && f.hidden) return null;
               if (!arranging && !value && (!canEdit(col) || !showEmpty)) {
                 return null;
               }
@@ -486,6 +547,7 @@ export function NpcDetail({
                   span={editing.liveSpan(f.key, f.span)}
                   rows={editing.liveRows(f.key, f.rows)}
                   arranging={arranging}
+                  hidden={Boolean(f.hidden)}
                   over={
                     editing.dropAt?.tab === openTab.id &&
                     editing.dropAt.index === fi
@@ -510,12 +572,20 @@ export function NpcDetail({
                   }
                   handles={
                     arranging ? (
-                      <ResizeHandles
-                        editing={editing}
-                        fieldKey={f.key}
-                        span={f.span}
-                        rows={f.rows}
-                      />
+                      <>
+                        <ResizeHandles
+                          editing={editing}
+                          fieldKey={f.key}
+                          span={f.span}
+                          rows={f.rows}
+                        />
+                        <FieldHideToggle
+                          template={template}
+                          fieldKey={f.key}
+                          hidden={Boolean(f.hidden)}
+                          onChange={setDraftTabs}
+                        />
+                      </>
                     ) : null
                   }
                   onCommit={(text) => commit(col, text)}
@@ -654,6 +724,7 @@ function RecordField({
   rows,
   tall,
   arranging,
+  hidden,
   over,
   dragProps,
   onDragOver,
@@ -675,6 +746,8 @@ function RecordField({
   tall?: boolean;
   /** Edit mode: this field is being moved and resized, not filled in. */
   arranging?: boolean;
+  /** The layout keeps this field off the record. */
+  hidden?: boolean;
   /** The pointer is over this field, suggesting a drop here. */
   over?: boolean;
   dragProps?: {
@@ -700,6 +773,7 @@ function RecordField({
     !variant && rows && rows > 1 ? `rw-${rows}` : "",
     tall ? "tall" : "",
     arranging ? "tpl-field" : "",
+    arranging && hidden ? "tpl-hidden" : "",
     over ? "over" : "",
   ]
     .filter(Boolean)

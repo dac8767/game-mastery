@@ -8,6 +8,7 @@ import { COLUMN_BY_KEY } from "@/components/npcColumns";
 import { BODY_KEYS, resolveTemplate } from "@/components/NpcDetail";
 import { NpcTemplate, templateKeys } from "@/components/npcTemplate";
 import {
+  FieldHideToggle,
   ResizeHandles,
   TabStripEditor,
   useTemplateEditing,
@@ -194,8 +195,8 @@ export function NpcTemplateDesigner({
                 className={`detail-field tpl-field sp-${span}${
                   rows > 1 ? ` rw-${rows}` : ""
                 }${col.dmOnly ? " dm-field" : ""}${
-                  isDropTarget ? " over" : ""
-                }`}
+                  f.hidden ? " tpl-hidden" : ""
+                }${isDropTarget ? " over" : ""}`}
                 {...editing.dragProps(f.key)}
                 onDragOver={(e) => {
                   e.preventDefault();
@@ -240,6 +241,15 @@ export function NpcTemplateDesigner({
                   fieldKey={f.key}
                   span={f.span}
                   rows={f.rows}
+                />
+                <FieldHideToggle
+                  template={template}
+                  fieldKey={f.key}
+                  hidden={Boolean(f.hidden)}
+                  onChange={(next) => {
+                    setDraft(next);
+                    setError(null);
+                  }}
                 />
                 <span className="tpl-span">
                   {span}×{rows}

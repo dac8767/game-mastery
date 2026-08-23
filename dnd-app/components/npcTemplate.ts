@@ -62,6 +62,16 @@ export interface TemplateField {
   span: number;
   /** 1-6 rows of the record grid. */
   rows: number;
+  /**
+   * Off the record, but still in the template.
+   *
+   * NOT the same as removing it. A field the template does not mention
+   * is one reconcileTemplate puts straight back under "More" on the
+   * next load, so removal cannot hide anything — and it would leave the
+   * field with no row in the editor, which is a field you cannot bring
+   * back. Hidden keeps its place, its size and its tab.
+   */
+  hidden?: boolean;
 }
 
 export interface TemplateTab {
@@ -86,7 +96,12 @@ export interface LooseTemplate {
   tabs?: {
     id?: string;
     title?: string;
-    fields?: { key?: string; span?: number; rows?: number }[];
+    fields?: {
+      key?: string;
+      span?: number;
+      rows?: number;
+      hidden?: boolean;
+    }[];
   }[];
 }
 
@@ -180,7 +195,15 @@ export function reconcileTemplate(
       // to a field the eye has already scrolled past.
       if (!valid.has(key) || seen.has(key)) continue;
       seen.add(key);
-      fields.push({ key, span: clampSpan(f?.span), rows: clampRows(f?.rows) });
+      // `hidden` carried through reconciliation, or a hidden field
+      // would come back visible on the next load — which reads as the
+      // hide having silently not saved.
+      fields.push({
+        key,
+        span: clampSpan(f?.span),
+        rows: clampRows(f?.rows),
+        ...(f?.hidden ? { hidden: true } : {}),
+      });
     }
     const title = String(tab?.title ?? "").trim().slice(0, TEMPLATE_LIMITS.titleLength);
     tabs.push({
@@ -383,4 +406,34 @@ export function shiftTab(
   const [t] = tabs.splice(at, 1);
   tabs.splice(to, 0, t);
   return { tabs };
+}
+
+/**
+ * Hide a field, or bring it back.
+ *
+ * A no-op for a key the template does not hold, like every other
+ * operation here: an id that is not in the layout is an id that came
+ * from a stale screen, and rebuilding the layout around it would be
+ * worse than ignoring it.
+ */
+export function setFieldHidden(
+  template: NpcTemplate,
+  key: string,
+  hidden: boolean
+): NpcTemplate {
+  return {
+    tabs: template.tabs.map((tab) => ({
+      ...tab,
+      fields: tab.fields.map((f) =>
+        f.key === key ? { ...f, hidden: hidden || undefined } : f
+      ),
+    })),
+  };
+}
+
+/** Every key the layout is currently keeping off the record. */
+export function hiddenKeys(template: NpcTemplate): string[] {
+  return template.tabs.flatMap((tab) =>
+    tab.fields.filter((f) => f.hidden).map((f) => f.key)
+  );
 }

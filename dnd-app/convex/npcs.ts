@@ -200,9 +200,36 @@ export const updateNpc = mutation({
   handler: async (ctx, args) => {
     const npc = await ctx.db.get(args.npcId);
     if (!npc) throw new Error("NPC not found");
-    await requireDm(ctx, npc.campaignId);
+
+    /**
+     * The DM, or the player who created this one.
+     *
+     * A player who can add an NPC but cannot type a name into it has
+     * been given a button, not a feature. So the creator keeps writing
+     * to the NPC they made — but only to the ORDINARY fields. The
+     * DM-only three are refused below whoever asks, which is what keeps
+     * "a player made this" from becoming "a player can write the DM's
+     * notes on it".
+     *
+     * The DM check comes first and `createdBy` is only set for a
+     * player's NPC, so "no creator" can never read as "anyone".
+     */
+    const { userId, isDm } = await requireMember(ctx, npc.campaignId);
+    const isCreator = npc.createdBy !== undefined && npc.createdBy === userId;
+    if (!isDm && !isCreator) {
+      throw new Error("Only the DM can edit that NPC");
+    }
 
     const { npcId, ...rest } = args;
+
+    if (!isDm) {
+      for (const key of DM_ONLY_FIELDS) {
+        if (rest[key] !== undefined) {
+          throw new Error("Only the DM can change that");
+        }
+      }
+    }
+
     const patch: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(rest)) {
       if (value === undefined) continue; // field not being edited
@@ -213,6 +240,18 @@ export const updateNpc = mutation({
     await ctx.db.patch(npcId, patch as Partial<Doc<"npcs">>);
   },
 });
+
+/**
+ * The fields only the DM may write, named once.
+ *
+ * The same three the query strips on the way out, so the boundary reads
+ * the same in both directions. Listed as a const rather than checked
+ * inline because a fourth DM-only field added to the schema and not to
+ * this list is a field a player could write — and that is exactly the
+ * silent kind of failure the guards exist for, so integrity.mjs
+ * compares this list against the DM-only columns.
+ */
+const DM_ONLY_FIELDS = ["hidden", "dmNotes", "secret"] as const;
 
 /**
  * Any campaign member: edit the shared Player Notes on an NPC.
@@ -257,7 +296,7 @@ export const createNpc = mutation({
     name: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireDm(ctx, args.campaignId);
+    const { userId, isDm } = await requireMember(ctx, args.campaignId);
 
     return await ctx.db.insert("npcs", {
       campaignId: args.campaignId,
@@ -267,9 +306,50 @@ export const createNpc = mutation({
       groups: [],
       familyMembers: [],
       place: [],
-      // New NPCs start hidden: the DM decides when the table meets them.
-      hidden: true,
+      /**
+       * A DM's new NPC starts hidden — they decide when the table meets
+       * them. A PLAYER's does not, and cannot: hidden NPCs are withheld
+       * from players server-side, so one created hidden would vanish the
+       * instant it was made, with no way for its author to reach it.
+       */
+      hidden: isDm,
+      // Recorded only for a player's, so "no creator" stays unambiguous.
+      createdBy: isDm ? undefined : userId,
     });
+  },
+});
+
+/**
+ * DM: delete an NPC, and everything hanging off it.
+ *
+ * DM-only even for an NPC a player created. Deleting is the one action
+ * here that cannot be undone by the person it surprises, and a roster
+ * everyone can delete from is a roster that quietly loses people.
+ *
+ * The notes and the portrait go with it. A note whose NPC is gone is
+ * unreachable rather than deleted, and an orphaned portrait is a file
+ * in storage nothing references and nothing will ever clean up.
+ */
+export const deleteNpc = mutation({
+  args: { npcId: v.id("npcs") },
+  handler: async (ctx, args) => {
+    const npc = await ctx.db.get(args.npcId);
+    if (!npc) return;
+    await requireDm(ctx, npc.campaignId);
+
+    const notes = await ctx.db
+      .query("npcNotes")
+      .withIndex("by_npc", (q) => q.eq("npcId", args.npcId))
+      .collect();
+    for (const note of notes) {
+      for (const image of note.imageIds ?? []) {
+        await ctx.storage.delete(image);
+      }
+      await ctx.db.delete(note._id);
+    }
+
+    if (npc.portraitId) await ctx.storage.delete(npc.portraitId);
+    await ctx.db.delete(args.npcId);
   },
 });
 
@@ -363,6 +443,7 @@ export const saveTemplate = mutation({
             key: v.string(),
             span: v.number(),
             rows: v.optional(v.number()),
+            hidden: v.optional(v.boolean()),
           })
         ),
       })
@@ -378,6 +459,9 @@ export const saveTemplate = mutation({
         key: f.key.slice(0, 64),
         span: Math.min(4, Math.max(1, Math.round(f.span) || 1)),
         rows: Math.min(6, Math.max(1, Math.round(f.rows ?? 1) || 1)),
+        // Written only when true, so a visible field carries no key at
+        // all rather than a `false` on every row of every layout.
+        ...(f.hidden ? { hidden: true } : {}),
       })),
     }));
 

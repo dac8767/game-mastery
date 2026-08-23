@@ -1149,11 +1149,21 @@ body.col-resizing {
   align-items: center;
 }
 
-/* The way out on the left, who may see it on the right, and nothing
-   between them — the gap is what makes the pair read as two opposite
-   decisions rather than a row of buttons. */
-.record-bar > :last-child {
+/* The way out on the left, and on the right the two decisions ABOUT
+   the record rather than in it. The first of those takes the gap; the
+   rest sit beside it. */
+.record-bar > .record-delete,
+.record-bar > .record-confirm {
   margin-left: auto;
+}
+
+.record-bar > :last-child:not(.record-hide-btn) {
+  margin-left: auto;
+}
+
+.record-bar > .record-delete ~ .record-hide-btn,
+.record-bar > .record-confirm ~ .record-hide-btn {
+  margin-left: 0;
 }
 
 .record-pane {
@@ -6566,4 +6576,75 @@ button.cal-day:hover {
 .record-tabs.tpl-tabstrip {
   flex-wrap: wrap;
   gap: 0.4rem;
+}
+
+/* ---------- hiding a field, and deleting a record ---------- */
+
+/* Off the record, but still in the editor. Faded rather than removed,
+   because a hidden field you cannot find is one you cannot bring back. */
+.detail-field.tpl-hidden {
+  opacity: 0.42;
+}
+
+.detail-field.tpl-hidden .detail-label {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.tpl-hide {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.35rem;
+  z-index: 2;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-raised);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.tpl-hide:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.tpl-hide.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  /* The one control on a faded field that has to stay readable — it is
+     the way back. */
+  opacity: 1;
+}
+
+.detail-field.tpl-hidden .tpl-hide {
+  opacity: 1;
+}
+
+.record-delete {
+  margin-left: auto;
+}
+
+.record-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--bloodied);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+
+.record-confirm .settings-note {
+  margin: 0;
+}
+
+.npc-btn.danger {
+  border-color: var(--bloodied);
+  background: var(--bloodied);
+  color: var(--bg);
 }
