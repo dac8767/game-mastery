@@ -16,6 +16,7 @@
  *   - the query hands back fields the schema may no longer have
  */
 
+import ts from "typescript";
 import { readdirSync, readFileSync } from "node:fs";
 import {
   read,
@@ -1833,6 +1834,27 @@ export const integrity = {
       }
     }
 
+    // ---- no hook an early return can skip ---------------------------
+    // React counts hooks by POSITION. A hook below a conditional return
+    // runs on some renders and not others, and the component throws
+    // "rendered more hooks than during the previous render" — taking
+    // the whole screen with it.
+    //
+    // Nothing else sees this. It typechecks, it builds, and it does not
+    // fire on first paint: the early return here was `if (stored ===
+    // undefined)`, so the count went 16, then 17 the moment the Convex
+    // query resolved. The Settings page threw on load.
+    for (const [file, src] of sourceFiles("components", "app")) {
+      if (!file.endsWith(".tsx")) continue;
+      for (const hit of conditionalHooks(file, src)) {
+        problems.push(
+          `${file}:${hit.line} calls a hook below an earlier return ` +
+            `(${hit.text}) — React counts hooks by position, so this one ` +
+            "runs on some renders and not others"
+        );
+      }
+    }
+
     // ---- no component declared inside another component -------------
     // The symptom is unforgettable and the cause is invisible: you can
     // type one letter into a field, and then it loses focus and you
@@ -2075,3 +2097,76 @@ export const integrity = {
     return problems;
   },
 };
+
+/**
+ * Hook calls an earlier return can skip.
+ *
+ * Parsed with TypeScript's own parser rather than scanned with a regex.
+ * The hand-rolled version of this counted braces to find scope
+ * boundaries and got it wrong four times in a row — named nested
+ * functions, object accessors, an arrow whose body started on the next
+ * line, and finally a brace count that unbalanced somewhere in the JSX
+ * and made the whole file scan stop early while still reporting clean.
+ * A guard that quietly checks nothing is the thing this suite exists to
+ * prevent, and `typescript` is already a dependency.
+ */
+function conditionalHooks(fileName, source) {
+  const sf = ts.createSourceFile(
+    fileName,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX
+  );
+  const found = [];
+
+  const isHookCall = (node) =>
+    ts.isCallExpression(node) &&
+    ts.isIdentifier(node.expression) &&
+    /^use[A-Z]/.test(node.expression.text);
+
+  const opensItsOwnScope = (node) =>
+    ts.isFunctionDeclaration(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isArrowFunction(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isGetAccessor(node) ||
+    ts.isSetAccessor(node) ||
+    ts.isClassDeclaration(node);
+
+  /** One function's own body, with nested scopes checked separately. */
+  const checkScope = (body) => {
+    let sawReturn = false;
+    const visit = (node) => {
+      if (opensItsOwnScope(node)) {
+        // Its returns are ITS returns, not this function's.
+        if (node.body) checkScope(node.body);
+        return;
+      }
+      if (sawReturn && isHookCall(node)) {
+        const { line } = sf.getLineAndCharacterOfPosition(node.getStart(sf));
+        found.push({
+          line: line + 1,
+          text: node.getText(sf).split("\n")[0].slice(0, 70),
+        });
+      }
+      ts.forEachChild(node, visit);
+      // Set AFTER descending, so a hook INSIDE the returned expression
+      // — `return useContext(X) ?? SHIPPED`, the whole body of a
+      // one-line hook wrapper — runs AT the return, not after it.
+      if (ts.isReturnStatement(node)) sawReturn = true;
+    };
+    ts.forEachChild(body, visit);
+  };
+
+  const top = (node) => {
+    if (opensItsOwnScope(node)) {
+      if (node.body) checkScope(node.body);
+      return;
+    }
+    ts.forEachChild(node, top);
+  };
+  ts.forEachChild(sf, top);
+
+  return found;
+}

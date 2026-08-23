@@ -48,6 +48,18 @@ export function NpcTemplateDesigner({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Derived and hooked BEFORE the loading return. A hook after an early
+  // return runs on some renders and not others, and React counts hooks
+  // by position — the count went 16, then 17 the moment the query
+  // resolved, and the whole screen threw. resolveTemplate(null) is the
+  // shipped layout, so there is always something to hand it.
+  const template = draft ?? resolveTemplate(stored ?? null);
+  const dirty = draft !== null;
+  const editing = useTemplateEditing(template, (next) => {
+    setDraft(next);
+    setError(null);
+  });
+
   if (stored === undefined) {
     return (
       <section className="settings-block">
@@ -56,12 +68,6 @@ export function NpcTemplateDesigner({
     );
   }
 
-  const template = draft ?? resolveTemplate(stored ?? null);
-  const dirty = draft !== null;
-  const editing = useTemplateEditing(template, (next) => {
-    setDraft(next);
-    setError(null);
-  });
   const openTab =
     template.tabs.find((t) => t.id === tabId) ?? template.tabs[0] ?? null;
 
