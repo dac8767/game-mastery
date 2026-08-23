@@ -163,7 +163,11 @@ export function AppShell({
     /* The provider wraps the whole shell, not one screen: edit mode has
        to survive walking to another screen to change that one, and the
        bar it puts along the bottom is mounted here so it does. */
-    <UiProvider campaignId={campaignId} canEdit={isDm}>
+    <UiProvider
+      campaignId={campaignId}
+      canEdit={isDm}
+      previewing={runsThis && previewing}
+    >
     <div className="shell">
       <ThemeSync />
       <nav className="sidebar">

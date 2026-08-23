@@ -283,17 +283,23 @@ export function SettingsPanel({
         <>
           <section className="settings-block">
             <h2>Edit mode</h2>
-            <p className="settings-note">
-              Turn this on and every label in the app you are allowed to
-              change grows a dotted outline — click one to rename it in
-              place — and every split you are allowed to move grows a
-              handle. Walk to any screen with it on and edit it there;
-              the bar along the bottom follows you. Save applies it for
-              everyone in this campaign, and Export gives you the whole
-              set of changes to send back so they can ship as the
-              defaults.
-            </p>
+            {/* The switch first, the explanation after. It was the
+                other way round, and the one line saying WHY the switch
+                was missing sat under six lines of prose about what the
+                switch does — so a DM previewing as a player read the
+                whole block and concluded there was no button. */}
             <EditModeSwitch />
+            <p className="settings-note">
+              Turn this on and every label you are allowed to change grows
+              a dotted outline — click one to rename it in place. On the
+              NPC record the fields themselves become draggable: move one,
+              drag its edges to resize it, drop it on a tab to send it
+              there, and rename or add tabs on the strip. Walk to any
+              screen with it on and edit it there; the bar along the
+              bottom follows you. Save applies it for everyone in this
+              campaign, and Export gives you the whole set of changes to
+              send back so they can ship as the defaults.
+            </p>
           </section>
 
           <SidebarDesigner />

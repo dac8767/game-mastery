@@ -66,6 +66,15 @@ interface UiState {
   editing: boolean;
   /** Null for anyone who may not edit — a player, or a DM previewing. */
   setEditing: ((on: boolean) => void) | null;
+  /**
+   * WHY it is null, when it is.
+   *
+   * "You may not do this" and "you have switched off the thing that
+   * lets you do this" need different answers, and giving the second one
+   * the first one's message is how a switch that is one click away
+   * reads as a switch that does not exist. It did.
+   */
+  blockedByPreview: boolean;
   rename: (id: string, value: string) => void;
   setLayout: (id: string, value: number) => void;
   dirty: boolean;
@@ -105,6 +114,7 @@ const SHIPPED: UiState = {
   layout: layoutFor([]),
   editing: false,
   setEditing: null,
+  blockedByPreview: false,
   rename: () => {},
   setLayout: () => {},
   dirty: false,
@@ -116,11 +126,14 @@ const SHIPPED: UiState = {
 export function UiProvider({
   campaignId,
   canEdit,
+  previewing,
   children,
 }: {
   campaignId: Id<"campaigns">;
   /** The DM, and not previewing as a player. */
   canEdit: boolean;
+  /** The DM, but looking at their own game as a player would. */
+  previewing: boolean;
   children: ReactNode;
 }) {
   const stored = useQuery(api.settings.getUiOverrides, { campaignId });
@@ -251,6 +264,7 @@ export function UiProvider({
     layout,
     editing: editing && canEdit,
     setEditing: canEdit ? setEditing : null,
+    blockedByPreview: !canEdit && previewing,
     rename,
     setLayout: setLayoutValue,
     dirty,
@@ -705,12 +719,35 @@ function ExportDialog({
  */
 export function EditModeSwitch() {
   const ui = useUi();
+  const stopPreview = useMutation(api.settings.saveMySettings);
+
+  // The DM, looking at their own game as a player would. Say so, and
+  // put the way back HERE — the toggle is at the bottom of the sidebar,
+  // and "turn off View as player" written in a paragraph is a treasure
+  // hunt when it could be a button.
+  if (!ui.setEditing && ui.blockedByPreview) {
+    return (
+      <div className="ui-editswitch">
+        <button
+          type="button"
+          className="npc-btn primary"
+          onClick={() => void stopPreview({ viewAsPlayer: false })}
+        >
+          Stop viewing as a player
+        </button>
+        <span className="settings-note">
+          Edit mode is the DM&apos;s, and you are currently looking at this
+          campaign the way a player does.
+        </span>
+      </div>
+    );
+  }
 
   if (!ui.setEditing) {
     return (
       <p className="settings-note">
-        Edit mode is the DM&apos;s. Turn off &ldquo;View as player&rdquo; to
-        use it.
+        Edit mode is the DM&apos;s — it changes what everyone in this
+        campaign sees, so only the person running it can turn it on.
       </p>
     );
   }
