@@ -20,6 +20,7 @@ import {
   removeSection,
   renameSection,
   setHidden,
+  setSectionDmOnly,
   shiftSection,
   showAll,
   shownItems,
@@ -138,6 +139,15 @@ export function SidebarDesigner() {
         ever removed, because a screen with no way to reach it is worse
         than one you scroll past.
       </p>
+      <p className="settings-note">
+        A named section folds up: click its heading in the sidebar and it
+        stays folded until you open it again. <strong>DM only</strong>{" "}
+        hides a whole section while you are not the DM of the campaign
+        you are in — including while you are viewing as a player, which
+        is what it is for. It is a preference, not a permission: this is
+        your sidebar and nobody else has one built from it, and what a
+        player can actually reach is decided on the server either way.
+      </p>
 
       {error && <p className="form-error">{error}</p>}
 
@@ -209,6 +219,34 @@ export function SidebarDesigner() {
                       Remove
                     </button>
                   </header>
+
+                  {/* Per section rather than per item: the point is to
+                      put a whole block of prep out of sight at once,
+                      which hiding six things one at a time and putting
+                      them all back afterwards is not. */}
+                  <label className="sbd-dm-only">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(section.dmOnly)}
+                      onChange={(e) =>
+                        edit(
+                          setSectionDmOnly(
+                            layout,
+                            section.id,
+                            e.target.checked
+                          )
+                        )
+                      }
+                    />
+                    <span>
+                      DM only
+                      <span className="settings-note">
+                        {" "}
+                        — gone from your sidebar unless you are the DM
+                        here
+                      </span>
+                    </span>
+                  </label>
 
                   {items.length === 0 ? (
                     <p className="settings-note sbd-drop-hint">

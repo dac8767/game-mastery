@@ -260,10 +260,15 @@ export const integrity = {
     //
     // With the header outside the split it spans the full width and the
     // notes start underneath it, reading as a footnote to the record
-    // rather than the other half of it. Both files draw the same
-    // layout, and the designer claims to be WYSIWYG, so they have to
-    // agree about this or the preview lies.
-    for (const file of ["NpcDetail.tsx", "NpcTemplateDesigner.tsx"]) {
+    // rather than the other half of it.
+    //
+    // This used to run over two files, because the Templates tab held a
+    // miniature of the record that claimed to be WYSIWYG and so had to
+    // agree with it. That miniature is gone — edit mode arranges the
+    // record on the record — so there is one drawing of this layout and
+    // nothing left for it to disagree with.
+    {
+      const file = "NpcDetail.tsx";
       const src = read("components", file);
       const split = src.indexOf(`className="record-split"`);
       const head = src.indexOf(`className="record-head`);
@@ -277,6 +282,49 @@ export const integrity = {
             "running the full height beside it"
         );
       }
+    }
+
+    // Deleting the Templates tab spent the record's only other way to be
+    // arranged. That was the right trade while the record itself can be
+    // arranged — and a disaster the moment it cannot, because there is
+    // now no second screen to fall back to and nothing that would fail:
+    // the record would simply render, un-draggable, looking finished.
+    //
+    // So the pieces edit mode arranges the record WITH are checked to be
+    // mounted, by name, from the file that has to mount them.
+    {
+      const src = read("components", "NpcDetail.tsx");
+      for (const piece of [
+        "useTemplateEditing",
+        "TabStripEditor",
+        "ResizeHandles",
+        "FieldHideToggle",
+      ]) {
+        // Imported AND used — an import alone is what a half-finished
+        // refactor leaves behind, and it renders nothing.
+        const uses = [...src.matchAll(new RegExp(`\\b${piece}\\b`, "g"))].length;
+        if (uses < 2) {
+          problems.push(
+            `NpcDetail does not mount ${piece} — the Templates tab was ` +
+              "removed because the record arranges itself, so losing this " +
+              "leaves no way to arrange the record at all"
+          );
+        }
+      }
+    }
+
+    // And the tab it was removed from must be gone from BOTH lists, not
+    // just unrendered. A declared tab with no panel is already caught
+    // further down; this catches the other half — a component left on
+    // disk that nothing imports, which typecheck is happy with and
+    // which is the copy someone edits by mistake a month from now.
+    if (exists("components", "NpcTemplateDesigner.tsx")) {
+      problems.push(
+        "components/NpcTemplateDesigner.tsx is back on disk — the Templates " +
+          "tab was removed in favour of arranging the record on the record, " +
+          "and a second designer nothing imports is a copy that silently " +
+          "drifts"
+      );
     }
 
     // A pinned field is out of the template's hands, so the ONLY thing
@@ -842,6 +890,26 @@ export const integrity = {
       problems.push(
         "AppShell no longer renders through visibleSidebar — the saved " +
           "sidebar layout would be stored and ignored"
+      );
+    }
+    // A DM-only SECTION is filtered on the same preview-adjusted flag
+    // as the DM-only items. Handing visibleSidebar the structural
+    // runsThis instead would type-check perfectly and leave the DM's
+    // prep section standing in the preview that exists to show what a
+    // player sees — the one place its absence is the entire point.
+    if (!/visibleSidebar\(layout, allowed, isDm\)/.test(shellSrc)) {
+      problems.push(
+        "AppShell does not pass the previewing-adjusted isDm to " +
+          "visibleSidebar — a DM-only section would survive View as Player"
+      );
+    }
+    // Folding writes through to the saved layout. Component state would
+    // type-check and would reset on every navigation, because there is
+    // no shared layout above these screens and the shell remounts.
+    if (/collapsed/.test(shellSrc) && !/saveSettings\(\{ sidebar:/.test(shellSrc)) {
+      problems.push(
+        "AppShell folds sections without writing the layout back — a fold " +
+          "kept in component state springs open on the next navigation"
       );
     }
     // ALL_NAV_ITEMS is what reconcile is given as the full set. If the
@@ -1894,6 +1962,93 @@ export const integrity = {
             `saveTemplate writes \`${key}\` but the npcTemplates validator ` +
               "does not declare it — Convex objects are strict, so every " +
               "save of a layout would fail validation"
+          );
+        }
+      }
+    }
+
+    // ---- the sidebar is declared in three places, and they agree ----
+    // Exactly the failure above, one screen over. A key added to
+    // SidebarSection and not to both validators does not degrade: the
+    // designer works, the sidebar renders, and every Save of the whole
+    // layout fails validation — which is how `rows` shipped on the
+    // record template and how nobody noticed for a day.
+    //
+    // Three copies because there are three compilations: the component
+    // interface, the mutation's argument validator, and the table.
+    // TypeScript checks none of them against the others.
+    {
+      const layoutSrc = stripComments(read("components", "sidebarLayout.ts"));
+      const settingsSrc = read("convex", "settings.ts");
+      const schemaSrc = read("convex", "schema.ts");
+
+      // `id: string;` and `dmOnly?: boolean;` both declare a field, and
+      // topLevelKeys does not read the optional marker — so this reads
+      // the interface itself rather than borrowing that helper.
+      const ifaceBody = blockAfter(
+        layoutSrc,
+        /export interface SidebarSection\s*/,
+        "the SidebarSection interface"
+      );
+      const ifaceKeys = [
+        ...ifaceBody.matchAll(/^\s*([A-Za-z_$][\w$]*)\??\s*:/gm),
+      ].map((m) => m[1]);
+      if (ifaceKeys.length === 0) {
+        throw new Error("read no keys off SidebarSection — parser out of date?");
+      }
+
+      const validatorKeys = (src, anchor, label) =>
+        [
+          ...blockAfter(src, anchor, label).matchAll(
+            /^\s*([A-Za-z_$][\w$]*)\s*:/gm
+          ),
+        ].map((m) => m[1]);
+
+      // The mutation's validator: the section object inside
+      // sidebarValidator's `sections: v.array(v.object({ … }))`.
+      const mutationKeys = validatorKeys(
+        settingsSrc.slice(settingsSrc.indexOf("export const sidebarValidator")),
+        /sections: v\.array\(\s*v\.object\(/,
+        "the sidebarValidator section object"
+      );
+
+      // And the table's, sliced from userSettings first so the anchor
+      // cannot run away into another table's `sections:`.
+      const settingsTable = schemaSrc.slice(
+        schemaSrc.indexOf("userSettings: defineTable")
+      );
+      if (!settingsTable) {
+        throw new Error("no userSettings table in schema.ts");
+      }
+      const tableKeys = validatorKeys(
+        settingsTable,
+        /sections: v\.array\(\s*v\.object\(/,
+        "the schema's sidebar section validator"
+      );
+
+      for (const key of ifaceKeys) {
+        for (const [where, keys] of [
+          ["settings.sidebarValidator", mutationKeys],
+          ["the userSettings table", tableKeys],
+        ]) {
+          if (!keys.includes(key)) {
+            problems.push(
+              `SidebarSection declares \`${key}\` but ${where} does not — ` +
+                "Convex objects are strict, so saving a sidebar would fail " +
+                "validation outright rather than dropping the field"
+            );
+          }
+        }
+      }
+      // The other direction, which is a quieter loss: a validator key
+      // nothing writes is a setting that can be stored and can never
+      // be read back into anything.
+      for (const key of mutationKeys) {
+        if (!ifaceKeys.includes(key)) {
+          problems.push(
+            `settings.sidebarValidator accepts \`${key}\`, which is not a ` +
+              "field of SidebarSection — nothing writes it and nothing " +
+              "reads it"
           );
         }
       }

@@ -115,8 +115,18 @@ export function navHref(item: NavItem, base: string): string {
  */
 export const SIDEBAR_GROUPS = [
   {
+    /**
+     * Titled, like every other group.
+     *
+     * It shipped untitled because the campaign name sat directly above
+     * it and was treated as its heading. That made the campaign name
+     * do two jobs — the name of the game, and the label of a group of
+     * screens — and made this the one section whose heading could not
+     * be edited or seen. The campaign name is now its own block above,
+     * and this is an ordinary section that says what it is.
+     */
     id: "campaign",
-    title: "",
+    title: "Campaign",
     itemIds: CAMPAIGN_ITEMS.map((i) => i.id),
   },
   { id: "tools", title: "Tools", itemIds: TOOL_ITEMS.map((i) => i.id) },

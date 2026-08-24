@@ -7,7 +7,6 @@ import { Id } from "@/convex/_generated/dataModel";
 import { THEMES } from "@/components/themes";
 import { RULES_VERSIONS } from "@/components/lookupFilters";
 import { DATE_FORMATS, formatCardDate } from "@/components/campaignCard";
-import { NpcTemplateDesigner } from "@/components/NpcTemplateDesigner";
 import { SidebarDesigner } from "@/components/SidebarDesigner";
 import { EditModeSwitch, UiText } from "@/components/UiEditor";
 import { NameField } from "@/components/NameField";
@@ -272,11 +271,6 @@ export function SettingsPanel({
 
         </>
       )}
-
-      {tab === "templates" && (
-        <NpcTemplateDesigner campaignId={campaignId} />
-      )}
-
 
       {tab === "players" && (
         <>

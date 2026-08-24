@@ -359,6 +359,14 @@ export default defineSchema({
           v.object({
             id: v.string(),
             title: v.string(),
+            /**
+             * Folded up, and shown only to the DM. Both are optional
+             * because both are rare, and because a validator that
+             * demanded them would reject every sidebar saved before
+             * they existed.
+             */
+            dmOnly: v.optional(v.boolean()),
+            collapsed: v.optional(v.boolean()),
             items: v.array(
               v.object({ id: v.string(), hidden: v.boolean() })
             ),

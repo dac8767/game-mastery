@@ -165,7 +165,6 @@ export const TEXT_PIECES: TextPiece[] = [
   { id: "settings.tab.user", value: "User", screen: "Settings" },
   { id: "settings.tab.campaign", value: "Campaign", screen: "Settings" },
   { id: "settings.tab.players", value: "Players", screen: "Settings" },
-  { id: "settings.tab.templates", value: "Templates", screen: "Settings" },
   { id: "settings.tab.interface", value: "Interface", screen: "Settings" },
 ];
 

@@ -502,12 +502,47 @@ button {
   font-size: 0.95rem;
 }
 
+/* A section heading is the control that folds the section, so it is a
+   button — not a div with a click handler. Keyboard, focus ring and
+   aria-expanded all come with the element rather than being rebuilt on
+   top of one that does not have them. */
 .nav-group-title {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
   padding: 0 0.6rem 0.4rem;
   font-size: 0.68rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-dim);
+  background: none;
+  border: none;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.nav-group-title:hover {
+  color: var(--text);
+}
+
+.nav-group-title .badge {
+  margin-left: auto;
+}
+
+/* The caret is the one part that has to stay put: a heading whose
+   arrow shifts as the word changes length reads as two controls. */
+.nav-fold {
+  display: inline-block;
+  width: 0.7rem;
+  font-size: 0.6rem;
+  color: var(--text-dim);
+}
+
+/* The campaign, on its own between the brand and the sections. */
+.nav-campaign-block {
+  display: grid;
 }
 
 .nav-campaign {
@@ -1932,10 +1967,35 @@ body.col-resizing {
 
 /* ---------- Settings ---------- */
 
+/* The panels take the window; the PROSE inside them does not.
+
+   This was one 44rem column, which kept the reading width right and
+   made everything else pay for it: the side panel designer's two
+   columns, the roster, and the theme cards were all squeezed into
+   less than half the screen and cut off. A panel is a container and
+   should be as wide as there is room for. A paragraph is text and
+   stops at a line you can still track back to the start of, so the
+   cap moved off the page and onto the sentences. */
 .settings {
-  max-width: 44rem;
   display: grid;
   gap: 1.5rem;
+}
+
+/* Every paragraph, not just the direct children — the panels each tab
+   is built from nest their prose a level or two down, and a cap that
+   only reached the top level would leave exactly those stretching. */
+.settings-blurb,
+.settings-block p,
+.settings-toggle > span > .settings-note {
+  max-width: 72ch;
+}
+
+/* .settings-note carries no margin, because most of them are one line
+   under a heading. Two in a row are a different thing — without this
+   they set solid and read as one paragraph that changes subject
+   halfway through. */
+.settings-block p + p {
+  margin-top: 0.6rem;
 }
 
 .settings-block {
@@ -1976,9 +2036,14 @@ body.col-resizing {
   font-size: 0.9rem;
 }
 
+/* auto-FILL, not auto-fit. With the settings column no longer capped
+   at 44rem, auto-fit would stretch four theme cards across a 2000px
+   window into four 500px slabs. auto-fill lays out the tracks the
+   width affords and leaves the spare ones empty, so a card stays the
+   size of a card. */
 .theme-options {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
   gap: 0.75rem;
   margin-top: 0.9rem;
 }
@@ -5342,9 +5407,13 @@ button.cal-day:hover {
   gap: 0.5rem;
 }
 
+/* Wide enough for a section name, not for the panel. It used to take
+   whatever was left, which at 44rem was reasonable and at full width
+   is a 700px box holding the word "Tools". */
 .tpl-tab-name {
   flex: 1;
   min-width: 0;
+  max-width: 20rem;
   font-weight: 600;
 }
 
@@ -5816,6 +5885,19 @@ button.cal-day:hover {
 /* The Hidden column has no sections, so its rows sit directly in it. */
 .sbd-hidden li {
   background: var(--bg);
+}
+
+.sbd-dm-only {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.sbd-dm-only .settings-note {
+  font-size: inherit;
 }
 
 /* Inside the Shown column the section cards need no second background. */

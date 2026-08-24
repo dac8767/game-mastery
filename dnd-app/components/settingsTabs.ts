@@ -17,12 +17,19 @@
  *                separate tab that only ever had one occupant
  *   Campaign     this campaign, as a thing with a name and a picture
  *   Players      who is at the table and what they play
- *   Templates    how a record is laid out, campaign-wide
  *   Interface    how the app looks and reads, yours alone
  *
  * That is why the theme and the date format are together and away from
  * the rules edition, which looks like a display preference and is not:
  * it changes what everybody at the table sees.
+ *
+ * There was a Templates tab here, holding a miniature of the NPC record
+ * you dragged fields around on. Edit mode does that on the record
+ * itself now, so the miniature was a second, smaller, worse copy of a
+ * screen you could just go and stand on — and one that had to be kept
+ * in step with the real one to avoid lying about the layout. The
+ * arranging did not move here from there; it moved OUT of settings
+ * entirely.
  */
 
 export type SettingsTab =
@@ -30,7 +37,6 @@ export type SettingsTab =
   | "user"
   | "campaign"
   | "players"
-  | "templates"
   | "interface";
 
 export interface SettingsTabDef {
@@ -64,13 +70,6 @@ export const SETTINGS_TABS: SettingsTabDef[] = [
     id: "players",
     label: "Players",
     blurb: "Who is at the table and what they play. Campaign-wide.",
-    dmOnly: true,
-  },
-  {
-    id: "templates",
-    label: "Templates",
-    blurb:
-      "How the campaign’s records are laid out. Campaign-wide — everyone opens an NPC to the same arrangement.",
     dmOnly: true,
   },
   {

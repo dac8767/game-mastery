@@ -18,8 +18,10 @@ import {
   navHref,
 } from "@/components/navItems";
 import {
+  SidebarLayout,
   defaultSidebar,
   reconcileSidebar,
+  toggleSectionCollapsed,
   visibleSidebar,
 } from "@/components/sidebarLayout";
 
@@ -141,23 +143,34 @@ export function AppShell({
    * the layout does not mention would be unreachable rather than
    * hidden — no menu entry, and no hint that there is one to un-hide.
    */
+  const layout = useMemo<SidebarLayout>(
+    () =>
+      reconcileSidebar(
+        settings?.sidebar ?? defaultSidebar(SIDEBAR_GROUPS),
+        ALL_NAV_ITEMS.map((i) => i.id)
+      ),
+    [settings?.sidebar]
+  );
+
   const sections = useMemo(() => {
     const allowed = ALL_NAV_ITEMS.filter((i) => isDm || !i.dmOnly).map(
       (i) => i.id
     );
-    const layout = reconcileSidebar(
-      settings?.sidebar ?? defaultSidebar(SIDEBAR_GROUPS),
-      ALL_NAV_ITEMS.map((i) => i.id)
-    );
-    return visibleSidebar(layout, allowed);
-  }, [settings?.sidebar, isDm]);
+    return visibleSidebar(layout, allowed, isDm);
+  }, [layout, isDm]);
 
-  // The first section sits under the campaign name rather than under a
-  // heading of its own — the campaign IS its heading.
-  const firstSection = (sections[0]?.items ?? [])
-    .map((i) => NAV_ITEM_BY_ID.get(i.id))
-    .filter((i): i is NavItem => Boolean(i));
-  const restSections = sections.slice(1);
+  /**
+   * Folding a section, written straight through to the saved layout.
+   *
+   * Not component state, because there is no shared layout above these
+   * screens — walking from the NPC table to the calendar remounts this
+   * whole shell, and a fold kept in a useState would spring open on
+   * every navigation. It is one small write per click on a document
+   * this person already owns.
+   */
+  const toggleFold = (sectionId: string) => {
+    void saveSettings({ sidebar: toggleSectionCollapsed(layout, sectionId) });
+  };
 
   return (
     /* The provider wraps the whole shell, not one screen: edit mode has
@@ -176,7 +189,12 @@ export function AppShell({
           <span className="brand-name">Game Mastery</span>
         </Link>
 
-        <div className="nav-group">
+        {/* The campaign, on its own. It used to double as the heading of
+            the first section, which made the name of the game also the
+            label of a group of screens and left that one section unable
+            to show a heading of its own. It is a block now, and every
+            section below is an ordinary section. */}
+        <div className="nav-campaign-block">
           {/* The campaign name doubles as the link to the live table. */}
           <Link href={base} className="nav-campaign">
             <span className="nav-campaign-icon">☾</span>
@@ -186,32 +204,45 @@ export function AppShell({
             {campaign?.isDm && <span className="badge">DM</span>}
             {campaign?.viaAdmin && <span className="badge admin">Admin</span>}
           </Link>
-          <NavList
-            items={firstSection}
-            base={base}
-            pathname={pathname}
-            isDm={isDm}
-          />
         </div>
 
-        {/* The rest of the sidebar, as this person arranged it. The
-            campaign block above stays put because the campaign name is
-            the header of the whole thing, not an item in a list. */}
-        {restSections.map((section) => (
-          <div className="nav-group" key={section.id}>
-            {section.title && (
-              <div className="nav-group-title">{section.title}</div>
-            )}
-            <NavList
-              items={section.items
-                .map((i) => NAV_ITEM_BY_ID.get(i.id))
-                .filter((i): i is NavItem => Boolean(i))}
-              base={base}
-              pathname={pathname}
-              isDm={isDm}
-            />
-          </div>
-        ))}
+        {/* The sidebar, as this person arranged it. */}
+        {sections.map((section) => {
+          /* Only a titled section folds: the heading is all a folded
+             one leaves on screen, so an untitled one would disappear
+             with no way to bring it back. */
+          const foldable = Boolean(section.title);
+          const folded = foldable && Boolean(section.collapsed);
+          return (
+            <div className="nav-group" key={section.id}>
+              {foldable && (
+                <button
+                  type="button"
+                  className={`nav-group-title${folded ? " folded" : ""}`}
+                  aria-expanded={!folded}
+                  title={folded ? "Open this section" : "Fold this section up"}
+                  onClick={() => toggleFold(section.id)}
+                >
+                  <span className="nav-fold" aria-hidden="true">
+                    {folded ? "▸" : "▾"}
+                  </span>
+                  {section.title}
+                  {section.dmOnly && <span className="badge">DM</span>}
+                </button>
+              )}
+              {!folded && (
+                <NavList
+                  items={section.items
+                    .map((i) => NAV_ITEM_BY_ID.get(i.id))
+                    .filter((i): i is NavItem => Boolean(i))}
+                  base={base}
+                  pathname={pathname}
+                  isDm={isDm}
+                />
+              )}
+            </div>
+          );
+        })}
 
         {/* Settings sits here rather than in the arranged sections
             above: it is the way back to the screen that arranges them,

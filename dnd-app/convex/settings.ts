@@ -88,12 +88,21 @@ export const dateFormatValidator = v.union(
   v.literal("iso")
 );
 
-/** Mirrors SidebarLayout in components/sidebarLayout.ts. */
+/**
+ * Mirrors SidebarLayout in components/sidebarLayout.ts.
+ *
+ * Every key the client writes has to be declared here: a Convex object
+ * validator REJECTS an undeclared one, so a field added to the
+ * TypeScript interface and forgotten here does not degrade — it makes
+ * every save of the whole layout fail.
+ */
 export const sidebarValidator = v.object({
   sections: v.array(
     v.object({
       id: v.string(),
       title: v.string(),
+      dmOnly: v.optional(v.boolean()),
+      collapsed: v.optional(v.boolean()),
       items: v.array(v.object({ id: v.string(), hidden: v.boolean() })),
     })
   ),

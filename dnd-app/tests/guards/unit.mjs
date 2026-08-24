@@ -808,9 +808,12 @@ export const unit = {
       "a player still has somewhere to land",
       st.visibleTabs(false).length > 0
     );
+    // Removed rather than renamed. The record is arranged on the record
+    // now, and a Templates tab still in the list would be a second way
+    // in that has to be kept honest about a layout it no longer draws.
     check(
-      "the Templates tab exists and is the DM's",
-      st.SETTINGS_TABS.find((t) => t.id === "templates")?.dmOnly === true
+      "the Templates tab is gone",
+      !st.SETTINGS_TABS.some((t) => t.id === "templates")
     );
     check(
       "System and User replaced General, and Game Master is gone",
@@ -1976,7 +1979,7 @@ export const unit = {
     );
 
     const GROUPS = [
-      { id: "campaign", title: "", itemIds: ["table", "npcs"] },
+      { id: "campaign", title: "Campaign", itemIds: ["table", "npcs"] },
       { id: "tools", title: "Tools", itemIds: ["chat", "dice"] },
       { id: "settings", title: "", itemIds: ["settings"] },
     ];
@@ -1994,6 +1997,14 @@ export const unit = {
         sb.reconcileSidebar(sb.reconcileSidebar(sbBase, IDS), IDS),
         sb.reconcileSidebar(sbBase, IDS)
       )
+    );
+    // Idempotence alone does not say this. Writing `dmOnly: false` onto
+    // every section on every pass is perfectly idempotent, and stamps a
+    // key nobody set into the layout of everyone who has never used the
+    // feature — which is then what gets saved.
+    check(
+      "and a layout that uses neither flag comes back exactly as it went in",
+      eq(sb.reconcileSidebar(sbBase, IDS), sbBase)
     );
     check(
       "a screen the layout never heard of is added, not lost",
@@ -2080,25 +2091,148 @@ export const unit = {
     check(
       "visibleSidebar drops what was hidden",
       !sb
-        .visibleSidebar(sb.toggleHidden(sbBase, "npcs"), IDS)
+        .visibleSidebar(sb.toggleHidden(sbBase, "npcs"), IDS, true)
         .flatMap((s) => s.items)
         .some((i) => i.id === "npcs")
     );
     check(
       "and drops a section left with nothing",
-      sb.visibleSidebar(sb.toggleHidden(sbBase, "settings"), ["table", "npcs"])
-        .length === 1
+      sb.visibleSidebar(
+        sb.toggleHidden(sbBase, "settings"),
+        ["table", "npcs"],
+        true
+      ).length === 1
     );
     check(
       "a screen this person may not see is not rendered either",
       !sb
-        .visibleSidebar(sbBase, ["table", "npcs", "settings"])
+        .visibleSidebar(sbBase, ["table", "npcs", "settings"], true)
         .flatMap((s) => s.items)
         .some((i) => i.id === "dice")
     );
     check(
       "visibleSidebar does not mutate the layout",
       sb.sidebarIds(sbBase).join() === IDS.join()
+    );
+
+    // ---- a section that is only yours while you run the game -------
+    // The DM's own preference, and the reason it exists is the preview:
+    // View as Player is meant to show what the table sees, so a prep
+    // section still standing in it would make the preview a lie about
+    // the only screen it is checked on.
+    const sbDm = sb.setSectionDmOnly(sbBase, "tools", true);
+    check(
+      "a DM-only section renders for the DM",
+      sb.visibleSidebar(sbDm, IDS, true).some((s) => s.id === "tools")
+    );
+    check(
+      "and is gone when you are not the DM here",
+      !sb.visibleSidebar(sbDm, IDS, false).some((s) => s.id === "tools")
+    );
+    check(
+      "its items go with it rather than surfacing elsewhere",
+      !sb
+        .visibleSidebar(sbDm, IDS, false)
+        .flatMap((s) => s.items)
+        .some((i) => i.id === "chat")
+    );
+    check(
+      "the flag survives a round trip through reconcile",
+      sb
+        .reconcileSidebar(sbDm, IDS)
+        .sections.find((s) => s.id === "tools")?.dmOnly === true
+    );
+    check(
+      "unticking it takes the key back out rather than writing false",
+      !("dmOnly" in
+        sb
+          .setSectionDmOnly(sbDm, "tools", false)
+          .sections.find((s) => s.id === "tools"))
+    );
+    check(
+      "marking a section DM-only does not hide its items for the DM",
+      sb.sidebarIds(sbDm).join() === IDS.join()
+    );
+
+    // ---- folding a section up --------------------------------------
+    // The heading is the whole of a folded section. Fold one that has
+    // no heading and there is nothing left on screen to click, and the
+    // items inside are gone with no hint that they exist.
+    check(
+      "a titled section folds",
+      sb
+        .setSectionCollapsed(sbBase, "tools", true)
+        .sections.find((s) => s.id === "tools")?.collapsed === true
+    );
+    check(
+      "an untitled one refuses to",
+      sb
+        .setSectionCollapsed(sbBase, "settings", true)
+        .sections.find((s) => s.id === "settings")?.collapsed !== true
+    );
+    check(
+      "toggling folds and unfolds",
+      (() => {
+        const one = sb.toggleSectionCollapsed(sbBase, "tools");
+        const two = sb.toggleSectionCollapsed(one, "tools");
+        return (
+          one.sections.find((s) => s.id === "tools").collapsed === true &&
+          two.sections.find((s) => s.id === "tools").collapsed !== true
+        );
+      })()
+    );
+    check(
+      "clearing the heading of a folded section unfolds it",
+      sb
+        .renameSection(
+          sb.setSectionCollapsed(sbBase, "tools", true),
+          "tools",
+          ""
+        )
+        .sections.find((s) => s.id === "tools")?.collapsed !== true
+    );
+    check(
+      "and reconcile catches one that was folded and lost its heading",
+      sb
+        .reconcileSidebar(
+          {
+            sections: [
+              {
+                id: "tools",
+                title: "",
+                collapsed: true,
+                items: [{ id: "chat", hidden: false }],
+              },
+            ],
+          },
+          ["chat"]
+        )
+        .sections.find((s) => s.id === "tools")?.collapsed !== true
+    );
+    check(
+      "folding is not hiding — the items are still in the layout",
+      sb.sidebarIds(sb.setSectionCollapsed(sbBase, "tools", true)).join() ===
+        IDS.join()
+    );
+    check(
+      "and a folded section still renders, so its heading is there to click",
+      sb
+        .visibleSidebar(sb.setSectionCollapsed(sbBase, "tools", true), IDS, true)
+        .some((s) => s.id === "tools")
+    );
+    check(
+      "reconcile stays idempotent with both flags set",
+      (() => {
+        const flagged = sb.setSectionCollapsed(
+          sb.setSectionDmOnly(sbBase, "tools", true),
+          "tools",
+          true
+        );
+        return eq(
+          sb.reconcileSidebar(sb.reconcileSidebar(flagged, IDS), IDS),
+          sb.reconcileSidebar(flagged, IDS)
+        );
+      })()
     );
 
     // ---- moving things ---------------------------------------------

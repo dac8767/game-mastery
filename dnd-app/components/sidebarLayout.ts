@@ -21,6 +21,25 @@ export interface SidebarItem {
 export interface SidebarSection {
   id: string;
   title: string;
+  /**
+   * Shown only while you are the DM of the campaign you are looking at.
+   *
+   * A preference, not a permission — this is YOUR sidebar and nobody
+   * else has one built from it. What a player may actually reach is
+   * decided on the server and by NavItem.dmOnly, and neither of them
+   * reads this. What it is for is the other direction: a DM who keeps
+   * their prep in one section and wants it gone while previewing as a
+   * player, without hiding six things one at a time and putting them
+   * all back after.
+   */
+  dmOnly?: boolean;
+  /**
+   * Folded up in the sidebar, its heading still showing.
+   *
+   * Only a section with a heading may be — folding an untitled one
+   * would leave nothing on screen to click to get it back.
+   */
+  collapsed?: boolean;
   items: SidebarItem[];
 }
 
@@ -99,11 +118,20 @@ export function reconcileSidebar(
     const title = String(section?.title ?? "")
       .trim()
       .slice(0, SIDEBAR_LIMITS.titleLength);
-    sections.push({
+    const next: SidebarSection = {
       id: String(section?.id ?? "") || sectionId(title, i),
       title,
       items,
-    });
+    };
+    // Written only when true, so a layout that never used either flag
+    // reconciles to the same object it went in as.
+    if (section?.dmOnly) next.dmOnly = true;
+    // A collapsed section with no heading is a section with nothing on
+    // screen to click. Renaming one to nothing while it was folded is
+    // how that happens, and it happens after the fact — so the rule is
+    // enforced here rather than only at the moment of folding.
+    if (section?.collapsed && title) next.collapsed = true;
+    sections.push(next);
     if (sections.length >= SIDEBAR_LIMITS.sections) break;
   }
 
@@ -142,18 +170,75 @@ export function sidebarIds(layout: SidebarLayout): string[] {
  * are not in it for a player. Hiding and not-being-allowed are
  * different things that happen to look the same here, and only one of
  * them is a preference.
+ *
+ * `isDm` is the third of those, and it is the preference again: a
+ * section marked DM-only goes when you are not the DM here, including
+ * while previewing as a player. It is deliberately a required argument
+ * rather than one defaulting to true — a call site that forgot it
+ * would leave a DM's prep section on screen in the preview that exists
+ * to show what the prep looks like from outside.
  */
 export function visibleSidebar(
   layout: SidebarLayout,
-  allowed: string[]
+  allowed: string[],
+  isDm: boolean
 ): SidebarSection[] {
   const permitted = new Set(allowed);
   return layout.sections
+    .filter((s) => isDm || !s.dmOnly)
     .map((s) => ({
       ...s,
       items: s.items.filter((i) => !i.hidden && permitted.has(i.id)),
     }))
     .filter((s) => s.items.length > 0);
+}
+
+/** Mark a section as the DM's, or stop. */
+export function setSectionDmOnly(
+  layout: SidebarLayout,
+  id: string,
+  dmOnly: boolean
+): SidebarLayout {
+  return {
+    sections: layout.sections.map((s) => {
+      if (s.id !== id) return s;
+      const next: SidebarSection = { ...s };
+      if (dmOnly) next.dmOnly = true;
+      else delete next.dmOnly;
+      return next;
+    }),
+  };
+}
+
+/**
+ * Fold a section up, or open it again.
+ *
+ * Refuses to fold one with no heading. The heading is the whole of a
+ * collapsed section — take it away and there is nothing left on screen
+ * to click, and the items inside are gone with no hint they exist.
+ */
+export function setSectionCollapsed(
+  layout: SidebarLayout,
+  id: string,
+  collapsed: boolean
+): SidebarLayout {
+  return {
+    sections: layout.sections.map((s) => {
+      if (s.id !== id) return s;
+      const next: SidebarSection = { ...s };
+      if (collapsed && s.title) next.collapsed = true;
+      else delete next.collapsed;
+      return next;
+    }),
+  };
+}
+
+export function toggleSectionCollapsed(
+  layout: SidebarLayout,
+  id: string
+): SidebarLayout {
+  const section = layout.sections.find((s) => s.id === id);
+  return setSectionCollapsed(layout, id, !section?.collapsed);
 }
 
 export function toggleHidden(
@@ -314,11 +399,18 @@ export function renameSection(
   title: string
 ): SidebarLayout {
   return {
-    sections: layout.sections.map((s) =>
-      s.id === id
-        ? { ...s, title: title.slice(0, SIDEBAR_LIMITS.titleLength) }
-        : s
-    ),
+    sections: layout.sections.map((s) => {
+      if (s.id !== id) return s;
+      const next: SidebarSection = {
+        ...s,
+        title: title.slice(0, SIDEBAR_LIMITS.titleLength),
+      };
+      // Clearing the heading of a folded section unfolds it. The
+      // heading was the only thing still on screen; keeping it folded
+      // would hide the section and the way back to it in one edit.
+      if (!next.title) delete next.collapsed;
+      return next;
+    }),
   };
 }
 
