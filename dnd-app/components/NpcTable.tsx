@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
@@ -14,7 +14,24 @@ import {
 import { NpcDetail, fromInput } from "@/components/NpcDetail";
 import { FilterPanel } from "@/components/FilterPanel";
 import { matchesAll } from "@/components/npcFilters";
-import { UiText, useUiText } from "@/components/UiEditor";
+import { UiText } from "@/components/UiEditor";
+import {
+  BLANK,
+  cell,
+  chipValues,
+  display,
+  facetCounts,
+  groupRows,
+  searchText,
+  sortRows,
+} from "@/components/recordGrid";
+import {
+  BarButton,
+  MoreMenu,
+  SearchBox,
+  ViewPicker,
+} from "@/components/TableToolbar";
+import { ExpandIcon } from "@/components/ExpandIcon";
 import {
   COLUMNS,
   COLUMN_BY_KEY,
@@ -47,7 +64,7 @@ const LINK_TITLES: Record<NonNullable<ColumnDef["linksTo"]>, string> = {
   npc: "Open this NPC",
   species: "Look this species up",
   location: "Show this place on the map",
-  group: "Show only this group",
+  group: "Open this group",
 };
 
 /**
@@ -70,10 +87,6 @@ const LINK_TITLES: Record<NonNullable<ColumnDef["linksTo"]>, string> = {
 type NpcListResult = FunctionReturnType<typeof api.npcs.listForCampaign>;
 type Npc = NpcListResult["npcs"][number];
 
-/** Bucket label for rows with no value in a faceted field. */
-const EMPTY = "—";
-/** Placeholder shown in a blank grid cell. */
-const BLANK = "–";
 const MIN_COL_WIDTH = 48;
 /**
  * The one column that can't be hidden.
@@ -84,31 +97,11 @@ const MIN_COL_WIDTH = 48;
  */
 const PRIMARY_COLUMN = "name";
 
-function cell(npc: Npc, key: string): unknown {
-  return (npc as unknown as Record<string, unknown>)[key];
-}
+/** Every column's key: what the search box reads. */
+const SEARCHED_KEYS = COLUMNS.map((c) => c.key);
 
-function facetValues(npc: Npc, key: string): string[] {
-  const raw = cell(npc, key);
-  if (Array.isArray(raw)) {
-    const vals = (raw as string[]).filter((v) => v && v.trim());
-    return vals.length > 0 ? vals : [EMPTY];
-  }
-  if (typeof raw === "string" && raw.trim()) return [raw];
-  return [EMPTY];
-}
-
-function chipValues(npc: Npc, key: string): string[] {
-  return facetValues(npc, key).filter((v) => v !== EMPTY);
-}
-
-function display(npc: Npc, key: string): string {
-  const raw = cell(npc, key);
-  if (Array.isArray(raw)) return (raw as string[]).join(", ");
-  if (raw === null || raw === undefined || raw === "") return "";
-  if (typeof raw === "boolean") return raw ? "Yes" : "No";
-  return String(raw);
-}
+/** Life stages sort in narrative order rather than alphabetically. */
+const RANKS = { maturity: MATURITY_ORDER };
 
 function chipClass(columnKey: string, value: string): string {
   if (columnKey !== "gender") return "chip";
@@ -116,487 +109,6 @@ function chipClass(columnKey: string, value: string): string {
   if (v.includes("female")) return "chip gender-female";
   if (v.includes("male")) return "chip gender-male";
   return "chip gender-other";
-}
-
-function searchText(npc: Npc): string {
-  const parts: string[] = [];
-  for (const col of COLUMNS) {
-    const raw = cell(npc, col.key);
-    if (Array.isArray(raw)) parts.push(...(raw as string[]));
-    else if (typeof raw === "string") parts.push(raw);
-  }
-  return parts.filter(Boolean).join(" ").toLowerCase();
-}
-
-function compare(a: Npc, b: Npc, key: string): number {
-  if (key === "maturity") {
-    const rank = (n: Npc) => {
-      const i = MATURITY_ORDER.indexOf(n.maturity ?? "");
-      return i === -1 ? MATURITY_ORDER.length : i;
-    };
-    return rank(a) - rank(b);
-  }
-
-  const av = cell(a, key);
-  const bv = cell(b, key);
-
-  const aEmpty =
-    av === null || av === undefined || (Array.isArray(av) && av.length === 0);
-  const bEmpty =
-    bv === null || bv === undefined || (Array.isArray(bv) && bv.length === 0);
-  // Blanks always sink to the bottom, in both directions.
-  if (aEmpty && bEmpty) return 0;
-  if (aEmpty) return 1;
-  if (bEmpty) return -1;
-
-  if (typeof av === "number" && typeof bv === "number") return av - bv;
-
-  const as = Array.isArray(av) ? (av as string[]).join(", ") : String(av);
-  const bs = Array.isArray(bv) ? (bv as string[]).join(", ") : String(bv);
-  return as.localeCompare(bs, undefined, { sensitivity: "base" });
-}
-
-/**
- * A toolbar button that carries a count instead of its setting.
- *
- * The count is the whole point: "Filter 2" tells you the list you are
- * looking at is not the whole list, which is the thing you need from
- * across the room. WHICH two filters is a question you ask by opening
- * the panel, and it is the only question the panel exists to answer.
- *
- * Zero shows nothing at all rather than a "0" — a badge that is always
- * there stops being a signal.
- */
-function BarButton({
-  labelId,
-  count,
-  open,
-  onClick,
-  onClose,
-  children,
-}: {
-  /** A registry id, so edit mode can rename it in place. */
-  labelId: string;
-  count: number;
-  open: boolean;
-  onClick: () => void;
-  /** Dismiss, for the click-anywhere-else scrim. */
-  onClose?: () => void;
-  /** The panel this button opens, hung under it. */
-  children?: React.ReactNode;
-}) {
-  return (
-    <span className="bar-pop">
-      <button
-        type="button"
-        className={`bar-btn${open ? " open" : ""}${count > 0 ? " on" : ""}`}
-        aria-expanded={open}
-        onClick={onClick}
-      >
-        <UiText id={labelId} />
-        {count > 0 && <span className="bar-count">{count}</span>}
-      </button>
-
-      {/* Hung UNDER the button rather than pushed into the list.
-          These used to be blocks in the flow, so opening Filter moved
-          every row down the page and closing it moved them back —
-          which is the layout jumping under your pointer at the exact
-          moment you were aiming at a row. */}
-      {open && children && (
-        <>
-          {/* Catches the click that dismisses, without a document
-              listener that would also fire on the button that opened
-              it. */}
-          <span className="view-scrim" onClick={onClose} />
-          <div className="bar-panel">{children}</div>
-        </>
-      )}
-    </span>
-  );
-}
-
-/**
- * How the roster is drawn, as a chip rather than a labelled dropdown.
- *
- * "View  [Grid ⌄]" spent two words and a form control saying what one
- * word and a caret say. The icon carries the meaning across the room —
- * rows for a grid, squares for tiles — and the name is there for when
- * it does not.
- *
- * Tiles-per-row lives INSIDE it rather than beside it, because it is a
- * setting of one view. On the grid it was a control for something you
- * could not see.
- */
-function ViewPicker({
-  mode,
-  perRow,
-  setMode,
-  setPerRow,
-}: {
-  mode: "grid" | "tiles";
-  perRow: number;
-  setMode: (next: "grid" | "tiles") => void;
-  setPerRow: (next: number) => void;
-}) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <span className="view-picker">
-      <button
-        type="button"
-        className={`bar-btn${open ? " open" : ""}`}
-        aria-expanded={open}
-        aria-label={`View: ${mode === "grid" ? "Grid" : "Tiles"}`}
-        onClick={() => setOpen((v) => !v)}
-      >
-        {mode === "grid" ? <GridIcon /> : <TilesIcon />}
-        <UiText id={mode === "grid" ? "npc.view.grid" : "npc.view.tiles"} />
-        <CaretIcon />
-      </button>
-
-      {open && (
-        <>
-          {/* Closes on a click anywhere else, which is the gesture
-              everybody already tries. */}
-          <span className="view-scrim" onClick={() => setOpen(false)} />
-          <div className="view-menu" role="menu">
-            <button
-              type="button"
-              className={`view-option${mode === "grid" ? " on" : ""}`}
-              onClick={() => {
-                setMode("grid");
-                setOpen(false);
-              }}
-            >
-              <GridIcon />
-              <UiText id="npc.view.grid" />
-            </button>
-            <button
-              type="button"
-              className={`view-option${mode === "tiles" ? " on" : ""}`}
-              onClick={() => setMode("tiles")}
-            >
-              <TilesIcon />
-              <UiText id="npc.view.tiles" />
-            </button>
-
-            {mode === "tiles" && (
-              <label className="npc-select view-perrow">
-                <UiText id="npc.view.perRow" />
-                <select
-                  value={perRow}
-                  onChange={(e) => setPerRow(Number(e.target.value))}
-                >
-                  {[2, 3, 4, 5, 6, 7, 8].map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-          </div>
-        </>
-      )}
-    </span>
-  );
-}
-
-/**
- * The chevron on the View chip.
- *
- * Drawn rather than typed. It was "⌄" — U+2304 DOWN ARROWHEAD — which
- * a text renderer sits on the BASELINE like a letter, so it hung below
- * the words beside it and no amount of line-height fixed it: the glyph
- * is where the font says it is. An SVG is centred by the flexbox like
- * the other icons on the bar, because it is a box rather than a
- * character.
- */
-function CaretIcon() {
-  return (
-    <svg
-      className="bar-caret"
-      viewBox="0 0 16 16"
-      width="10"
-      height="10"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path
-        d="M3 6l5 5 5-5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-/** The expand icon on each row: two arrows going opposite ways. */
-function ExpandIcon() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      width="13"
-      height="13"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path
-        d="M9.5 2.5H13.5V6.5M6.5 13.5H2.5V9.5M13.5 2.5L9 7M2.5 13.5L7 9"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-/** Three vertical dots: the things you reach for once a week. */
-function MoreIcon() {
-  return (
-    <svg
-      className="bar-icon"
-      viewBox="0 0 16 16"
-      width="14"
-      height="14"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <circle cx="8" cy="3" r="1.5" fill="currentColor" />
-      <circle cx="8" cy="8" r="1.5" fill="currentColor" />
-      <circle cx="8" cy="13" r="1.5" fill="currentColor" />
-    </svg>
-  );
-}
-
-/**
- * The overflow menu, right of the search box.
- *
- * Reset and Fields lived on the bar beside Filter, Group and Sort, and
- * did not belong there: those three are what you are doing to the list
- * right now and carry a count saying so, while these two are settings
- * you touch once and then not again for a week. Six buttons in a row
- * all look equally likely; four plus a menu says which is which.
- */
-function MoreMenu({
-  onResetLayout,
-  onFields,
-  onCloseFields,
-  fieldsOpen,
-  children,
-}: {
-  onResetLayout: () => void;
-  onFields: () => void;
-  onCloseFields: () => void;
-  fieldsOpen: boolean;
-  /** The Fields panel, hung under this button when it is open. */
-  children?: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <span className="view-picker bar-pop">
-      <button
-        type="button"
-        className={`bar-btn icon-only${open ? " open" : ""}`}
-        aria-expanded={open}
-        aria-label="More"
-        title="More"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <MoreIcon />
-      </button>
-
-      {open && (
-        <>
-          <span className="view-scrim" onClick={() => setOpen(false)} />
-          <div className="view-menu" role="menu">
-            <button
-              type="button"
-              className={`view-option${fieldsOpen ? " on" : ""}`}
-              onClick={() => {
-                onFields();
-                setOpen(false);
-              }}
-            >
-              <UiText id="npc.more.fields" />
-            </button>
-            <button
-              type="button"
-              className="view-option"
-              onClick={() => {
-                onResetLayout();
-                setOpen(false);
-              }}
-            >
-              <UiText id="npc.more.reset" />
-            </button>
-          </div>
-        </>
-      )}
-
-      {/* Fields opens from the menu above and hangs off the same
-          button, so the panel appears where the thing that opened it
-          was rather than shoving the table down the page. */}
-      {fieldsOpen && children && (
-        <>
-          <span className="view-scrim" onClick={onCloseFields} />
-          <div className="bar-panel">{children}</div>
-        </>
-      )}
-    </span>
-  );
-}
-
-function GridIcon() {
-  return (
-    <svg
-      className="bar-icon"
-      viewBox="0 0 16 16"
-      width="14"
-      height="14"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <rect x="1.5" y="2.5" width="13" height="3" rx="1" fill="currentColor" />
-      <rect x="1.5" y="6.75" width="13" height="3" rx="1" fill="currentColor" />
-      <rect x="1.5" y="11" width="13" height="3" rx="1" fill="currentColor" />
-    </svg>
-  );
-}
-
-function TilesIcon() {
-  return (
-    <svg
-      className="bar-icon"
-      viewBox="0 0 16 16"
-      width="14"
-      height="14"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1" fill="currentColor" />
-      <rect x="9" y="1.5" width="5.5" height="5.5" rx="1" fill="currentColor" />
-      <rect x="1.5" y="9" width="5.5" height="5.5" rx="1" fill="currentColor" />
-      <rect x="9" y="9" width="5.5" height="5.5" rx="1" fill="currentColor" />
-    </svg>
-  );
-}
-
-/**
- * Search: an icon until you want it, a field once you do.
- *
- * It does NOT collapse while it holds text. A search box that tidied
- * itself away with a query still in it would leave a shorter list on
- * screen and nothing saying why — the same failure as a hidden filter,
- * and the one thing this toolbar is careful about everywhere else.
- *
- * Declared at module level, not inside NpcTable: a component defined
- * during render is a new component type on every render, so React
- * unmounts the old one and the input loses focus after each keystroke.
- */
-function SearchBox({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (next: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  // A placeholder is an attribute, not a child, so it reads the text
-  // through the hook rather than rendering <UiText>. Renaming it in
-  // edit mode still works — you rename it on the collapsed button,
-  // which is the same registry entry.
-  const label = useUiText("npc.bar.search");
-
-  useEffect(() => {
-    if (open) inputRef.current?.focus();
-  }, [open]);
-
-  if (!open && !value) {
-    return (
-      <button
-        type="button"
-        className="bar-btn bar-search-btn"
-        aria-label={label}
-        title={label}
-        onClick={() => setOpen(true)}
-      >
-        <SearchIcon />
-      </button>
-    );
-  }
-
-  return (
-    <div className="bar-search">
-      <SearchIcon />
-      <input
-        ref={inputRef}
-        type="text"
-        value={value}
-        placeholder={label}
-        aria-label={label}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={() => {
-          if (!value) setOpen(false);
-        }}
-        onKeyDown={(e) => {
-          if (e.key !== "Escape") return;
-          e.preventDefault();
-          onChange("");
-          setOpen(false);
-        }}
-      />
-      <button
-        type="button"
-        className="bar-search-clear"
-        aria-label="Close the search"
-        onClick={() => {
-          onChange("");
-          setOpen(false);
-        }}
-      >
-        ×
-      </button>
-    </div>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <svg
-      className="bar-search-icon"
-      viewBox="0 0 16 16"
-      width="15"
-      height="15"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <circle
-        cx="7"
-        cy="7"
-        r="4.5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-      />
-      <line
-        x1="10.4"
-        y1="10.4"
-        x2="14"
-        y2="14"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
 }
 
 export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
@@ -636,9 +148,31 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
 
   const all = useMemo(() => result?.npcs ?? [], [result]);
 
+  /* ?open=<name> — how another screen sends you to one NPC.
+     A NAME rather than an id, the same way Locations and Lookup take
+     one, because the caller is a Groups row whose member list is built
+     out of NPC names. A name that matches nobody lands you on the
+     roster rather than on an error. Opened once per name, tracked in a
+     ref rather than derived from state, or closing the record you were
+     sent to would reopen it on the next render. */
+  const params = useSearchParams();
+  const openName = params.get("open");
+  const handledOpen = useRef<string | null>(null);
+  useEffect(() => {
+    if (!openName || all.length === 0) return;
+    if (handledOpen.current === openName) return;
+    const want = openName.replace(/\s+/g, " ").trim().toLowerCase();
+    const found = all.find(
+      (n) => n.name.replace(/\s+/g, " ").trim().toLowerCase() === want
+    );
+    if (!found) return;
+    handledOpen.current = openName;
+    setSelected(found._id);
+  }, [openName, all]);
+
   const haystacks = useMemo(() => {
     const m = new Map<string, string>();
-    for (const n of all) m.set(n._id, searchText(n));
+    for (const n of all) m.set(n._id, searchText(n, SEARCHED_KEYS));
     return m;
   }, [all]);
 
@@ -665,14 +199,10 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
     );
   }, [searched, prefs.filters, prefs.filterConjunction]);
 
-  const sorted = useMemo(() => {
-    const rows = [...filtered];
-    rows.sort((a, b) => {
-      const c = compare(a, b, prefs.sortKey);
-      return prefs.sortAsc ? c : -c;
-    });
-    return rows;
-  }, [filtered, prefs.sortKey, prefs.sortAsc]);
+  const sorted = useMemo(
+    () => sortRows(filtered, prefs.sortKey, prefs.sortAsc, RANKS),
+    [filtered, prefs.sortKey, prefs.sortAsc]
+  );
 
   const facetOptions = useMemo(() => {
     const out: {
@@ -685,22 +215,9 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
       const def = COLUMN_BY_KEY.get(key);
       if (!def || (def.dmOnly && !isDm)) continue;
 
-      const counts = new Map<string, number>();
-      for (const n of searched) {
-        for (const v of facetValues(n, key)) counts.set(v, 0);
-      }
-      for (const n of filtered) {
-        for (const v of facetValues(n, key)) {
-          counts.set(v, (counts.get(v) ?? 0) + 1);
-        }
-      }
-      counts.delete(EMPTY);
+      const options = facetCounts(searched, filtered, key);
       // A facet whose column is entirely blank is noise — leave it out.
-      if (counts.size === 0) continue;
-
-      const options = Array.from(counts.entries())
-        .map(([value, count]) => ({ value, count }))
-        .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+      if (options.length === 0) continue;
       out.push({ key, label: def.label, options });
     }
     return out;
@@ -726,22 +243,10 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
     return m;
   }, [all]);
 
-  const groups = useMemo(() => {
-    if (!prefs.groupBy) return null;
-    const map = new Map<string, Npc[]>();
-    for (const n of sorted) {
-      // A row in two groups shows up under both.
-      for (const v of facetValues(n, prefs.groupBy)) {
-        if (!map.has(v)) map.set(v, []);
-        map.get(v)!.push(n);
-      }
-    }
-    return Array.from(map.entries()).sort((a, b) => {
-      if (a[0] === EMPTY) return 1;
-      if (b[0] === EMPTY) return -1;
-      return b[1].length - a[1].length || a[0].localeCompare(b[0]);
-    });
-  }, [sorted, prefs.groupBy]);
+  const groups = useMemo(
+    () => (prefs.groupBy ? groupRows(sorted, prefs.groupBy) : null),
+    [sorted, prefs.groupBy]
+  );
 
   const selectedNpc = useMemo(
     () => all.find((n) => n._id === selected) ?? null,
@@ -918,28 +423,24 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
       return;
     }
 
-    if (kind === "group") {
-      // A group has no screen, because a group IS a set of NPCs —
-      // this list, narrowed. Sending you to a page that could only
-      // ever show the same rows with a different heading would be
-      // ceremony around a filter.
-      prefs.setFilters([
-        { field: "groups", operator: "hasAnyOf", values: [value] },
-      ]);
-      setSelected(null);
-      return;
-    }
-
     // Named per kind rather than reached by a ternary's else-branch.
     // `kind === "species" ? "species" : "locations"` sent EVERY other
     // kind to Locations, so a fifth link target added later would have
     // navigated somewhere plausible and wrong instead of failing.
+    //
+    // A group used to be the exception here: it set a filter on this
+    // list instead of navigating, because a group WAS a set of NPCs and
+    // nothing else. It has a screen of its own now — a description, its
+    // pictures, and the roll of who is in it — so the chip goes there
+    // like every other link on the row.
     const to =
       kind === "species"
         ? `lookup?tab=species&open=${encodeURIComponent(value)}`
         : kind === "location"
           ? `locations?open=${encodeURIComponent(value)}`
-          : null;
+          : kind === "group"
+            ? `groups?open=${encodeURIComponent(value)}`
+            : null;
     if (!to) return;
     router.push(`/campaign/${campaignId}/${to}`);
   };
@@ -1008,7 +509,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
               at a glance, and the panel behind the button is where the
               detail belongs. */}
           <BarButton
-            labelId="npc.bar.filter"
+            labelId="list.bar.filter"
             count={activeFilterCount}
             open={panel === "filter"}
             onClick={() => togglePanel("filter")}
@@ -1024,7 +525,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
             />
           </BarButton>
           <BarButton
-            labelId="npc.bar.group"
+            labelId="list.bar.group"
             count={prefs.groupBy ? 1 : 0}
             open={panel === "group"}
             onClick={() => togglePanel("group")}
@@ -1033,7 +534,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
             <div className="filter-panel">
             <div className="filter-title">Group</div>
             <label className="npc-select">
-              <span><UiText id="npc.panel.groupBy" /></span>
+              <span><UiText id="list.panel.groupBy" /></span>
               <select
                 value={prefs.groupBy}
                 onChange={(e) => prefs.setGroupBy(e.target.value)}
@@ -1058,7 +559,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
             </div>
           </BarButton>
           <BarButton
-            labelId="npc.bar.sort"
+            labelId="list.bar.sort"
             count={sortCount}
             open={panel === "sort"}
             onClick={() => togglePanel("sort")}
@@ -1067,7 +568,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
             <div className="filter-panel">
             <div className="filter-title">Sort</div>
             <label className="npc-select">
-              <span><UiText id="npc.panel.sortBy" /></span>
+              <span><UiText id="list.panel.sortBy" /></span>
               <select
                 value={prefs.sortKey}
                 onChange={(e) => prefs.setSortKey(e.target.value)}
@@ -1087,8 +588,8 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
               <UiText
                 id={
                   prefs.sortAsc
-                    ? "npc.panel.ascending"
-                    : "npc.panel.descending"
+                    ? "list.panel.ascending"
+                    : "list.panel.descending"
                 }
               />
             </button>
@@ -1114,7 +615,11 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
             setPerRow={prefs.setTilesPerRow}
           />
 
-          <SearchBox value={search} onChange={setSearch} />
+          <SearchBox
+            value={search}
+            onChange={setSearch}
+            labelId="npc.bar.search"
+          />
 
           <MoreMenu
             fieldsOpen={panel === "columns"}

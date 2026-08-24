@@ -4,7 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
-import { ColumnState, reconcileColumns } from "@/components/npcColumns";
+import {
+  COLUMNS,
+  ColumnDef,
+  ColumnState,
+  reconcileColumns,
+} from "@/components/npcColumns";
 import { Conjunction, FilterCondition } from "@/components/npcFilters";
 
 /**
@@ -36,13 +41,19 @@ export const DEFAULT_SORT_ASC = true;
 export function useViewPrefs(
   campaignId: Id<"campaigns">,
   view: string,
-  isDm: boolean
+  isDm: boolean,
+  /**
+   * The field set this view arranges. Defaults to the NPC roster's,
+   * which is the view this hook was written for; the Groups screen is
+   * the same table over its own columns and passes them here.
+   */
+  columns: ColumnDef[] = COLUMNS
 ) {
   const saved = useQuery(api.views.getViewPrefs, { campaignId, view });
   const save = useMutation(api.views.saveViewPrefs);
 
-  const [columns, setColumnsRaw] = useState<ColumnState[]>(() =>
-    reconcileColumns(null, isDm)
+  const [columnState, setColumnsRaw] = useState<ColumnState[]>(() =>
+    reconcileColumns(null, isDm, columns)
   );
   const [sortKey, setSortKeyRaw] = useState(DEFAULT_SORT_KEY);
   const [sortAsc, setSortAscRaw] = useState(DEFAULT_SORT_ASC);
@@ -61,7 +72,7 @@ export function useViewPrefs(
   useEffect(() => {
     if (saved === undefined || hydrated.current) return;
 
-    setColumnsRaw(reconcileColumns(saved?.columns ?? null, isDm));
+    setColumnsRaw(reconcileColumns(saved?.columns ?? null, isDm, columns));
     if (saved) {
       setSortKeyRaw(saved.sortKey ?? DEFAULT_SORT_KEY);
       setSortAscRaw(saved.sortAsc ?? DEFAULT_SORT_ASC);
@@ -78,7 +89,7 @@ export function useViewPrefs(
       setTilesPerRowRaw(saved.tilesPerRow ?? 4);
     }
     hydrated.current = true;
-  }, [saved, isDm]);
+  }, [saved, isDm, columns]);
 
   // A DM flipping into the player preview loses the DM-only columns;
   // flipping back restores them. Not a change the person "made", so it
@@ -86,8 +97,8 @@ export function useViewPrefs(
   useEffect(() => {
     if (lastIsDm.current === isDm) return;
     lastIsDm.current = isDm;
-    setColumnsRaw((cur) => reconcileColumns(cur, isDm));
-  }, [isDm]);
+    setColumnsRaw((cur) => reconcileColumns(cur, isDm, columns));
+  }, [isDm, columns]);
 
   // ---- debounced save of anything the person changed ----------------
   useEffect(() => {
@@ -97,7 +108,7 @@ export function useViewPrefs(
       void save({
         campaignId,
         view,
-        columns,
+        columns: columnState,
         sortKey,
         sortAsc,
         groupBy: groupBy || undefined,
@@ -109,7 +120,7 @@ export function useViewPrefs(
     }, SAVE_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [
-    columns,
+    columnState,
     sortKey,
     sortAsc,
     groupBy,
@@ -175,12 +186,12 @@ export function useViewPrefs(
 
   const resetLayout = useCallback(() => {
     touch();
-    setColumnsRaw(reconcileColumns(null, isDm));
-  }, [isDm]);
+    setColumnsRaw(reconcileColumns(null, isDm, columns));
+  }, [isDm, columns]);
 
   return {
     ready: saved !== undefined,
-    columns,
+    columns: columnState,
     setColumns,
     sortKey,
     setSortKey,

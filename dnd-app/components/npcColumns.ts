@@ -61,8 +61,7 @@ export type ColumnDef = {
    *   npc       another NPC in this roster
    *   species   an entry in the Species lookup
    *   location  a place in the Locations tool
-   *   group     no screen of its own: a group IS a set of NPCs, so
-   *             this filters the roster down to it
+   *   group     a faction on the Groups screen
    */
   linksTo?: "npc" | "species" | "location" | "group";
 };
@@ -192,13 +191,25 @@ export const MATURITY_ORDER = ["Child", "Young Adult", "Adult", "Senior"];
 
 export type ColumnState = { key: string; width: number; visible: boolean };
 
-/** The layout someone sees before they've customized anything. */
-export function defaultColumnState(isDm: boolean): ColumnState[] {
-  return COLUMNS.filter((c) => isDm || !c.dmOnly).map((c) => ({
-    key: c.key,
-    width: c.defaultWidth,
-    visible: c.defaultVisible,
-  }));
+/**
+ * The layout someone sees before they've customized anything.
+ *
+ * `columns` defaults to the NPC set. It is a parameter because the
+ * Groups screen is the same table over a different set of fields, and
+ * a second copy of this function is a second place for the DM rule to
+ * be got wrong.
+ */
+export function defaultColumnState(
+  isDm: boolean,
+  columns: ColumnDef[] = COLUMNS
+): ColumnState[] {
+  return columns
+    .filter((c) => isDm || !c.dmOnly)
+    .map((c) => ({
+      key: c.key,
+      width: c.defaultWidth,
+      visible: c.defaultVisible,
+    }));
 }
 
 /**
@@ -208,17 +219,19 @@ export function defaultColumnState(isDm: boolean): ColumnState[] {
  */
 export function reconcileColumns(
   saved: ColumnState[] | null,
-  isDm: boolean
+  isDm: boolean,
+  columns: ColumnDef[] = COLUMNS
 ): ColumnState[] {
-  const allowed = COLUMNS.filter((c) => isDm || !c.dmOnly);
-  if (!saved || saved.length === 0) return defaultColumnState(isDm);
+  const allowed = columns.filter((c) => isDm || !c.dmOnly);
+  if (!saved || saved.length === 0) return defaultColumnState(isDm, columns);
 
+  const byKey = new Map(columns.map((c) => [c.key, c]));
   const savedByKey = new Map(saved.map((c) => [c.key, c]));
   const out: ColumnState[] = [];
 
   // Saved order first, skipping anything stale or not permitted.
   for (const s of saved) {
-    const def = COLUMN_BY_KEY.get(s.key);
+    const def = byKey.get(s.key);
     if (!def) continue;
     if (def.dmOnly && !isDm) continue;
     out.push({

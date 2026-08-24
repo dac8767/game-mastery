@@ -407,6 +407,18 @@ export const purgeCampaign = internalMutation({
       return await more();
     }
 
+    const groups = await ctx.db
+      .query("groups")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
+      .take(left);
+    if (
+      await sweep(groups, async (g) => {
+        for (const id of g.attachmentIds ?? []) await ctx.storage.delete(id);
+      })
+    ) {
+      return await more();
+    }
+
     const characters = await ctx.db
       .query("characters")
       .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))

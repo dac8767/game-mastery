@@ -175,6 +175,80 @@ export const dmVisibility = {
       }
     }
 
+    // ---- convex/groups.ts ------------------------------------------
+    // The leak here does not look like a leak. A group's member list is
+    // built out of NPC rows, so a hidden NPC that survives into the
+    // collection tells a player that someone they have not met is in
+    // the cult — the name gets out through the group even though the
+    // roster itself withheld the NPC. The filter has to run BEFORE the
+    // names are collected, which is why this checks that the collected
+    // set is the filtered one rather than merely that a filter exists
+    // somewhere in the file.
+    const groups = read("convex", "groups.ts");
+
+    requirePattern(
+      problems,
+      groups,
+      /requireMember\(\s*ctx,\s*args\.campaignId\s*\)/,
+      "groups.listForCampaign must gate on requireMember(campaignId) — " +
+        "requireUser alone would expose another campaign's factions"
+    );
+    requirePattern(
+      problems,
+      groups,
+      /const visible = npcRows\.filter\(\(n\) => isDm \|\| !n\.hidden\)/,
+      "groups.listForCampaign must drop hidden NPCs before it collects " +
+        "the member lists"
+    );
+    requirePattern(
+      problems,
+      groups,
+      /for \(const npc of visible\)/,
+      "groups.listForCampaign must collect members from the FILTERED " +
+        "rows — collecting from the raw ones would name a hidden NPC to " +
+        "a player through the group they are in"
+    );
+    // The count and the inferred rows come from the same map, so both
+    // follow the filter — but only while the map is the one built above.
+    if (/members\.set\([^)]*npcRows/.test(groups)) {
+      problems.push(
+        "groups.listForCampaign builds its member map from npcRows — the " +
+          "unfiltered list, which puts hidden NPCs back into the counts"
+      );
+    }
+    // A DM previewing as a player must see what a player sees here too,
+    // or the preview quietly reports the wrong thing.
+    requirePattern(
+      problems,
+      groups,
+      /const isDm = isCampaignDm && !viewAsPlayer/,
+      "groups.listForCampaign must honour viewAsPlayer, the same way the " +
+        "roster does — otherwise the preview shows the real member lists"
+    );
+
+    // Every write is the DM's. A player must not rename a faction,
+    // describe one, delete one, or upload a picture onto one.
+    for (const fn of [
+      "createGroup",
+      "describeGroup",
+      "updateGroup",
+      "deleteGroup",
+      "generateUploadUrl",
+      "addAttachment",
+      "removeAttachment",
+    ]) {
+      const at = groups.indexOf(`export const ${fn} = mutation`);
+      if (at === -1) {
+        problems.push(`convex/groups.ts no longer exports ${fn}`);
+        continue;
+      }
+      const next = groups.indexOf("export const ", at + 10);
+      const body = groups.slice(at, next === -1 ? undefined : next);
+      if (!/await requireDm\(/.test(body)) {
+        problems.push(`groups.${fn} is not gated on requireDm`);
+      }
+    }
+
     // ---- per-person view state is never shared ---------------------
     const views = read("convex", "views.ts");
     if (/args\.userId|userId:\s*v\.id\("users"\)/.test(views)) {

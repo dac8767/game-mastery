@@ -58,6 +58,9 @@ export const CAMPAIGN_ITEMS: NavItem[] = [
   // the campaign block above it — two different things in one sidebar
   // wearing the same symbol.
   { id: "npcs", label: "NPCs", icon: "☾", art: "people", slug: "npcs" },
+  // Beside NPCs because it is the roster read the other way round:
+  // the same people, filed by who they belong to.
+  { id: "groups", label: "Groups", icon: "⚑", slug: "groups" },
   { id: "shops", label: "Shops", icon: "⌂" },
   { id: "locations", label: "Locations", icon: "⌖", slug: "locations" },
   { id: "calendar", label: "Calendar", icon: "◷", slug: "calendar" },

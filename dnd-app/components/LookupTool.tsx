@@ -36,6 +36,7 @@ import {
   applyFilters,
 } from "@/components/lookupFilters";
 import { LookupFilterBar } from "@/components/LookupFilterBar";
+import { ExpandIcon } from "@/components/ExpandIcon";
 import { useLookupLayout } from "@/components/useLookupLayout";
 
 /**
@@ -319,6 +320,12 @@ export function LookupTool({
               className="lk-head"
               style={{ ["--lk-cols" as string]: template }}
             >
+              {/* The expand button's track, and the filler track at the
+                  far end. Both are empty here, and both have to be
+                  present: the header is a separate grid from the rows
+                  and lines up with them only by holding a cell per
+                  track. */}
+              <span />
               {columns.map((c) => (
                 <span key={c.key} className="lk-th-cell">
                   <button
@@ -370,6 +377,21 @@ export function LookupTool({
                       style={{ ["--lk-cols" as string]: template }}
                       onClick={() => toggle(id)}
                     >
+                      <span className="lk-expand-cell">
+                        <button
+                          type="button"
+                          className="expand-btn"
+                          aria-label={isOpen ? "Collapse" : "Expand"}
+                          aria-expanded={isOpen}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggle(id);
+                          }}
+                        >
+                          <ExpandIcon />
+                        </button>
+                      </span>
+
                       {columns.map((c) => (
                         <span
                           key={c.key}
@@ -403,18 +425,7 @@ export function LookupTool({
                           )}
                         </span>
                       ))}
-                      <button
-                        type="button"
-                        className="lk-expand"
-                        aria-label={isOpen ? "Collapse" : "Expand"}
-                        aria-expanded={isOpen}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggle(id);
-                        }}
-                      >
-                        {isOpen ? "−" : "+"}
-                      </button>
+                      <span />
                     </div>
 
                     {isOpen && (

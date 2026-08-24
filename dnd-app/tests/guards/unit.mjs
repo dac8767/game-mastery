@@ -3854,23 +3854,16 @@ export const unit = {
         .map((r) => r.name)
         .join() === "Grappler,Alert,Tough"
     );
-    // The Class column shows a base class's OWN name, so that sorting
-    // on it groups each class with its subclasses. Leave it blank and
-    // sorting stacks every base class together above an
-    // undifferentiated pile of subclasses, which is the arrangement
-    // the column exists to prevent.
+    // There is no Class column. It answered "which class is this" for
+    // a flat list; the tab groups structurally now, so on a subclass it
+    // repeated the heading you opened to get there and on a class it
+    // repeated the name in the cell beside it. The two checks above
+    // are what still has to hold: the parent survives as a FACT on the
+    // opened subclass, which is the one place it is not already on
+    // screen.
     check(
-      "the Class column names a base class as itself",
-      look.LOOKUP_COLUMNS.classes
-        .find((c) => c.key === "parentClass")
-        .get({ name: "Fighter", isSubclass: false }) === "Fighter"
-    );
-    check(
-      "and a subclass by its parent",
-      look.LOOKUP_COLUMNS.classes
-        .find((c) => c.key === "parentClass")
-        .get({ name: "Champion", isSubclass: true, parentClass: "Fighter" }) ===
-        "Fighter"
+      "the classes tab has no column repeating the name or the heading",
+      look.LOOKUP_COLUMNS.classes.every((c) => c.key !== "parentClass")
     );
 
     // The same shape one column over, so the rule is the property of
@@ -4038,15 +4031,23 @@ export const unit = {
           tracks(look.columnTemplate(kind))
       );
       // Pinning everything leaves nothing to absorb the leftover width,
-      // so the button's track has to stretch — otherwise the row stops
-      // short of the table's edge with the button stranded mid-row.
+      // so the filler at the end has to stretch — otherwise the columns
+      // bunch at the left of the table with dead space beside them.
       check(
-        `${kind} gives the slack to the button once nothing else flexes`,
-        look.columnTemplate(kind, pinned).endsWith("minmax(2.25rem, 1fr)")
+        `${kind} gives the slack to the filler once nothing else flexes`,
+        look.columnTemplate(kind, pinned).endsWith(" minmax(0, 1fr)")
       );
       check(
-        `${kind} leaves the button track alone while a column still flexes`,
-        look.columnTemplate(kind).endsWith(" 2.25rem")
+        `${kind} leaves the filler flat while a column still flexes`,
+        look.columnTemplate(kind).endsWith(" 0")
+      );
+      // The button LEADS the row — the whole point of moving it off the
+      // right-hand edge — and its track is fixed, so it does not grow
+      // with the table and strand the name halfway across it.
+      check(
+        `${kind} opens from the head of the row`,
+        look.columnTemplate(kind).startsWith(`${look.EXPAND_TRACK} `) &&
+          look.columnTemplate(kind, pinned).startsWith(`${look.EXPAND_TRACK} `)
       );
     }
 
@@ -5049,6 +5050,175 @@ export const unit = {
     check("source is composed from the object", axe.source === "SRD 2024");
     check("a weapon is a weapon", axe.kind === "weapon");
     check("shield subtype folds into armor", shield.kind === "armor");
+
+    // ---- what every record list does to a row ----------------------
+    // These moved out of NpcTable so the Groups screen could use them
+    // rather than reimplement them faithfully enough. Which makes them
+    // worth testing on their own: a regression here is now two screens
+    // full of blanks rather than one.
+    {
+      const grid = await import(
+        pathToFileURL(
+          join(compile("components/recordGrid.ts"), "recordGrid.js")
+        ).href
+      );
+
+      check(
+        "a row with nothing in the field lands in the empty bucket",
+        grid.facetValues({ groups: [] }, "groups").join() === grid.EMPTY &&
+          grid.facetValues({}, "name").join() === grid.EMPTY
+      );
+      check(
+        "a blank string in an array is not a value",
+        grid.facetValues({ g: ["Guild", "  ", ""] }, "g").join() === "Guild"
+      );
+      // The distinction the chips cell turns on: the placeholder is for
+      // FACETING, and drawing it as a pill would put an em dash in the
+      // cell that reads like a value somebody typed.
+      check(
+        "chips drop the placeholder the facets keep",
+        grid.chipValues({ g: [] }, "g").length === 0
+      );
+
+      check(
+        "a boolean displays as a word, not as true",
+        grid.display({ hidden: false }, "hidden") === "No"
+      );
+      check(
+        "an array displays as a list",
+        grid.display({ g: ["A", "B"] }, "g") === "A, B"
+      );
+      check(
+        "a zero is not mistaken for empty",
+        grid.display({ n: 0 }, "n") === "0"
+      );
+
+      // Blanks last in BOTH directions. Sorting a mostly-empty column
+      // means "show me the ones that have something", and clicking the
+      // heading again asks for the other end of that answer — not for
+      // the two hundred rows that had no answer at all. Negating the
+      // comparator reverses the blanks with everything else, which is
+      // what both grids used to do, so this is asserted through
+      // sortRows rather than through compare.
+      const rows = [{ n: "b" }, {}, { n: "a" }];
+      check(
+        "blanks sort last ascending",
+        grid.sortRows(rows, "n", true).map((r) => r.n ?? "-").join() === "a,b,-"
+      );
+      check(
+        "and still last descending",
+        grid.sortRows(rows, "n", false).map((r) => r.n ?? "-").join() === "b,a,-"
+      );
+      check(
+        "sorting does not reorder the array it was handed",
+        rows[0].n === "b" && rows[1].n === undefined
+      );
+      // A value the named order has never heard of is as blank as no
+      // value, so it sinks either way rather than bobbing to the top on
+      // the way back.
+      const ages = [{ m: "Adult" }, { m: "Wyrmling" }, { m: "Child" }];
+      const RANK = { m: ["Child", "Adult", "Senior"] };
+      check(
+        "an unrecognised rank sorts last ascending",
+        grid.sortRows(ages, "m", true, RANK).map((r) => r.m).join() ===
+          "Child,Adult,Wyrmling"
+      );
+      check(
+        "and last descending too",
+        grid.sortRows(ages, "m", false, RANK).map((r) => r.m).join() ===
+          "Adult,Child,Wyrmling"
+      );
+      check(
+        "an empty array counts as blank, not as a value",
+        grid.compare({ g: [] }, { g: ["x"] }, "g") === 1
+      );
+      check(
+        "numbers compare as numbers",
+        grid.compare({ n: 9 }, { n: 100 }, "n") < 0
+      );
+      check(
+        "a named order beats the alphabet",
+        grid.compare({ m: "Child" }, { m: "Adult" }, "m", {
+          m: ["Child", "Adult", "Senior"],
+        }) < 0
+      );
+      check(
+        "a value the named order has never heard of sorts last",
+        grid.compare({ m: "Wyrmling" }, { m: "Senior" }, "m", {
+          m: ["Child", "Adult", "Senior"],
+        }) > 0
+      );
+
+      // A row in two groups is in both. Showing it once under whichever
+      // came first would make one of the two counts wrong.
+      const grouped = grid.groupRows(
+        [
+          { name: "Kelja", g: ["Guild", "Council"] },
+          { name: "Orin", g: ["Guild"] },
+          { name: "Sten", g: [] },
+        ],
+        "g"
+      );
+      check(
+        "a row in two groups appears under both",
+        grouped.find(([v]) => v === "Guild")[1].length === 2 &&
+          grouped.find(([v]) => v === "Council")[1].length === 1
+      );
+      check(
+        "the no-value bucket sorts last, whatever its size",
+        grouped[grouped.length - 1][0] === grid.EMPTY
+      );
+      check(
+        "the biggest group leads",
+        grouped[0][0] === "Guild"
+      );
+
+      // An option you have filtered OUT must still be offered, at zero.
+      // Vanishing from the panel the moment you use it is how a filter
+      // becomes impossible to widen again.
+      const counts = grid.facetCounts(
+        [{ g: ["Guild"] }, { g: ["Council"] }],
+        [{ g: ["Guild"] }],
+        "g"
+      );
+      check(
+        "a filtered-out option stays on the list at zero",
+        counts.length === 2 &&
+          counts.find((c) => c.value === "Council").count === 0
+      );
+
+      // Search reads the COLUMNS, not the row's own keys — finding a row
+      // on a field you cannot see anywhere reads as a broken search.
+      check(
+        "search reads only the fields the table has",
+        grid.searchText({ name: "Kelja", secret: "a traitor" }, ["name"]) ===
+          "kelja"
+      );
+      check(
+        "and reads numbers, which are values people search for",
+        grid.searchText({ n: 12 }, ["n"]) === "12"
+      );
+    }
+
+    // ---- a group is matched by name, not by spelling ---------------
+    // The field is free text typed into Airtable and nobody typed it
+    // twice the same way. Matching on the raw string files one guild
+    // under two rows with half its members each.
+    {
+      const groups = await import(
+        pathToFileURL(join(compile("convex/groups.ts"), "groups.js")).href
+      ).catch(() => null);
+      if (groups) {
+        check(
+          "spacing and case do not make a second group",
+          groups.groupKey("  Mining   Guild ") === groups.groupKey("mining guild")
+        );
+        check(
+          "an empty name keys to nothing, so it can be skipped",
+          groups.groupKey("   ") === ""
+        );
+      }
+    }
 
     return problems;
   },

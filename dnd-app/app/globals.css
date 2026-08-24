@@ -1086,8 +1086,20 @@ body.col-resizing {
   cursor: pointer;
 }
 
-.npc-table tr:hover .expand-btn {
+/* Both lists, one rule. The Lookup tabs used to have a bordered `+` at
+   the far right of the row instead, so the way into an entry was on the
+   opposite side of the screen from the name you were reading. */
+.npc-table tr:hover .expand-btn,
+.lk-tr:hover .expand-btn {
   opacity: 1;
+}
+
+/* An open row keeps its control lit: it is the way back OUT, and
+   hunting for an invisible button to close what you opened is the
+   thing the hover rule would otherwise cost. */
+.lk-entry.open .expand-btn {
+  opacity: 1;
+  color: var(--accent);
 }
 
 .expand-btn:hover {
@@ -4720,27 +4732,13 @@ button.cal-day:hover {
   color: var(--text-dim);
 }
 
-.lk-expand {
-  width: 1.6rem;
-  height: 1.6rem;
-  justify-self: end;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-inset);
-  color: var(--text-dim);
-  font-size: 1rem;
-  line-height: 1;
-  padding: 0;
-}
-
-.lk-expand:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.lk-entry.open .lk-expand {
-  border-color: var(--accent);
-  color: var(--accent);
+/* The expand button's cell, at the head of the row. Centred in a track
+   the width of the NPC list's expand column, so the two lists' names
+   begin on the same vertical line. */
+.lk-expand-cell {
+  display: grid;
+  place-items: center;
+  min-width: 0;
 }
 
 /* The expanded panel, pushing the rows below it down. */
@@ -4752,14 +4750,15 @@ button.cal-day:hover {
 
 @media (max-width: 1000px) {
   /* Below this the columns stop being readable, so the row becomes the
-     name and the expand button, and everything else lives in the panel
-     you open. */
+     expand button and the name, and everything else lives in the panel
+     you open. The filler track stays — the row's cells are counted
+     against it whatever the width. */
   .lk-head {
     display: none;
   }
 
   .lk-tr {
-    grid-template-columns: minmax(0, 1fr) 2.25rem;
+    grid-template-columns: 34px minmax(0, 1fr) 0;
   }
 
   .lk-td:not(.primary) {
@@ -7372,4 +7371,135 @@ button.cal-day:hover {
 .note-add {
   align-self: flex-start;
   margin-top: 0.5rem;
+}
+
+/* ---------------------------------------------------------------
+   Groups
+   --------------------------------------------------------------- */
+
+/* The record is three plain blocks stacked, not the NPC record's
+   arrangeable grid: a group has a description, a roll of who is in it,
+   and some pictures, and there is nothing to lay out. */
+.group-record {
+  max-width: 60rem;
+}
+
+.group-block {
+  display: grid;
+  gap: 0.6rem;
+  justify-items: start;
+}
+
+.group-h {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* Beside the heading rather than under it: "how many are in this" is
+   part of the heading's answer. */
+.group-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.35rem;
+  margin-left: 0.4rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.7rem;
+  letter-spacing: 0;
+}
+
+.group-description {
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.group-description:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.group-prose {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.group-members {
+  flex-wrap: wrap;
+}
+
+.group-shots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.group-shot {
+  position: relative;
+  display: block;
+}
+
+.group-shot img {
+  display: block;
+  width: 9rem;
+  height: 9rem;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+/* Only while the picture is under the pointer. A row of delete buttons
+   at full strength reads as a list of things to remove rather than as
+   a set of pictures. */
+.group-shot-x {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1;
+  opacity: 0;
+}
+
+.group-shot:hover .group-shot-x,
+.group-shot-x:focus-visible {
+  opacity: 1;
+}
+
+.group-shot-x:hover {
+  background: var(--bloodied);
+}
+
+/* "+3" beside the first picture in a grid cell. The row shows one and
+   says how many more rather than growing to hold them. */
+.shot-more {
+  margin-left: 0.35rem;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  vertical-align: top;
+}
+
+.pic-cell:has(.shot-more) {
+  display: flex;
+  align-items: center;
 }

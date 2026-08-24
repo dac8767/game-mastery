@@ -13,6 +13,7 @@ import type * as calendar from "../calendar.js";
 import type * as campaigns from "../campaigns.js";
 import type * as chat from "../chat.js";
 import type * as combat from "../combat.js";
+import type * as groups from "../groups.js";
 import type * as http from "../http.js";
 import type * as locations from "../locations.js";
 import type * as lookup from "../lookup.js";
@@ -34,6 +35,7 @@ declare const fullApi: ApiFromModules<{
   campaigns: typeof campaigns;
   chat: typeof chat;
   combat: typeof combat;
+  groups: typeof groups;
   http: typeof http;
   locations: typeof locations;
   lookup: typeof lookup;

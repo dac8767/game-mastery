@@ -111,6 +111,89 @@ export const integrity = {
       }
     }
 
+    // ---- and the same for the Groups grid, one table over ----------
+    // Its rows are not documents: three of the five columns are
+    // computed by groups.listForCampaign out of the roster and out of
+    // storage, and one of them is not on the groups table at all. So
+    // the columns are checked against what the QUERY returns rather
+    // than against the schema — which is the only thing the grid ever
+    // sees.
+    {
+      const groupsSrc = read("convex", "groups.ts");
+      const returnedGroup = topLevelKeys(
+        blockAfter(
+          groupsSrc,
+          /const rows:\s*\{/,
+          "the row shape in groups.ts"
+        ),
+        "groups.listForCampaign row"
+      );
+      if (returnedGroup.length === 0) {
+        throw new Error("read no row fields out of convex/groups.ts");
+      }
+
+      const groupColsSrc = read("components", "groupColumns.ts");
+      const groupBlock = groupColsSrc.slice(
+        groupColsSrc.indexOf("export const GROUP_COLUMNS"),
+        groupColsSrc.indexOf("export const GROUP_COLUMN_BY_KEY")
+      );
+      const groupKeys = stringProps(
+        groupBlock,
+        "key",
+        "groupColumns GROUP_COLUMNS"
+      );
+      if (groupKeys.length === 0) {
+        throw new Error("read no column keys out of groupColumns.ts");
+      }
+
+      for (const key of groupKeys) {
+        if (!returnedGroup.includes(key)) {
+          problems.push(
+            `groupColumns defines a \`${key}\` column, which ` +
+              "groups.listForCampaign never returns — it would be a column " +
+              "of blanks"
+          );
+        }
+      }
+
+      // A derived column must not be editable. The grid would open a
+      // cell, take what you typed, and save it nowhere — membership is
+      // a field on the NPC, and the count and the pictures are read
+      // out of the roster and out of storage.
+      for (const entry of groupBlock.split(/\},\s*\n/)) {
+        const m = entry.match(/key:\s*"([^"]+)"/);
+        if (!m) continue;
+        if (
+          ["members", "memberCount", "attachments"].includes(m[1]) &&
+          /editable:\s*true/.test(entry)
+        ) {
+          problems.push(
+            `the Groups grid's \`${m[1]}\` column is editable, but nothing ` +
+              "stores it — an edit there would vanish on the next " +
+              "subscription update"
+          );
+        }
+      }
+
+      // The facet keys are what "Group by" offers. One that is not a
+      // column has no label to offer it under.
+      const facets = (
+        groupColsSrc.match(/GROUP_FACET_KEYS = \[([^\]]*)\]/s)?.[1] ?? ""
+      )
+        .split(",")
+        .map((s) => s.trim().replace(/^"|"$/g, ""))
+        .filter(Boolean);
+      for (const key of facets) {
+        if (!groupKeys.includes(key)) {
+          problems.push(
+            `GROUP_FACET_KEYS names \`${key}\`, which is not a Groups ` +
+              "column — Group by would offer an unlabelled option that " +
+              "buckets everything under —"
+          );
+        }
+      }
+    }
+
     // Every column needs a default width and visibility, or the layout
     // reconciler produces a column that cannot be sized or shown.
     for (const entry of columnsBlock.split(/\},\s*\n/)) {
@@ -865,6 +948,131 @@ export const integrity = {
       }
     }
 
+    // ---- a group that becomes real keeps the screen looking at it ---
+    // Half the Groups list is not documents: a name some NPCs carry,
+    // keyed by that name. The first thing you type into one creates the
+    // document, and its identity moves with it — name key to id — while
+    // the list is still holding the old one. Nothing about that is
+    // visible in a type: both are strings, `find` simply returns
+    // undefined, and the record you were typing into closes itself
+    // mid-word.
+    {
+      const detail = stripComments(read("components", "GroupDetail.tsx"));
+      const table = stripComments(read("components", "GroupTable.tsx"));
+
+      const at = detail.indexOf("const ensure =");
+      if (at === -1) {
+        problems.push(
+          "GroupDetail has no ensure() — creating the document on first " +
+            "edit is how an undescribed group is written up at all"
+        );
+      } else {
+        const body = detail.slice(at, detail.indexOf("\n  const run", at));
+        if (!/onBecameReal\(/.test(body)) {
+          problems.push(
+            "GroupDetail's ensure() creates the document without telling " +
+              "the list — the row's key changes from its name to its id, " +
+              "and the open record would close itself mid-edit"
+          );
+        }
+      }
+      if (!/onBecameReal=\{/.test(table)) {
+        problems.push(
+          "GroupTable does not pass onBecameReal, so GroupDetail cannot " +
+            "report a group it had to create"
+        );
+      }
+
+      // And the same handoff on the grid's own inline edit.
+      const commitAt = table.indexOf("async function commitEdit");
+      if (commitAt === -1) {
+        problems.push("no commitEdit in GroupTable.tsx");
+      } else {
+        const body = table.slice(commitAt, table.indexOf("\n  /**", commitAt));
+        if (!/if \(!row\.groupId\)/.test(body)) {
+          problems.push(
+            "GroupTable's commitEdit does not follow the id a row gains " +
+              "on its first edit — the selection would still name the row " +
+              "by a key nothing answers to any more"
+          );
+        }
+      }
+    }
+
+    // ---- every list opens a row the same way, in the same place -----
+    // The Lookup tabs used to open a row from a `+` at the far right,
+    // so the control was on the opposite side of the screen from the
+    // name you had just read. One gesture now, at the head of the row,
+    // in both lists — which is only true if it is the same drawing, the
+    // same class, and the same width, and nothing in the type system
+    // holds any of those three together.
+    {
+      const npc = stripComments(read("components", "NpcTable.tsx"));
+      const lookup = stripComments(read("components", "LookupTool.tsx"));
+
+      // One drawing. A second copy is how the two quietly diverge.
+      const drawn = [
+        ["ExpandIcon.tsx", read("components", "ExpandIcon.tsx")],
+        ["NpcTable.tsx", npc],
+        ["LookupTool.tsx", lookup],
+      ].filter(([, src]) => /function ExpandIcon\(/.test(src));
+      if (drawn.length !== 1 || drawn[0][0] !== "ExpandIcon.tsx") {
+        problems.push(
+          "ExpandIcon is drawn in " +
+            (drawn.map(([f]) => f).join(" and ") || "no file") +
+            " — it belongs in ExpandIcon.tsx alone, so the two lists " +
+            "cannot end up wearing different icons for the same gesture"
+        );
+      }
+
+      // One control, and in the Lookup row it comes BEFORE the columns.
+      // A row's cells are laid out in source order against the grid
+      // template, so a button that drifts below the map is a button
+      // back on the right-hand edge.
+      for (const [file, src] of [
+        ["NpcTable.tsx", npc],
+        ["LookupTool.tsx", lookup],
+      ]) {
+        if (!/className="expand-btn"/.test(src)) {
+          problems.push(
+            `${file} has no expand-btn — its rows would have no visible ` +
+              "way in, which is the state the NPC list was reported in"
+          );
+        }
+      }
+      const rowAt = lookup.indexOf('className="lk-tr"');
+      if (rowAt === -1) {
+        problems.push("no lk-tr in LookupTool — the row markup moved");
+      } else {
+        const button = lookup.indexOf('className="expand-btn"', rowAt);
+        const cells = lookup.indexOf("columns.map(", rowAt);
+        if (button === -1 || cells === -1 || button > cells) {
+          problems.push(
+            "the Lookup row's expand button is not the first thing in the " +
+              "row — it would sit after the columns again, which is the " +
+              "right-hand edge it was moved off"
+          );
+        }
+      }
+
+      // One width. The grid template's leading track is a string in a
+      // .ts module; the NPC table's is a number in a .tsx one.
+      const track = /EXPAND_TRACK = "(\d+)px"/.exec(
+        read("components", "lookupFields.ts")
+      );
+      const col = /EXPAND_COL = (\d+)/.exec(npc);
+      if (!track || !col) {
+        throw new Error("could not read both expand-column widths");
+      }
+      if (track[1] !== col[1]) {
+        problems.push(
+          `the two lists' expand columns are ${track[1]}px and ${col[1]}px — ` +
+            "they open the same way in the same place, so their names " +
+            "should start on the same line"
+        );
+      }
+    }
+
     // ---- the list's panels float, and every float can be dismissed --
     // Filter, Group, Sort and Fields hang under their own button. Two
     // ways that regresses, and only one of them is visible:
@@ -876,16 +1084,22 @@ export const integrity = {
     //                         and the thing people actually get stuck
     //                         on.
     {
-      const src = stripComments(read("components", "NpcTable.tsx"));
-
-      // A panel rendered as a block in the screen's own flow.
-      for (const m of src.matchAll(/\{panel === "(\w+)" && \(/g)) {
-        problems.push(
-          `the ${m[1]} panel is rendered in the screen's flow — opening it ` +
-            "would push the whole table down the page. It belongs under " +
-            "its button, inside a bar-pop"
-        );
+      // A panel rendered as a block in the screen's own flow. Checked
+      // on the SCREENS, because that is where a panel would land if
+      // somebody pulled one back out of its button.
+      for (const file of ["NpcTable.tsx", "GroupTable.tsx"]) {
+        const screen = stripComments(read("components", file));
+        for (const m of screen.matchAll(/\{panel === "(\w+)" && \(/g)) {
+          problems.push(
+            `${file}'s ${m[1]} panel is rendered in the screen's flow — ` +
+              "opening it would push the whole table down the page. It " +
+              "belongs under its button, inside a bar-pop"
+          );
+        }
       }
+
+      // And the floating itself, in the toolbar both screens wear.
+      const src = stripComments(read("components", "TableToolbar.tsx"));
 
       // Every floating panel needs something to dismiss it. Checked
       // pairwise: each bar-panel must have a scrim within the same
@@ -893,8 +1107,8 @@ export const integrity = {
       const panels = [...src.matchAll(/className="bar-panel"/g)];
       if (panels.length === 0) {
         problems.push(
-          "no bar-panel in NpcTable — the toolbar's panels are meant to " +
-            "float under their buttons"
+          "no bar-panel in TableToolbar — the toolbar's panels are meant " +
+            "to float under their buttons"
         );
       }
       for (const m of panels) {
@@ -1094,17 +1308,19 @@ export const integrity = {
       );
 
       // Which screen each kind is sent to, and what has to be true
-      // there. `npc` and `group` are handled inside this screen.
-      // Species lives on the Lookup screen's species TAB now, not on a
-      // route of its own — so the link is /lookup?tab=species&open=…
-      // and the route it has to reach is the lookup page.
+      // there. `npc` is handled inside this screen. Species lives on
+      // the Lookup screen's species TAB now, not on a route of its own
+      // — so the link is /lookup?tab=species&open=… and the route it
+      // has to reach is the lookup page.
       const DESTINATIONS = {
         species: ["app", "campaign", "[campaignId]", "lookup", "page.tsx"],
         location: ["app", "campaign", "[campaignId]", "locations", "page.tsx"],
+        group: ["app", "campaign", "[campaignId]", "groups", "page.tsx"],
       };
       const READERS = {
         species: "LookupTool.tsx",
         location: "LocationsTool.tsx",
+        group: "GroupTable.tsx",
       };
 
       for (const kind of new Set(declared)) {

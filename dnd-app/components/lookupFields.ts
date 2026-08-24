@@ -908,19 +908,15 @@ export const LOOKUP_COLUMNS: Record<LookupKind, LookupColumn[]> = {
     { key: "tools", label: "Tool", width: "9rem", get: (r) => str(r.tools) },
     SOURCE_COLUMN,
   ],
+  // No "Class" column. It existed to answer "which class does this
+  // belong to" back when the tab was a flat list and sorting on it was
+  // the only way to get a class next to its own subclasses. The tab
+  // groups structurally now — a subclass is only ever reachable by
+  // opening the class it sits under — so the column repeated the
+  // heading directly above it, and on a base class it repeated the
+  // name in the very next cell.
   classes: [
     NAME_COLUMN,
-    {
-      key: "parentClass",
-      label: "Class",
-      width: "8rem",
-      // A class shows its own name here rather than a dash: the column
-      // is "which class does this belong to", and a Fighter belongs to
-      // Fighter. It is what makes sorting on it group each class with
-      // its own subclasses instead of stacking every base class above
-      // an undifferentiated pile.
-      get: (r) => str(r.parentClass) ?? str(r.name),
-    },
     {
       key: "isSubclass",
       label: "Kind",
@@ -978,6 +974,16 @@ export const LOOKUP_COLUMNS: Record<LookupKind, LookupColumn[]> = {
 export const MIN_LOOKUP_COL = 56;
 
 /**
+ * The expand button's track, at the head of every row.
+ *
+ * 34px is NpcTable's EXPAND_COL. The two lists sit under the same
+ * sidebar and now open the same way, so a different width here would
+ * be a difference between them that nothing means — the integrity
+ * guard holds the two numbers together.
+ */
+export const EXPAND_TRACK = "34px";
+
+/**
  * Where a row's artwork is fetched from.
  *
  * `image` is a mirror-relative path — "web/foundry/icons/..." — and the
@@ -1019,18 +1025,22 @@ export function columnTemplate(
       : c.width;
   });
 
-  // The trailing track is the expand/collapse button. It absorbs the
-  // slack once nothing else can: the name column is normally `2fr` and
-  // soaks up the leftover width, but pinning it to pixels leaves every
-  // track fixed, and the row would then stop short of the table's right
-  // edge with the button stranded in the middle of it. The button is
-  // `justify-self: end`, so widening its track keeps it against the
-  // edge where it belongs.
-  const button = tracks.some((t) => t.includes("fr"))
-    ? "2.25rem"
-    : "minmax(2.25rem, 1fr)";
+  // The expand button LEADS the row, in the same fixed track the NPC
+  // list uses, so a row opens from the place your eye already is
+  // rather than from the far side of the screen.
+  //
+  // Which leaves the slack to a track of its own at the end. The name
+  // column is normally `2fr` and soaks up whatever is left over, but
+  // dragging every column to a pixel width leaves nothing that flexes,
+  // and the columns would then bunch at the left of a table with a
+  // band of dead space beside them. The filler is a track either way,
+  // present but zero, because the header and the rows are separate
+  // grids that line up only by being handed the same template — a
+  // track that appears and disappears would slide every column out
+  // from under its heading at the width where it changed.
+  const filler = tracks.some((t) => t.includes("fr")) ? "0" : "minmax(0, 1fr)";
 
-  return `${tracks.join(" ")} ${button}`;
+  return `${EXPAND_TRACK} ${tracks.join(" ")} ${filler}`;
 }
 
 /**

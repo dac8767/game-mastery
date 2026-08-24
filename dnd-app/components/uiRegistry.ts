@@ -57,35 +57,56 @@ export const UI_LIMITS = {
  * the guard all follow from the registry with nothing else to update.
  */
 export const TEXT_PIECES: TextPiece[] = [
-  // ---- the NPC roster toolbar -------------------------------------
-  { id: "npc.bar.group", value: "Group", screen: "NPC list" },
-  { id: "npc.bar.filter", value: "Filter", screen: "NPC list" },
-  { id: "npc.bar.sort", value: "Sort", screen: "NPC list" },
+  // ---- the toolbar every record list wears ------------------------
+  // Shared, under `list.*`, because these are the same words doing the
+  // same job on the NPC roster and on Groups. Renaming "Filter" on one
+  // screen and not the other would be a bug wearing a preference's
+  // clothes. The two ids that name a screen's own contents — what "+
+  // New" makes, what the search box searches — stay per screen.
+  { id: "list.bar.group", value: "Group", screen: "Record lists" },
+  { id: "list.bar.filter", value: "Filter", screen: "Record lists" },
+  { id: "list.bar.sort", value: "Sort", screen: "Record lists" },
   // ---- and the two behind the ⋮ menu at the end of it --------------
   // Reset and Fields were on the bar beside Filter, Group and Sort.
   // Those three are what you are doing to the list right now; these two
   // are settings you touch once and then not again for a week, and six
   // buttons in a row all look equally likely.
   {
-    id: "npc.more.fields",
+    id: "list.more.fields",
     value: "Hide/Show fields",
-    screen: "NPC list",
+    screen: "Record lists",
     note: "In the ⋮ menu — which columns the grid shows",
   },
   {
-    id: "npc.more.reset",
+    id: "list.more.reset",
     value: "Reset layout to default",
-    screen: "NPC list",
+    screen: "Record lists",
     note: "In the ⋮ menu — columns, widths and order back to the defaults",
   },
-  { id: "npc.view.grid", value: "Grid", screen: "NPC list" },
-  { id: "npc.view.tiles", value: "Tiles", screen: "NPC list" },
+  { id: "list.view.grid", value: "Grid", screen: "Record lists" },
+  { id: "list.view.tiles", value: "Tiles", screen: "Record lists" },
   {
-    id: "npc.view.perRow",
+    id: "list.view.perRow",
     value: "Per row",
-    screen: "NPC list",
+    screen: "Record lists",
     note: "How many tiles fit across, inside the View menu",
   },
+  { id: "list.panel.groupBy", value: "Group by", screen: "Record lists" },
+  { id: "list.panel.sortBy", value: "Sort by", screen: "Record lists" },
+  {
+    id: "list.panel.ascending",
+    value: "↑ First to last",
+    screen: "Record lists",
+    note: "Shown when the sort runs A→Z",
+  },
+  {
+    id: "list.panel.descending",
+    value: "↓ Last to first",
+    screen: "Record lists",
+    note: "Shown when the sort runs Z→A",
+  },
+
+  // ---- what each list calls its own contents ----------------------
   {
     id: "npc.bar.search",
     value: "Search NPCs",
@@ -93,20 +114,13 @@ export const TEXT_PIECES: TextPiece[] = [
     note: "The search box's placeholder and its label when collapsed",
   },
   { id: "npc.bar.new", value: "+ New NPC", screen: "NPC list" },
-  { id: "npc.panel.groupBy", value: "Group by", screen: "NPC list" },
-  { id: "npc.panel.sortBy", value: "Sort by", screen: "NPC list" },
   {
-    id: "npc.panel.ascending",
-    value: "↑ First to last",
-    screen: "NPC list",
-    note: "Shown when the sort runs A→Z",
+    id: "group.bar.search",
+    value: "Search groups",
+    screen: "Groups list",
+    note: "The search box's placeholder and its label when collapsed",
   },
-  {
-    id: "npc.panel.descending",
-    value: "↓ Last to first",
-    screen: "NPC list",
-    note: "Shown when the sort runs Z→A",
-  },
+  { id: "group.bar.new", value: "+ New Group", screen: "Groups list" },
 
   // ---- the NPC record ---------------------------------------------
   { id: "record.bar.back", value: "Back to NPC List", screen: "NPC record" },

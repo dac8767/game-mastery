@@ -287,6 +287,32 @@ export default defineSchema({
   }).index("by_campaign", ["campaignId"]),
 
   /**
+   * What a group IS, as opposed to who is in it.
+   *
+   * Membership is NOT here. An NPC carries `groups: string[]`, typed by
+   * hand in Airtable long before this table existed, and that is still
+   * where "who is in the Mining Guild" is written down. A row here adds
+   * the things a name cannot carry — a description, and pictures —
+   * keyed by that name.
+   *
+   * Which means the Groups screen lists more rows than this table has:
+   * every name any NPC carries is a group whether or not anybody has
+   * written it up, and a screen that showed only the described ones
+   * would be empty on a roster full of groups. See groups.ts.
+   *
+   * `name` is not unique at the database level, because nothing here
+   * can enforce it — createGroup and renameGroup check, which is where
+   * a duplicate can actually be refused with something to say.
+   */
+  groups: defineTable({
+    campaignId: v.id("campaigns"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    /** Uploaded images, in order. Deleted from storage with the row. */
+    attachmentIds: v.optional(v.array(v.id("_storage"))),
+  }).index("by_campaign", ["campaignId"]),
+
+  /**
    * Per-person app settings. One document per user, all of it personal.
    *
    * Note what is NOT here: whether you are a DM. That is structural —
