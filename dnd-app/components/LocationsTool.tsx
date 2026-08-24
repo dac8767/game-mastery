@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
+import { useSearchParams } from "next/navigation";
 import { Id } from "@/convex/_generated/dataModel";
 import {
   LocRow,
@@ -54,6 +55,31 @@ export function LocationsTool({
   const mapServer = process.env.NEXT_PUBLIC_MAP_SERVER ?? "";
   const locations = useMemo(() => data?.locations ?? [], [data]);
   const isDm = data?.isDm ?? false;
+
+  /* ?open=<name> — how an NPC's Place field sends you here.
+     A NAME, because that field is free text typed into Airtable, and
+     a place that matches nothing is a normal outcome: you land on the
+     locations screen rather than on an error. Opened once per name,
+     tracked in a ref rather than derived from state, or closing the
+     one you were sent to would reopen it on the next render. */
+  const params = useSearchParams();
+  const openName = params.get("open");
+  const handledOpen = useRef<string | null>(null);
+  useEffect(() => {
+    if (!openName || locations.length === 0) return;
+    if (handledOpen.current === openName) return;
+    const want = openName.replace(/\s+/g, " ").trim().toLowerCase();
+    const found = locations.find(
+      (l) => String(l.name ?? "").replace(/\s+/g, " ").trim().toLowerCase() === want
+    );
+    if (!found) return;
+    handledOpen.current = openName;
+    setSelectedId(found._id);
+    // Its parent is what has the map the pin sits on; opening the
+    // place itself would show an empty map for anything that is a pin
+    // rather than a scene.
+    setOpenId((cur) => cur ?? (found.parentId ? String(found.parentId) : null));
+  }, [openName, locations]);
 
   const run = async (fn: () => Promise<unknown>) => {
     try {

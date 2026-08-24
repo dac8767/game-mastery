@@ -49,6 +49,22 @@ export type ColumnDef = {
    * becoming a link to nothing.
    */
   namesNpcs?: boolean;
+  /**
+   * What a value in this column NAMES, so the grid can turn it into a
+   * link to that thing's own screen.
+   *
+   * Names, not ids, for the same reason `namesNpcs` is: these fields
+   * came out of Airtable as free text. A value that resolves to
+   * nothing stays plain text rather than becoming a link to nowhere —
+   * "Aarakocra Tribe" is a group somebody typed, not a row.
+   *
+   *   npc       another NPC in this roster
+   *   species   an entry in the Species lookup
+   *   location  a place in the Locations tool
+   *   group     no screen of its own: a group IS a set of NPCs, so
+   *             this filters the roster down to it
+   */
+  linksTo?: "npc" | "species" | "location" | "group";
 };
 
 export const COLUMNS: ColumnDef[] = [
@@ -65,7 +81,7 @@ export const COLUMNS: ColumnDef[] = [
   { key: "job", label: "Job", kind: "text", chip: true, defaultWidth: 140, defaultVisible: true, editable: true },
   { key: "age", label: "Age", kind: "number", defaultWidth: 70, defaultVisible: true, editable: true },
   { key: "gender", label: "Gender", kind: "text", chip: true, defaultWidth: 110, defaultVisible: true, editable: true },
-  { key: "species", label: "Species", kind: "text", chip: true, defaultWidth: 120, defaultVisible: true, editable: true },
+  { key: "species", label: "Species", kind: "text", chip: true, defaultWidth: 120, defaultVisible: true, editable: true, linksTo: "species" },
   { key: "lineage", label: "Lineage", kind: "text", defaultWidth: 100, defaultVisible: true, editable: true },
   { key: "sexuality", label: "Sexuality", kind: "text", defaultWidth: 110, defaultVisible: true, editable: true },
   {
@@ -76,9 +92,10 @@ export const COLUMNS: ColumnDef[] = [
     defaultVisible: true,
     editable: true,
     namesNpcs: true,
+    linksTo: "npc",
   },
-  { key: "groups", label: "Groups", kind: "chips", defaultWidth: 170, defaultVisible: true, editable: true },
-  { key: "place", label: "Place", kind: "chips", defaultWidth: 150, defaultVisible: true, editable: true },
+  { key: "groups", label: "Groups", kind: "chips", defaultWidth: 170, defaultVisible: true, editable: true, linksTo: "group" },
+  { key: "place", label: "Place", kind: "chips", defaultWidth: 150, defaultVisible: true, editable: true, linksTo: "location" },
   { key: "status", label: "Status", kind: "chips", defaultWidth: 140, defaultVisible: true, editable: true },
   {
     key: "playerNotes",

@@ -865,6 +865,92 @@ export const integrity = {
       }
     }
 
+    // ---- a cell that links must land somewhere that listens --------
+    // `linksTo` on a column is a string, matched against a string in
+    // NpcTable's openLink, pointing at a screen that has to READ the
+    // parameter it is sent. Three places, no types between them, and
+    // every way it breaks is silent: a chip that does nothing when
+    // clicked, or one that navigates to an unfiltered list — which
+    // reads as the link being broken rather than as the destination
+    // ignoring it.
+    {
+      const columnsSrc = stripComments(read("components", "npcColumns.ts"));
+      const tableSrc = read("components", "NpcTable.tsx");
+
+      const declared = [
+        ...columnsSrc.matchAll(/linksTo:\s*"(\w+)"/g),
+      ].map((m) => m[1]);
+      if (declared.length === 0) {
+        throw new Error("no linksTo columns found — parser out of date?");
+      }
+
+      const linkAt = tableSrc.indexOf("const openLink =");
+      if (linkAt === -1) {
+        throw new Error("no openLink in NpcTable.tsx");
+      }
+      const linkBody = tableSrc.slice(
+        linkAt,
+        tableSrc.indexOf("\n  if (result === undefined", linkAt)
+      );
+
+      // Which screen each kind is sent to, and what has to be true
+      // there. `npc` and `group` are handled inside this screen.
+      const DESTINATIONS = {
+        species: ["app", "campaign", "[campaignId]", "species", "page.tsx"],
+        location: ["app", "campaign", "[campaignId]", "locations", "page.tsx"],
+      };
+      const READERS = {
+        species: "LookupTool.tsx",
+        location: "LocationsTool.tsx",
+      };
+
+      for (const kind of new Set(declared)) {
+        if (!linkBody.includes(`"${kind}"`)) {
+          problems.push(
+            `a column declares linksTo: "${kind}", which openLink has no ` +
+              "arm for — clicking that value would do nothing at all"
+          );
+        }
+        const route = DESTINATIONS[kind];
+        if (route && !exists(...route)) {
+          problems.push(
+            `linksTo: "${kind}" navigates to a route that does not exist`
+          );
+        }
+        const reader = READERS[kind];
+        if (reader) {
+          const src = read("components", reader);
+          if (!/params\.get\("open"\)/.test(src)) {
+            problems.push(
+              `${reader} does not read the \`open\` parameter, so a ` +
+                `linksTo: "${kind}" chip would navigate there and land on ` +
+                "an ordinary list — which reads as the link being broken"
+            );
+          }
+        }
+      }
+
+      // And the one way in must stay the one way in. A cell that opens
+      // the record puts back the invisible second control the expand
+      // button replaced — and on a linking column it would fight the
+      // link for the same click.
+      const rowAt = tableSrc.indexOf("function Row({");
+      if (rowAt === -1) throw new Error("no Row in NpcTable.tsx");
+      const rowBody = tableSrc.slice(rowAt);
+      for (const m of rowBody.matchAll(/onClick=\{onOpen\}/g)) {
+        // The expand button is the legitimate one; anything else is a
+        // cell that opens the record.
+        const before = rowBody.slice(Math.max(0, m.index - 400), m.index);
+        if (!/className="expand-btn"/.test(before)) {
+          problems.push(
+            "a cell in Row still opens the record on click — the expand " +
+              "button is meant to be the only way in, and on a linking " +
+              "column the two would race for the same click"
+          );
+        }
+      }
+    }
+
     // ---- a drawn nav icon must have a drawing ----------------------
     // `art: "people"` names a component in NavIcon.tsx, by string.
     // Getting it wrong does not throw and does not render nothing: the

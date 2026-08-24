@@ -6528,6 +6528,29 @@ button.cal-day:hover {
   border-top: 1px solid var(--border);
 }
 
+/* A chip that goes somewhere.
+
+   Same shape as the chip beside it, because it IS the same thing —
+   only the pointer and the underline on hover say it is a link. A chip
+   that navigated but looked like a label was the version of this that
+   nobody found; one restyled into a button would have made the columns
+   that link look like a different kind of data. */
+.chip-link {
+  font: inherit;
+  cursor: pointer;
+  border-style: solid;
+}
+
+.chip-link:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chip-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* Dragging replaced the arrows and the section dropdown. */
 .sbd-row {
   cursor: grab;

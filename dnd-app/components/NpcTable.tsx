@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
@@ -34,6 +35,20 @@ import {
  * runs off the end of the wrapper.
  */
 const EXPAND_COL = 34;
+
+/**
+ * What following a link will do, said before you click it.
+ *
+ * A chip that navigates and a chip that does not look identical
+ * otherwise, and the difference matters most on the columns where both
+ * kinds sit side by side.
+ */
+const LINK_TITLES: Record<NonNullable<ColumnDef["linksTo"]>, string> = {
+  npc: "Open this NPC",
+  species: "Look this species up",
+  location: "Show this place on the map",
+  group: "Show only this group",
+};
 
 /**
  * The NPC roster — an Airtable-style grid over npcs.listForCampaign.
@@ -576,6 +591,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   );
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
   const [columnSearch, setColumnSearch] = useState("");
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [dropKey, setDropKey] = useState<string | null>(null);
@@ -841,6 +857,52 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
       setError(e instanceof Error ? e.message : "Could not save that change.");
     }
   }
+
+  /** Same normalising the record's family links use. */
+  const norm = (v: string) => v.replace(/\s+/g, " ").trim().toLowerCase();
+
+  /**
+   * Follow a value that names something else.
+   *
+   * Which columns do this is declared in npcColumns.ts, not decided
+   * here: the grid should not know that Place means the Locations
+   * tool. Every one of these is free text somebody typed into
+   * Airtable, so a value that resolves to nothing does nothing rather
+   * than navigating to an empty screen.
+   */
+  const openLink = (kind: ColumnDef["linksTo"], raw: string) => {
+    const value = raw.trim();
+    if (!kind || !value) return;
+
+    if (kind === "npc") {
+      const found = all.find((n) => norm(n.name) === norm(value));
+      if (found) setSelected(found._id);
+      return;
+    }
+
+    if (kind === "group") {
+      // A group has no screen, because a group IS a set of NPCs —
+      // this list, narrowed. Sending you to a page that could only
+      // ever show the same rows with a different heading would be
+      // ceremony around a filter.
+      prefs.setFilters([
+        { field: "groups", operator: "hasAnyOf", values: [value] },
+      ]);
+      setSelected(null);
+      return;
+    }
+
+    // Named per kind rather than reached by a ternary's else-branch.
+    // `kind === "species" ? "species" : "locations"` sent EVERY other
+    // kind to Locations, so a fifth link target added later would have
+    // navigated somewhere plausible and wrong instead of failing.
+    const screen =
+      kind === "species" ? "species" : kind === "location" ? "locations" : null;
+    if (!screen) return;
+    router.push(
+      `/campaign/${campaignId}/${screen}?open=${encodeURIComponent(value)}`
+    );
+  };
 
   if (result === undefined || !prefs.ready) {
     return <p className="centered-note">Loading the roster…</p>;
@@ -1285,6 +1347,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
                       setDraft={setDraft}
                       canEdit={canEdit}
                       onOpen={() => setSelected(n._id)}
+                      onLink={openLink}
                       onStartEdit={(def, value) => {
                         setEditing({ id: n._id, key: def.key });
                         setDraft(value);
@@ -1308,6 +1371,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
                   setDraft={setDraft}
                   canEdit={canEdit}
                   onOpen={() => setSelected(n._id)}
+                  onLink={openLink}
                   onStartEdit={(def, value) => {
                     setEditing({ id: n._id, key: def.key });
                     setDraft(value);
@@ -1343,6 +1407,7 @@ function Row({
   setDraft,
   canEdit,
   onOpen,
+  onLink,
   onStartEdit,
   onCommit,
   onCancel,
@@ -1355,6 +1420,8 @@ function Row({
   setDraft: (v: string) => void;
   canEdit: (def: ColumnDef) => boolean;
   onOpen: () => void;
+  /** Follow a value that names something else. See COLUMNS.linksTo. */
+  onLink?: (kind: ColumnDef["linksTo"], value: string) => void;
   onStartEdit: (def: ColumnDef, value: string) => void;
   onCommit: (def: ColumnDef, text: string) => void;
   onCancel: () => void;
@@ -1422,7 +1489,10 @@ function Row({
         if (def.kind === "picture") {
           const src = portraitSrc(npc.portraitUrl, npc.portraitPath, mapServer);
           return (
-            <td key={state.key} className="pic-cell" onClick={onOpen}>
+            /* No longer opens the record. The expand button is the one
+               way in, so a picture that also opened it was a second,
+               invisible control that only rows WITH a portrait had. */
+            <td key={state.key} className="pic-cell">
               {src ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img className="row-portrait" src={src} alt="" />
@@ -1435,22 +1505,48 @@ function Row({
 
         if (def.kind === "chips" || def.chip) {
           const vals = chipValues(npc, def.key);
+          const links = Boolean(def.linksTo && onLink);
           return (
             <td
               key={state.key}
               className={editable ? "editable" : undefined}
+              /* A linking column edits on DOUBLE click and follows on
+                 single. Every other editable cell edits on single.
+                 The two readings of the report collide here — these
+                 columns are both editable and links — and this is the
+                 split that keeps editing reachable while a single
+                 click on a chip does the thing the chip looks like it
+                 does. */
               onDoubleClick={open}
-              onClick={editable ? undefined : onOpen}
+              onClick={links || !editable ? undefined : open}
             >
               {vals.length === 0 ? (
                 <span className="blank">{BLANK}</span>
               ) : (
                 <span className="cell-chips">
-                  {vals.map((v) => (
-                    <span className={chipClass(def.key, v)} key={v}>
-                      {v}
-                    </span>
-                  ))}
+                  {vals.map((v) =>
+                    links ? (
+                      <button
+                        type="button"
+                        className={`${chipClass(def.key, v)} chip-link`}
+                        key={v}
+                        title={LINK_TITLES[def.linksTo!]}
+                        onClick={(e) => {
+                          // The row and the cell both listen; without
+                          // this, following a link would also start an
+                          // edit underneath it.
+                          e.stopPropagation();
+                          onLink?.(def.linksTo, v);
+                        }}
+                      >
+                        {v}
+                      </button>
+                    ) : (
+                      <span className={chipClass(def.key, v)} key={v}>
+                        {v}
+                      </span>
+                    )
+                  )}
                 </span>
               )}
             </td>
@@ -1468,8 +1564,12 @@ function Row({
               .filter(Boolean)
               .join(" ")}
             title={text || undefined}
+            /* Single click edits, for a DM. It used to take two, and
+               the name cell opened the record instead — so the one
+               cell every row has was the one you could not edit
+               without knowing to double-click it. */
             onDoubleClick={open}
-            onClick={def.key === "name" ? onOpen : undefined}
+            onClick={editable ? open : undefined}
           >
             {text === "" ? <span className="blank">{BLANK}</span> : text}
           </td>

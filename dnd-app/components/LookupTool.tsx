@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -81,6 +82,14 @@ export function LookupTool({
   // open at once, which a single-selection panel cannot do.
   const [open, setOpen] = useState<Set<string>>(new Set());
 
+  /* ?open=<name> — how another screen sends you to one entry.
+     A NAME rather than an id, because the caller is an NPC row whose
+     Species field is free text somebody typed into Airtable. It may
+     match nothing, and that is a normal outcome: you land on the list
+     rather than on an error. */
+  const params = useSearchParams();
+  const openName = params.get("open");
+
   /* One `useQuery` per kind, all but one skipped.
      Hooks cannot be called conditionally or in a varying order, so
      this cannot become a lookup keyed on `kind` — the alternative is
@@ -150,6 +159,30 @@ export function LookupTool({
     [kind, library, filters, sort]
   );
   const shown = matched.slice(0, MAX_ROWS);
+
+  /* Opened ONCE, when the row it names is actually there.
+     `all` is empty until the query resolves, so this cannot act on
+     mount. It must also not act twice: the effect depends on `all`,
+     and any re-delivery of that array would reopen the entry the
+     moment you closed it — a row you cannot get rid of. The ref
+     records which name has been handled, which is a fact about this
+     visit rather than about the data. */
+  const handledOpen = useRef<string | null>(null);
+  useEffect(() => {
+    if (!openName || all.length === 0) return;
+    if (handledOpen.current === openName) return;
+    const want = openName.replace(/\s+/g, " ").trim().toLowerCase();
+    const found = all.find(
+      (r) => String(r.name ?? "").replace(/\s+/g, " ").trim().toLowerCase() === want
+    );
+    // Only marked handled once the row EXISTS. The index may still be
+    // filling in; giving up on the first pass would land you on the
+    // list with no explanation.
+    if (!found) return;
+    handledOpen.current = openName;
+    const id = String(found._id);
+    setOpen((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+  }, [openName, all]);
 
   const layout = useLookupLayout(campaignId, kind);
 
