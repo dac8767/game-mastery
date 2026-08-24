@@ -3272,6 +3272,229 @@ export const unit = {
       look.itemSubtitle({ kind: "gear" }) === "Adventuring Gear"
     );
 
+    // ---- feats, backgrounds, classes and species -------------------
+    // The four build kinds share one renderer, so the thing worth
+    // checking is that they do NOT all say the same thing: the whole
+    // point of one subtitle function over four is that the answer
+    // still depends on the kind AND on the row.
+    check(
+      "a feat's subtitle names its category",
+      look.buildSubtitle("feats", { category: "Origin" }) === "Origin Feat"
+    );
+    check(
+      "and a feat with no category is still a feat",
+      look.buildSubtitle("feats", {}) === "Feat"
+    );
+    check(
+      "a subclass says whose it is",
+      look.buildSubtitle("classes", {
+        isSubclass: true,
+        parentClass: "Fighter",
+      }) === "Fighter Subclass"
+    );
+    check(
+      "a subclass with no parent does not say 'undefined Subclass'",
+      look.buildSubtitle("classes", { isSubclass: true }) === "Subclass"
+    );
+    check(
+      "a class says how far its casting goes",
+      look.buildSubtitle("classes", {
+        isSubclass: false,
+        spellcasting: "Full",
+      }) === "Class · Full Caster"
+    );
+    check(
+      "a non-caster class does not claim a progression",
+      look.buildSubtitle("classes", { isSubclass: false }) === "Class"
+    );
+    check(
+      "a species reads size then type",
+      look.buildSubtitle("species", {
+        size: "Small",
+        creatureType: "Humanoid",
+      }) === "Small Humanoid"
+    );
+    // Half a phrase is the failure worth having a test for: "Small
+    // undefined" or a leading space both look like a bug in the data.
+    check(
+      "a species missing its type keeps the half it has, cleanly",
+      look.buildSubtitle("species", { size: "Small" }) === "Small"
+    );
+    check(
+      "a species missing its size keeps the other half, cleanly",
+      look.buildSubtitle("species", { creatureType: "Humanoid" }) ===
+        "Humanoid"
+    );
+    check(
+      "a species with neither still says what it is",
+      look.buildSubtitle("species", {}) === "Species"
+    );
+    check(
+      "a background needs no embellishment",
+      look.buildSubtitle("backgrounds", { skills: "Stealth" }) === "Background"
+    );
+
+    // Facts: absent fields are SKIPPED, never printed empty. A Foundry
+    // export is as likely to omit a field as to get it wrong, and a
+    // column of dashes reads as data loss.
+    const featFacts = look.buildFacts("feats", {
+      prerequisite: "Level 4",
+      repeatable: true,
+    });
+    check(
+      "buildFacts lists what is there",
+      featFacts.length === 2 &&
+        featFacts[0].label === "Prerequisite" &&
+        featFacts[0].value === "Level 4"
+    );
+    check(
+      "and nothing at all when there is nothing",
+      look.buildFacts("feats", {}).length === 0
+    );
+    check(
+      "a false repeatable is not a fact worth printing",
+      look.buildFacts("feats", { repeatable: false }).length === 0
+    );
+    check(
+      "every fact has a non-empty value",
+      look
+        .buildFacts("backgrounds", {
+          abilities: "Int, Wis, Cha",
+          skills: "Insight, Religion",
+          tools: "",
+          feat: null,
+        })
+        .every((f) => f.value && f.value.length > 0)
+    );
+    check(
+      "an empty string is not a fact",
+      look.buildFacts("backgrounds", { abilities: "", skills: "  " })
+        .length === 0
+    );
+    check(
+      "zero darkvision is not darkvision",
+      look
+        .buildFacts("species", { darkvision: 0 })
+        .every((f) => f.label !== "Darkvision")
+    );
+    check(
+      "and a real one is written in feet",
+      look
+        .buildFacts("species", { darkvision: 60 })
+        .some((f) => f.label === "Darkvision" && f.value === "60 ft")
+    );
+    // Only a subclass repeats its class in the facts — on a class the
+    // subtitle already said it.
+    check(
+      "a class does not list itself under Class",
+      look
+        // WITH a name: the mistake worth catching is falling back to
+        // it, and a row with no name cannot show that happening.
+        .buildFacts("classes", {
+          isSubclass: false,
+          name: "Fighter",
+          hitDie: "d10",
+        })
+        .every((f) => f.label !== "Class")
+    );
+    check(
+      "a subclass does",
+      look
+        .buildFacts("classes", { isSubclass: true, parentClass: "Fighter" })
+        .some((f) => f.label === "Class" && f.value === "Fighter")
+    );
+
+    // Sorting a column most rows leave blank must not bury the answer.
+    // Ascending by Prerequisite means "show me the ones that have
+    // one" — and with the blanks sorting first you get two hundred
+    // empty rows above the fifteen you clicked for.
+    check(
+      "a blank prerequisite sorts LAST, not first",
+      look
+        .sortByColumn(
+          "feats",
+          [
+            { name: "Alert" },
+            { name: "Grappler", prerequisite: "Level 4" },
+            { name: "Tough" },
+          ],
+          "prerequisite",
+          false
+        )
+        .map((r) => r.name)
+        .join() === "Grappler,Alert,Tough"
+    );
+    // The Class column shows a base class's OWN name, so that sorting
+    // on it groups each class with its subclasses. Leave it blank and
+    // sorting stacks every base class together above an
+    // undifferentiated pile of subclasses, which is the arrangement
+    // the column exists to prevent.
+    check(
+      "the Class column names a base class as itself",
+      look.LOOKUP_COLUMNS.classes
+        .find((c) => c.key === "parentClass")
+        .get({ name: "Fighter", isSubclass: false }) === "Fighter"
+    );
+    check(
+      "and a subclass by its parent",
+      look.LOOKUP_COLUMNS.classes
+        .find((c) => c.key === "parentClass")
+        .get({ name: "Champion", isSubclass: true, parentClass: "Fighter" }) ===
+        "Fighter"
+    );
+
+    // The same shape one column over, so the rule is the property of
+    // the file rather than of one comparator.
+    check(
+      "and so does a blank spellcasting progression",
+      look
+        .sortByColumn(
+          "classes",
+          [
+            { name: "Fighter", isSubclass: false },
+            { name: "Wizard", isSubclass: false, spellcasting: "Full" },
+          ],
+          "spellcasting",
+          false
+        )
+        .map((r) => r.name)
+        .join() === "Wizard,Fighter"
+    );
+
+    // Every kind must have columns, and every column must be readable.
+    for (const kind of Object.keys(look.LOOKUP_TITLES)) {
+      const cols = look.LOOKUP_COLUMNS[kind];
+      check(
+        `${kind} has columns, and one of them is the name`,
+        Array.isArray(cols) &&
+          cols.length > 0 &&
+          cols.some((c) => c.primary === true)
+      );
+      check(
+        `${kind}'s columns survive a row with nothing in it`,
+        cols.every((c) => {
+          const v = c.get({});
+          return v === null || typeof v === "string";
+        })
+      );
+      // sort() too, not just get(). A column whose comparator throws
+      // on an empty field takes the whole table down the moment
+      // someone clicks its heading — and the row that triggers it is
+      // the one nobody filled in.
+      check(
+        `${kind}'s comparators survive a row with nothing in it`,
+        cols.every((c) => {
+          if (!c.sort) return true;
+          const v = c.sort({});
+          return typeof v === "number" || typeof v === "string";
+        })
+      );
+      check(
+        `${kind}'s column keys are unique`,
+        new Set(cols.map((c) => c.key)).size === cols.length
+      );
+    }
+
     // Spells: eight cells, always eight.
     const sc = look.spellCells({ level: 8, school: "Necromancy" });
     check("spellCells always has eight slots", sc.length === 8);

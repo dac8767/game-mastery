@@ -470,6 +470,108 @@ export default defineSchema({
       filterFields: ["source"],
     }),
 
+  /**
+   * ── The character-build half of the library ───────────────────────
+   *
+   * Feats, backgrounds, classes and species. Same rules as the three
+   * above: campaign-agnostic, no write path, loaded by `npx convex
+   * import`, and emptied by scripts/clear-lookup.mjs when their shape
+   * changes.
+   *
+   * Every one of them carries `source`, and that is not decoration —
+   * it is what the 5e/5.5e rule reads. `applyEdition` groups by name
+   * and keeps the printing whose book matches the campaign's edition,
+   * so a 2024 Alert and a 2014 Alert become one row. A table without
+   * `source` would show both and there would be no way to tell them
+   * apart.
+   *
+   * The fields are deliberately shallow. What a feat or a background
+   * actually SAYS lives in `blocks`, like everything else here; the
+   * columns exist to sort and filter by, not to reproduce the entry.
+   * A field Foundry does not reliably carry is better absent than
+   * present and empty on nine rows in ten.
+   */
+  feats: defineTable({
+    name: v.string(),
+    image: v.optional(v.string()),
+    /** Origin | General | Fighting Style | Epic Boon — 2024's grouping. */
+    category: v.optional(v.string()),
+    /** "Level 4+, Strength 13" — free text, as the book writes it. */
+    prerequisite: v.optional(v.string()),
+    /** Can be taken more than once. */
+    repeatable: v.optional(v.boolean()),
+    blocks: v.optional(v.array(blockValidator)),
+    source: v.optional(v.string()),
+  })
+    .index("by_name", ["name"])
+    .searchIndex("search_name", {
+      searchField: "name",
+      filterFields: ["category"],
+    }),
+
+  backgrounds: defineTable({
+    name: v.string(),
+    image: v.optional(v.string()),
+    /** "Dex, Int, Cha" — the three the 2024 backgrounds raise. */
+    abilities: v.optional(v.string()),
+    /** The origin feat it grants, by name. */
+    feat: v.optional(v.string()),
+    skills: v.optional(v.string()),
+    tools: v.optional(v.string()),
+    equipment: v.optional(v.string()),
+    blocks: v.optional(v.array(blockValidator)),
+    source: v.optional(v.string()),
+  })
+    .index("by_name", ["name"])
+    .searchIndex("search_name", { searchField: "name" }),
+
+  /**
+   * Classes AND subclasses, in one table.
+   *
+   * A subclass is not a peer of a class, it is part of one — nobody
+   * looks up "Champion" without meaning the Fighter. Two tables would
+   * mean two screens and a Champion you could only find by knowing
+   * which of them to open. `isSubclass` and `parentClass` are what the
+   * filter and the column read.
+   */
+  classes: defineTable({
+    name: v.string(),
+    image: v.optional(v.string()),
+    isSubclass: v.boolean(),
+    /** The class identifier a subclass belongs to; absent on a class. */
+    parentClass: v.optional(v.string()),
+    /** "d10" — written as it is spoken, not as a number. */
+    hitDie: v.optional(v.string()),
+    primaryAbility: v.optional(v.string()),
+    /** The two saving throws a class is proficient in. */
+    saves: v.optional(v.string()),
+    /** Full | Half | Third | Pact — absent when it does not cast. */
+    spellcasting: v.optional(v.string()),
+    blocks: v.optional(v.array(blockValidator)),
+    source: v.optional(v.string()),
+  })
+    .index("by_name", ["name"])
+    .searchIndex("search_name", {
+      searchField: "name",
+      filterFields: ["parentClass"],
+    }),
+
+  species: defineTable({
+    name: v.string(),
+    image: v.optional(v.string()),
+    size: v.optional(v.string()),
+    /** "30 ft" — walking speed, as the entry writes it. */
+    speed: v.optional(v.string()),
+    /** Humanoid, almost always — but not on every species. */
+    creatureType: v.optional(v.string()),
+    /** Range in feet, as a number so it sorts and filters as one. */
+    darkvision: v.optional(v.number()),
+    blocks: v.optional(v.array(blockValidator)),
+    source: v.optional(v.string()),
+  })
+    .index("by_name", ["name"])
+    .searchIndex("search_name", { searchField: "name" }),
+
   items: defineTable({
     name: v.string(),
     image: v.optional(v.string()),

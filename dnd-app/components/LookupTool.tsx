@@ -12,6 +12,8 @@ import {
   LookupKind,
   abilityCells,
   artSrc,
+  buildFacts,
+  buildSubtitle,
   columnTemplate,
   blocks as readBlocks,
   features,
@@ -32,7 +34,8 @@ import { LookupFilterBar } from "@/components/LookupFilterBar";
 import { useLookupLayout } from "@/components/useLookupLayout";
 
 /**
- * The Lookup screens: spells, items, monsters.
+ * The Lookup screens: spells, items, monsters, feats, backgrounds,
+ * classes and species.
  *
  * A full-width table with sortable columns, where a row expands
  * DOWNWARD in place to show the whole entry. Expanding in the list
@@ -40,9 +43,16 @@ import { useLookupLayout } from "@/components/useLookupLayout";
  * — open both, and they sit in the table with the rows you were
  * scanning still around them.
  *
- * One component for all three kinds. The columns, the filters and the
+ * One component for every kind. The columns, the filters and the
  * expanded layout are all declarations elsewhere, so this file is the
- * shape of the screen rather than three screens in a trench coat.
+ * shape of the screen rather than seven screens in a trench coat —
+ * which is why adding four kinds touched the declarations and barely
+ * touched this.
+ *
+ * The 5e/5.5e rule is applied here, once, for all of them: a name that
+ * exists in both printings collapses to the one this campaign plays.
+ * It reads only `name` and `source`, so every kind gets it by carrying
+ * those two fields rather than by opting in.
  *
  * The whole lightweight index is fetched once and filtered in memory.
  * That is the cheap option here rather than the expensive one, because
@@ -71,14 +81,44 @@ export function LookupTool({
   // open at once, which a single-selection panel cannot do.
   const [open, setOpen] = useState<Set<string>>(new Set());
 
+  /* One `useQuery` per kind, all but one skipped.
+     Hooks cannot be called conditionally or in a varying order, so
+     this cannot become a lookup keyed on `kind` — the alternative is
+     seven components with the same body. A skipped query costs
+     nothing: Convex does not subscribe it. */
   const spells = useQuery(api.lookup.indexSpells, kind === "spells" ? {} : "skip");
   const items = useQuery(api.lookup.indexItems, kind === "items" ? {} : "skip");
   const monsters = useQuery(
     api.lookup.indexMonsters,
     kind === "monsters" ? {} : "skip"
   );
+  const feats = useQuery(api.lookup.indexFeats, kind === "feats" ? {} : "skip");
+  const backgrounds = useQuery(
+    api.lookup.indexBackgrounds,
+    kind === "backgrounds" ? {} : "skip"
+  );
+  const classes = useQuery(
+    api.lookup.indexClasses,
+    kind === "classes" ? {} : "skip"
+  );
+  const species = useQuery(
+    api.lookup.indexSpecies,
+    kind === "species" ? {} : "skip"
+  );
 
-  const index = kind === "spells" ? spells : kind === "items" ? items : monsters;
+  /* Keyed rather than chained. The chain it replaced ended in a bare
+     `: monsters`, so every kind added after it silently rendered the
+     monster list instead of its own — a screen full of the wrong data
+     and no error anywhere. */
+  const index = {
+    spells,
+    items,
+    monsters,
+    feats,
+    backgrounds,
+    classes,
+    species,
+  }[kind];
   const all = useMemo(
     () => (index?.rows ?? []) as Record<string, unknown>[],
     [index]
@@ -343,11 +383,34 @@ function ExpandedRow({ kind, id }: { kind: LookupKind; id: string }) {
     api.lookup.getMonster,
     kind === "monsters" ? { id: id as Id<"monsters"> } : "skip"
   );
+  const feat = useQuery(
+    api.lookup.getFeat,
+    kind === "feats" ? { id: id as Id<"feats"> } : "skip"
+  );
+  const background = useQuery(
+    api.lookup.getBackground,
+    kind === "backgrounds" ? { id: id as Id<"backgrounds"> } : "skip"
+  );
+  const klass = useQuery(
+    api.lookup.getClass,
+    kind === "classes" ? { id: id as Id<"classes"> } : "skip"
+  );
+  const speciesRow = useQuery(
+    api.lookup.getSpecies,
+    kind === "species" ? { id: id as Id<"species"> } : "skip"
+  );
 
-  const row = (kind === "spells" ? spell : kind === "items" ? item : monster) as
-    | Record<string, unknown>
-    | null
-    | undefined;
+  // Keyed, for the same reason the index is: a chain ending in a bare
+  // fallback silently serves one kind's row under another kind's name.
+  const row = {
+    spells: spell,
+    items: item,
+    monsters: monster,
+    feats: feat,
+    backgrounds: background,
+    classes: klass,
+    species: speciesRow,
+  }[kind] as Record<string, unknown> | null | undefined;
 
   return (
     <div className="lk-panel">
@@ -393,6 +456,10 @@ function LookupDetail({
           {kind === "items" && <ItemHead row={row} />}
           {kind === "spells" && <SpellHead row={row} />}
           {kind === "monsters" && <MonsterBlock row={row} />}
+          {kind === "feats" && <FeatHead row={row} />}
+          {kind === "backgrounds" && <BackgroundHead row={row} />}
+          {kind === "classes" && <ClassHead row={row} />}
+          {kind === "species" && <SpeciesHead row={row} />}
 
           {body.length > 0 && (
             <section className="lk-body">
@@ -544,6 +611,56 @@ function BigArt({ row }: { row: Record<string, unknown> }) {
 }
 
 /** "Wondrous Item, very rare (requires attunement)", then cost/weight. */
+/**
+ * The four build kinds all read the same way: a subtitle saying what
+ * this IS, then a short list of the facts, then the entry's own prose.
+ *
+ * They share one renderer rather than four, because they genuinely
+ * have the same shape — unlike a spell and a stat block, which do not.
+ * `buildSubtitle` and `buildFacts` are declarations in lookupFields.ts,
+ * so what each kind says is data and this is only how it is drawn.
+ */
+function BuildHead({
+  kind,
+  row,
+}: {
+  kind: LookupKind;
+  row: Record<string, unknown>;
+}) {
+  const subtitle = buildSubtitle(kind, row);
+  const facts = buildFacts(kind, row);
+
+  return (
+    <>
+      {subtitle && <p className="lk-sub">{subtitle}</p>}
+      <div className="lk-rule" />
+      {facts.length > 0 && (
+        <dl className="lk-facts">
+          {facts.map((f) => (
+            <div key={f.label}>
+              <dt>{f.label}</dt>
+              <dd>{f.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </>
+  );
+}
+
+const FeatHead = ({ row }: { row: Record<string, unknown> }) => (
+  <BuildHead kind="feats" row={row} />
+);
+const BackgroundHead = ({ row }: { row: Record<string, unknown> }) => (
+  <BuildHead kind="backgrounds" row={row} />
+);
+const ClassHead = ({ row }: { row: Record<string, unknown> }) => (
+  <BuildHead kind="classes" row={row} />
+);
+const SpeciesHead = ({ row }: { row: Record<string, unknown> }) => (
+  <BuildHead kind="species" row={row} />
+);
+
 function ItemHead({ row }: { row: Record<string, unknown> }) {
   const facts = itemFacts(row);
   return (

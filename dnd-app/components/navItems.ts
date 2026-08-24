@@ -91,6 +91,14 @@ export const LOOKUP_ITEMS: NavItem[] = [
   { id: "spells", label: "Spells", icon: "✧", slug: "spells" },
   { id: "items", label: "Items", icon: "⚱", slug: "items" },
   { id: "monsters", label: "Monsters", icon: "☠", slug: "monsters" },
+  // The character-build half of the library. Grouped after the three
+  // above rather than in a section of their own: it is all one
+  // rulebook, and a "Character Options" heading with four entries under
+  // it would be a second Lookup you had to learn about.
+  { id: "feats", label: "Feats", icon: "❖", slug: "feats" },
+  { id: "backgrounds", label: "Backgrounds", icon: "❦", slug: "backgrounds" },
+  { id: "classes", label: "Classes", icon: "⚑", slug: "classes" },
+  { id: "species", label: "Species", icon: "❧", slug: "species" },
   { id: "rules", label: "Rules Lawyer", icon: "§", slug: "rules" },
 ];
 

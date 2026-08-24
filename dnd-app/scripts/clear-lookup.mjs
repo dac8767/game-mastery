@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 /**
- * Empty the three Lookup tables, so a change to their shape can be
- * pushed.
+ * Empty the Lookup tables, so a change to their shape can be pushed.
  *
  *   node scripts/clear-lookup.mjs
  *
@@ -25,8 +24,8 @@
  * ---------------------------------------------------------------------
  * Why EMPTYING is the right migration here, and nowhere else
  *
- * These three tables are the only ones in the app that can be thrown
- * away without losing anything. They are derived: every row comes from
+ * These tables are the only ones in the app that can be thrown away
+ * without losing anything. They are derived: every row comes from
  * `npx convex import` off a Foundry export, nothing in the app writes
  * them (convex/lookup.ts has queries only, and a guard enforces that),
  * and the import that follows replaces all of them anyway.
@@ -52,7 +51,15 @@ import { parseOrExit } from "./args.mjs";
  * matches the schema's Lookup tables, so adding a fourth cannot leave
  * this one silently behind.
  */
-const TABLES = ["spells", "items", "monsters"];
+const TABLES = [
+  "spells",
+  "items",
+  "monsters",
+  "feats",
+  "backgrounds",
+  "classes",
+  "species",
+];
 
 const APP_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 

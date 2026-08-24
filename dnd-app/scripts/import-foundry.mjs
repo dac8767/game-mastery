@@ -147,6 +147,16 @@ function classify(doc) {
     const t = declared.toLowerCase();
     if (t === "spell") return "spell";
     if (ITEM_TYPES.has(t)) return "item";
+    if (t === "feat") return "feat";
+    if (t === "background") return "background";
+    // A subclass is filed with its class: nobody looks up "Champion"
+    // without meaning the Fighter, and two buckets would be two
+    // screens with the answer on whichever one you did not open.
+    if (t === "class" || t === "subclass") return "class";
+    // "race" is the pre-2024 name and is still what most exports
+    // carry; "species" is what the 2024 books call it. Both, because
+    // one library can hold documents written under either.
+    if (t === "race" || t === "species") return "species";
     if (t === "npc" || t === "character" || t === "vehicle" || t === "group") {
       return "actor";
     }
@@ -160,9 +170,8 @@ function classify(doc) {
  * dnd5e Item types that are things you can hold.
  *
  * feat / class / subclass / background / race are Items too, and are
- * deliberately absent: they are character-build machinery, not the
- * reference library, and folding them in would put "Fighter" in the
- * item list.
+ * deliberately absent HERE: they now have four tables of their own, and
+ * folding them in would still put "Fighter" in the item list.
  */
 const ITEM_TYPES = new Set([
   "weapon",
@@ -824,6 +833,269 @@ function itemToRow(doc) {
     source: formatSource(s.source),
   };
   return row;
+}
+
+// ---------------------------------------------------------------------
+// Feats, backgrounds, classes, species -> the build tables
+// ---------------------------------------------------------------------
+//
+// These four read the same export at four different levels of
+// certainty, so they are written to the same rule: TRY the places the
+// value has lived across dnd5e versions, and leave the field OFF when
+// none of them has it. Never write "" or 0 as a stand-in.
+//
+// That matters more here than it did for spells and items. Those two
+// have had stable shapes for years; a class's spellcasting progression
+// has moved twice, backgrounds were rebuilt wholesale for 2024, and
+// "race" became "species". A converter that guessed and wrote a
+// placeholder would fill a column with plausible wrong answers, which
+// is the one outcome worse than an empty one — the report at the end
+// counts how many rows got each field precisely so a field that is
+// quietly never being found is visible before the import runs.
+
+/**
+ * Every advancement of a given type on a build item.
+ *
+ * dnd5e hangs a class's hit die, a background's skills and a species'
+ * size off `system.advancement`, a heterogeneous list where the `type`
+ * discriminates. Absent on older documents, so this always returns an
+ * array.
+ */
+function advancementsOf(s, type) {
+  const list = Array.isArray(s.advancement) ? s.advancement : [];
+  return list.filter(
+    (a) => a && String(a.type ?? "").toLowerCase() === type.toLowerCase()
+  );
+}
+
+/** "Str", "Dex" — how a class entry abbreviates an ability. */
+function abilityAbbrev(key) {
+  const k = clean(key).toLowerCase().slice(0, 3);
+  return ABILITIES[k] ? ABILITIES[k].slice(0, 3) : undefined;
+}
+
+/** A list of ability keys as "Str, Dex", or undefined if there are none. */
+function abilityList(raw) {
+  const keys = Array.isArray(raw)
+    ? raw
+    : raw instanceof Set
+      ? [...raw]
+      : typeof raw === "string" && raw
+        ? raw.split(/[,\s]+/)
+        : [];
+  const out = keys.map(abilityAbbrev).filter(Boolean);
+  return out.length > 0 ? [...new Set(out)].join(", ") : undefined;
+}
+
+/**
+ * Proficiency grants, spelled out.
+ *
+ * dnd5e writes them as compound slugs — "skills:ath", "tool:thief",
+ * "saves:dex" — in a Trait advancement's `configuration.grants`, which
+ * may be an array or a Set depending on how the document was loaded.
+ * `wanted` is the prefix to keep, so skills and tools come out of the
+ * same list as two different fields.
+ */
+function traitGrants(s, wanted) {
+  const out = [];
+  for (const adv of advancementsOf(s, "Trait")) {
+    const grants = adv.configuration?.grants ?? adv.configuration?.choices ?? [];
+    const list = Array.isArray(grants)
+      ? grants
+      : grants && typeof grants === "object"
+        ? Object.values(grants).flatMap((c) =>
+            Array.isArray(c?.pool) ? c.pool : []
+          )
+        : [];
+    for (const raw of list) {
+      const slug = clean(raw);
+      if (!slug.startsWith(`${wanted}:`)) continue;
+      const key = slug.slice(wanted.length + 1);
+      // Skills have a name; tools are an identifier we can only tidy.
+      const label = SKILLS[key] ?? ABILITIES[key] ?? humanize(key);
+      if (label) out.push(label);
+    }
+  }
+  return out.length > 0 ? [...new Set(out)].join(", ") : undefined;
+}
+
+/**
+ * A feat's grouping.
+ *
+ * 2024 puts it in `system.type.subtype` as a camelCase slug; 2014 feats
+ * have no grouping at all, and get none rather than being called
+ * "General" — which is a 2024 word for a 2024 idea.
+ */
+function featCategory(s) {
+  const subtype = clean(s.type?.subtype ?? s.type?.value);
+  if (!subtype || subtype.toLowerCase() === "feat") return undefined;
+  return humanize(subtype);
+}
+
+/**
+ * A feat's prerequisite, as a sentence.
+ *
+ * 2024 stores it structurally (`system.prerequisites.level`), older
+ * documents put it in prose only. The structural half is used when it
+ * is there and nothing is invented when it is not — a feat that
+ * genuinely has no prerequisite and one whose export forgot to say are
+ * both better left blank than guessed at.
+ */
+function featPrerequisite(s) {
+  const parts = [];
+  const level = Number(s.prerequisites?.level);
+  if (Number.isFinite(level) && level > 1) parts.push(`Level ${level}`);
+
+  const repeat = clean(s.prerequisites?.repeat);
+  if (repeat) parts.push(repeat);
+
+  return parts.length > 0 ? parts.join(", ") : undefined;
+}
+
+function featToRow(doc) {
+  const s = sys(doc);
+  return {
+    name: clean(doc.name) || "Unnamed",
+    image: libraryImage(doc),
+    category: featCategory(s),
+    prerequisite: featPrerequisite(s),
+    // `properties` is a list in 2024 and absent before it.
+    repeatable: Array.isArray(s.properties)
+      ? s.properties.includes("repeatable")
+      : undefined,
+    blocks: toBlocks(s.description?.value),
+    source: formatSource(s.source),
+  };
+}
+
+function backgroundToRow(doc) {
+  const s = sys(doc);
+
+  // The three abilities a 2024 background raises. They live in an
+  // AbilityScoreImprovement advancement rather than a field.
+  const asi = advancementsOf(s, "AbilityScoreImprovement")[0];
+  const abilities = abilityList(
+    asi?.configuration?.locked ?? asi?.configuration?.choices ?? []
+  );
+
+  // The origin feat, as an ItemGrant advancement pointing at a feat.
+  // The UUID's last segment is the feat's id, not its name, so the
+  // name is only usable when the export carried a label alongside it.
+  const grant = advancementsOf(s, "ItemGrant")[0];
+  const featLabel =
+    clean(grant?.title) ||
+    clean(grant?.configuration?.label) ||
+    undefined;
+
+  return {
+    name: clean(doc.name) || "Unnamed",
+    image: libraryImage(doc),
+    abilities,
+    feat: featLabel,
+    skills: traitGrants(s, "skills"),
+    tools: traitGrants(s, "tool"),
+    equipment: startingEquipment(s),
+    blocks: toBlocks(s.description?.value),
+    source: formatSource(s.source),
+  };
+}
+
+/**
+ * Starting equipment, as a short phrase.
+ *
+ * `system.startingEquipment` is a tree of grouped choices with UUID
+ * references in it; reconstructing "a scholar's pack, a bottle of ink"
+ * from that reliably is not something this can promise. What it CAN
+ * report honestly is how many entries there are, and the entry's own
+ * prose already lists them — so this reads the labels when they exist
+ * and gives up cleanly when they do not.
+ */
+function startingEquipment(s) {
+  const list = Array.isArray(s.startingEquipment) ? s.startingEquipment : [];
+  const labels = list
+    .map((e) => clean(e?.label) || clean(e?.name))
+    .filter(Boolean);
+  return labels.length > 0 ? labels.join(", ") : undefined;
+}
+
+/** "full" -> "Full". The four progressions dnd5e knows. */
+const CASTER_PROGRESSION = {
+  full: "Full",
+  half: "Half",
+  third: "Third",
+  pact: "Pact",
+};
+
+function classToRow(doc) {
+  const s = sys(doc);
+  const isSubclass = clean(doc.type).toLowerCase() === "subclass";
+
+  // The hit die moved: `system.hitDice` was "d10", then it became
+  // `system.hd.denomination`. Both, oldest last.
+  const die =
+    clean(s.hd?.denomination) || clean(s.hitDice) || clean(s.hitDie);
+
+  const progression = clean(s.spellcasting?.progression).toLowerCase();
+
+  // A class's identifier is what a subclass points at, so a subclass's
+  // parent is its `classIdentifier`. Humanised, because the identifier
+  // is a slug ("fighter") and the column shows a name.
+  const parent = isSubclass
+    ? humanize(clean(s.classIdentifier) || clean(s.class))
+    : undefined;
+
+  return {
+    name: clean(doc.name) || "Unnamed",
+    image: libraryImage(doc),
+    isSubclass,
+    parentClass: parent,
+    // `d10` and `10` are both in the wild; the column says "Hit Die",
+    // so it is written the way it is spoken.
+    hitDie: die ? (die.startsWith("d") ? die : `d${die}`) : undefined,
+    primaryAbility: abilityList(
+      s.primaryAbility?.value ?? s.primaryAbility ?? []
+    ),
+    saves: abilityList(s.saves ?? []),
+    spellcasting:
+      progression && progression !== "none"
+        ? (CASTER_PROGRESSION[progression] ?? humanize(progression))
+        : undefined,
+    blocks: toBlocks(s.description?.value),
+    source: formatSource(s.source),
+  };
+}
+
+function speciesToRow(doc) {
+  const s = sys(doc);
+
+  // Size is a Size advancement's list of allowed sizes — "Small or
+  // Medium" is a real answer, not a data error, so both are kept.
+  const sizeAdv = advancementsOf(s, "Size")[0];
+  const rawSizes = sizeAdv?.configuration?.sizes ?? s.size ?? [];
+  const sizes = (
+    Array.isArray(rawSizes)
+      ? rawSizes
+      : rawSizes instanceof Set
+        ? [...rawSizes]
+        : [rawSizes]
+  )
+    .map((x) => SIZES[clean(x).toLowerCase()] ?? humanize(x))
+    .filter(Boolean);
+
+  const walk = Number(s.movement?.walk);
+  const dark = Number(s.senses?.darkvision);
+
+  return {
+    name: clean(doc.name) || "Unnamed",
+    image: libraryImage(doc),
+    size: sizes.length > 0 ? [...new Set(sizes)].join(" or ") : undefined,
+    speed: Number.isFinite(walk) && walk > 0 ? `${walk} ft` : undefined,
+    creatureType:
+      humanize(clean(s.type?.value)) || humanize(clean(s.creatureType)),
+    darkvision: Number.isFinite(dark) && dark > 0 ? dark : undefined,
+    blocks: toBlocks(s.description?.value),
+    source: formatSource(s.source),
+  };
 }
 
 // ---------------------------------------------------------------------
@@ -1508,6 +1780,10 @@ const npcs = [];
 const monsters = [];
 const spells = [];
 const itemRows = [];
+const feats = [];
+const backgrounds = [];
+const classRows = [];
+const speciesRows = [];
 const locations = [];
 
 for (const doc of documents) {
@@ -1520,6 +1796,26 @@ for (const doc of documents) {
 
   if (kind === "spell") {
     spells.push(spellToRow(doc));
+    continue;
+  }
+
+  if (kind === "feat") {
+    feats.push(featToRow(doc));
+    continue;
+  }
+
+  if (kind === "background") {
+    backgrounds.push(backgroundToRow(doc));
+    continue;
+  }
+
+  if (kind === "class") {
+    classRows.push(classToRow(doc));
+    continue;
+  }
+
+  if (kind === "species") {
+    speciesRows.push(speciesToRow(doc));
     continue;
   }
 
@@ -1564,12 +1860,20 @@ const npcPath = join(outDir, "npcs.jsonl");
 const monsterPath = join(outDir, "monsters.jsonl");
 const spellPath = join(outDir, "spells.jsonl");
 const itemPath = join(outDir, "items.jsonl");
+const featPath = join(outDir, "feats.jsonl");
+const backgroundPath = join(outDir, "backgrounds.jsonl");
+const classPath = join(outDir, "classes.jsonl");
+const speciesPath = join(outDir, "species.jsonl");
 
 if (!dryRun) {
   writeFileSync(npcPath, jsonl(npcs));
   writeFileSync(monsterPath, jsonl(monsters));
   writeFileSync(spellPath, jsonl(spells));
   writeFileSync(itemPath, jsonl(itemRows));
+  writeFileSync(featPath, jsonl(feats));
+  writeFileSync(backgroundPath, jsonl(backgrounds));
+  writeFileSync(classPath, jsonl(classRows));
+  writeFileSync(speciesPath, jsonl(speciesRows));
 }
 
 const locPath = join(outDir, "locations.json");
@@ -1595,6 +1899,10 @@ console.log(`read ${documents.length} document(s) from ${basename(path)}`);
 console.log(`  ${spells.length} spell(s)${to(spellPath)}`);
 console.log(`  ${itemRows.length} item(s)${to(itemPath)}`);
 console.log(`  ${monsters.length} monster(s)${to(monsterPath)}`);
+console.log(`  ${feats.length} feat(s)${to(featPath)}`);
+console.log(`  ${backgrounds.length} background(s)${to(backgroundPath)}`);
+console.log(`  ${classRows.length} class(es) and subclass(es)${to(classPath)}`);
+console.log(`  ${speciesRows.length} species${to(speciesPath)}`);
 console.log(
   `  ${npcs.length} of those also available as NPCs${to(npcPath)}`
 );
@@ -1621,6 +1929,55 @@ if (withoutPortrait > 0) {
   );
 }
 
+/**
+ * How often each build field was actually found.
+ *
+ * The four build converters read fields that have moved between dnd5e
+ * versions, so the failure mode is not a crash — it is a column that
+ * is empty on every row, in a table that otherwise imported fine, and
+ * which nobody notices until they sort by it. A field found on 0% of
+ * rows is called out here, before the import runs, where it is one
+ * question rather than an afternoon.
+ *
+ * Rows with a field on SOME of them are reported as a percentage and
+ * left alone: a prerequisite is genuinely absent on most feats, and a
+ * parent class is absent on every class that is not a subclass.
+ */
+const FILL_REPORT = [
+  ["feat", feats, ["category", "prerequisite", "repeatable"]],
+  [
+    "background",
+    backgrounds,
+    ["abilities", "feat", "skills", "tools", "equipment"],
+  ],
+  ["class", classRows, ["hitDie", "primaryAbility", "saves", "spellcasting"]],
+  // parentClass is checked against the SUBCLASSES only. Every class
+  // that is not a subclass has none, so measuring it across the whole
+  // table reports a library with no subclasses in it as a converter
+  // fault — a warning that cries wolf is one you stop reading.
+  ["class", classRows.filter((r) => r.isSubclass), ["parentClass"]],
+  ["species", speciesRows, ["size", "speed", "creatureType", "darkvision"]],
+];
+
+const missing = [];
+for (const [label, rows, fields] of FILL_REPORT) {
+  if (rows.length === 0) continue;
+  for (const field of fields) {
+    const filled = rows.filter((r) => r[field] !== undefined).length;
+    if (filled === 0) missing.push(`${label}.${field}`);
+  }
+}
+
+if (missing.length > 0) {
+  console.log(
+    `\nnote: these build fields came back empty on EVERY row —\n` +
+      `  ${missing.join(", ")}\n` +
+      "  The column will import and be blank. Either this export does not\n" +
+      "  carry them, or dnd5e has moved them again and the converter is\n" +
+      "  reading the wrong place. Worth checking before you import."
+  );
+}
+
 if (dryRun) {
   console.log("\n--dry-run: nothing was written. Drop the flag to convert.");
   process.exit(0);
@@ -1629,6 +1986,14 @@ if (dryRun) {
 const lines = ["\nnext — run only the ones with rows in them:\n"];
 if (spells.length) lines.push(`  npx convex import --table spells ${spellPath} --append`);
 if (itemRows.length) lines.push(`  npx convex import --table items ${itemPath} --append`);
+if (feats.length) lines.push(`  npx convex import --table feats ${featPath} --append`);
+if (backgrounds.length) {
+  lines.push(
+    `  npx convex import --table backgrounds ${backgroundPath} --append`
+  );
+}
+if (classRows.length) lines.push(`  npx convex import --table classes ${classPath} --append`);
+if (speciesRows.length) lines.push(`  npx convex import --table species ${speciesPath} --append`);
 if (monsters.length) {
   lines.push(`  npx convex import --table monsters ${monsterPath} --append`);
   lines.push(

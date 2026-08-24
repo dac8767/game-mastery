@@ -10,12 +10,23 @@
  * the table rather than in a test.
  */
 
-export type LookupKind = "spells" | "items" | "monsters";
+export type LookupKind =
+  | "spells"
+  | "items"
+  | "monsters"
+  | "feats"
+  | "backgrounds"
+  | "classes"
+  | "species";
 
 export const LOOKUP_TITLES: Record<LookupKind, string> = {
   spells: "Spells",
   items: "Items",
   monsters: "Monsters",
+  feats: "Feats",
+  backgrounds: "Backgrounds",
+  classes: "Classes",
+  species: "Species",
 };
 
 const str = (v: unknown): string | null => {
@@ -113,6 +124,104 @@ const ITEM_KIND_LABELS: Record<string, string> = {
   gear: "Adventuring Gear",
   other: "Item",
 };
+
+// ---------------------------------------------------------------------
+// Feats, backgrounds, classes and species
+// ---------------------------------------------------------------------
+
+/**
+ * The italic line under the name of a build entry.
+ *
+ * "Origin Feat", "Background", "Fighter Subclass", "Small or Medium
+ * Humanoid" — what the thing IS, in the words the book uses, before
+ * any of its numbers. Returns "" rather than null when there is
+ * nothing worth saying, so the caller can drop the line entirely
+ * instead of printing an em dash where a subtitle should be.
+ */
+export function buildSubtitle(
+  kind: LookupKind,
+  row: Record<string, unknown>
+): string {
+  if (kind === "feats") {
+    const category = str(row.category);
+    return category ? `${category} Feat` : "Feat";
+  }
+
+  if (kind === "backgrounds") return "Background";
+
+  if (kind === "classes") {
+    // A subclass says whose it is. "Subclass" on its own is true and
+    // useless — the thing you want to know about Champion is that it
+    // is a Fighter subclass.
+    if (row.isSubclass === true) {
+      const parent = str(row.parentClass);
+      return parent ? `${parent} Subclass` : "Subclass";
+    }
+    const casting = str(row.spellcasting);
+    return casting ? `Class · ${casting} Caster` : "Class";
+  }
+
+  if (kind === "species") {
+    // "Small or Medium Humanoid", with either half dropped when it is
+    // missing rather than left as a gap in the middle of the phrase.
+    const parts = [str(row.size), str(row.creatureType)].filter(Boolean);
+    return parts.length > 0 ? parts.join(" ") : "Species";
+  }
+
+  return "";
+}
+
+/**
+ * The labelled facts a build entry has that are not its prose.
+ *
+ * Each one is skipped when absent rather than printed empty: these
+ * come out of a Foundry export where a field is as likely to be
+ * missing as wrong, and a column of dashes reads as data loss where a
+ * shorter list reads as a shorter entry.
+ */
+export function buildFacts(
+  kind: LookupKind,
+  row: Record<string, unknown>
+): { label: string; value: string }[] {
+  const out: { label: string; value: string }[] = [];
+  const add = (label: string, value: string | null) => {
+    if (value) out.push({ label, value });
+  };
+
+  if (kind === "feats") {
+    add("Prerequisite", str(row.prerequisite));
+    if (row.repeatable === true) add("Repeatable", "Yes");
+  }
+
+  if (kind === "backgrounds") {
+    add("Ability Scores", str(row.abilities));
+    add("Origin Feat", str(row.feat));
+    add("Skill Proficiencies", str(row.skills));
+    add("Tool Proficiency", str(row.tools));
+    add("Equipment", str(row.equipment));
+  }
+
+  if (kind === "classes") {
+    add("Hit Die", str(row.hitDie));
+    add("Primary Ability", str(row.primaryAbility));
+    add("Saving Throws", str(row.saves));
+    add("Spellcasting", str(row.spellcasting));
+    // Only on a subclass. On a class the subtitle already said it, and
+    // the column shows the class's own name to make sorting group.
+    if (row.isSubclass === true) add("Class", str(row.parentClass));
+  }
+
+  if (kind === "species") {
+    add("Size", str(row.size));
+    add("Speed", str(row.speed));
+    add("Creature Type", str(row.creatureType));
+    if (typeof row.darkvision === "number" && row.darkvision > 0) {
+      add("Darkvision", `${row.darkvision} ft`);
+    }
+  }
+
+  return out;
+}
 
 /**
  * The italic line under an item's name:
@@ -393,6 +502,95 @@ export const LOOKUP_COLUMNS: Record<LookupKind, LookupColumn[]> = {
       get: (r) => (typeof r.weight === "number" ? `${r.weight} lb` : null),
       sort: (r) => (typeof r.weight === "number" ? r.weight : LAST),
     },
+  ],
+  feats: [
+    NAME_COLUMN,
+    { key: "category", label: "Category", width: "9rem", get: (r) => str(r.category) },
+    {
+      key: "prerequisite",
+      label: "Prerequisite",
+      width: "minmax(10rem, 1.5fr)",
+      get: (r) => str(r.prerequisite),
+      // Blank sorts LAST rather than first. "No prerequisite" is the
+      // common case, and putting two hundred blanks above the fifteen
+      // rows you sorted this column to find is the opposite of what
+      // the click asked for.
+      sort: (r) => str(r.prerequisite) ?? "￿",
+    },
+    {
+      key: "repeatable",
+      label: "Repeat",
+      width: "5.5rem",
+      align: "center",
+      get: (r) => (r.repeatable === true ? "Yes" : null),
+      sort: (r) => (r.repeatable === true ? 0 : 1),
+    },
+  ],
+  backgrounds: [
+    NAME_COLUMN,
+    { key: "abilities", label: "Abilities", width: "8rem", get: (r) => str(r.abilities) },
+    { key: "feat", label: "Origin Feat", width: "10rem", get: (r) => str(r.feat) },
+    { key: "skills", label: "Skills", width: "minmax(10rem, 1.4fr)", get: (r) => str(r.skills) },
+    { key: "tools", label: "Tool", width: "9rem", get: (r) => str(r.tools) },
+  ],
+  classes: [
+    NAME_COLUMN,
+    {
+      key: "parentClass",
+      label: "Class",
+      width: "8rem",
+      // A class shows its own name here rather than a dash: the column
+      // is "which class does this belong to", and a Fighter belongs to
+      // Fighter. It is what makes sorting on it group each class with
+      // its own subclasses instead of stacking every base class above
+      // an undifferentiated pile.
+      get: (r) => str(r.parentClass) ?? str(r.name),
+    },
+    {
+      key: "isSubclass",
+      label: "Kind",
+      width: "6.5rem",
+      get: (r) => (r.isSubclass === true ? "Subclass" : "Class"),
+      sort: (r) => (r.isSubclass === true ? 1 : 0),
+    },
+    { key: "hitDie", label: "Hit Die", width: "5.5rem", align: "center", get: (r) => str(r.hitDie) },
+    { key: "primaryAbility", label: "Primary", width: "7rem", get: (r) => str(r.primaryAbility) },
+    { key: "saves", label: "Saves", width: "7rem", get: (r) => str(r.saves) },
+    {
+      key: "spellcasting",
+      label: "Casting",
+      width: "6.5rem",
+      get: (r) => str(r.spellcasting),
+      sort: (r) => str(r.spellcasting) ?? "￿",
+    },
+  ],
+  species: [
+    NAME_COLUMN,
+    { key: "size", label: "Size", width: "7rem", get: (r) => str(r.size) },
+    {
+      key: "speed",
+      label: "Speed",
+      width: "6.5rem",
+      get: (r) => str(r.speed),
+      // Sorted on the number in it, so 100 ft does not land between
+      // 10 ft and 20 ft the way a string comparison puts it.
+      sort: (r) => {
+        const m = /(\d+)/.exec(String(r.speed ?? ""));
+        return m ? Number(m[1]) : LAST;
+      },
+    },
+    {
+      key: "darkvision",
+      label: "Darkvision",
+      width: "7.5rem",
+      align: "center",
+      get: (r) =>
+        typeof r.darkvision === "number" && r.darkvision > 0
+          ? `${r.darkvision} ft`
+          : null,
+      sort: (r) => (typeof r.darkvision === "number" ? r.darkvision : LAST),
+    },
+    { key: "creatureType", label: "Type", width: "8rem", get: (r) => str(r.creatureType) },
   ],
 };
 

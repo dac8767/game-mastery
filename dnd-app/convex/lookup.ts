@@ -149,13 +149,121 @@ export const indexMonsters = query({
   },
 });
 
+// ---------------------------------------------------------------------
+// The character-build half: feats, backgrounds, classes, species
+// ---------------------------------------------------------------------
+//
+// Same shape as the three above, and same reasoning: no write path, so
+// one unpaginated subscription per screen delivers once and sits
+// silent. These four are much smaller than the spell list — a few
+// hundred rows between them — so the read ceiling is nowhere near.
+//
+// `source` rides on every one of them because the 5e/5.5e rule is
+// computed in the browser from it. Strip it here to save a few bytes
+// and a 2024 Alert and a 2014 Alert both appear, indistinguishable.
+
+export const indexFeats = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireReader(ctx);
+    const rows = await ctx.db.query("feats").withIndex("by_name").take(MAX_INDEX);
+    return {
+      capped: rows.length >= MAX_INDEX,
+      rows: rows.map((r) => ({
+        _id: r._id,
+        name: r.name,
+        image: r.image ?? null,
+        category: r.category ?? null,
+        prerequisite: r.prerequisite ?? null,
+        repeatable: r.repeatable ?? false,
+        source: r.source ?? null,
+      })),
+    };
+  },
+});
+
+export const indexBackgrounds = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireReader(ctx);
+    const rows = await ctx.db
+      .query("backgrounds")
+      .withIndex("by_name")
+      .take(MAX_INDEX);
+    return {
+      capped: rows.length >= MAX_INDEX,
+      rows: rows.map((r) => ({
+        _id: r._id,
+        name: r.name,
+        image: r.image ?? null,
+        abilities: r.abilities ?? null,
+        feat: r.feat ?? null,
+        skills: r.skills ?? null,
+        tools: r.tools ?? null,
+        equipment: r.equipment ?? null,
+        source: r.source ?? null,
+      })),
+    };
+  },
+});
+
+export const indexClasses = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireReader(ctx);
+    const rows = await ctx.db
+      .query("classes")
+      .withIndex("by_name")
+      .take(MAX_INDEX);
+    return {
+      capped: rows.length >= MAX_INDEX,
+      rows: rows.map((r) => ({
+        _id: r._id,
+        name: r.name,
+        image: r.image ?? null,
+        isSubclass: r.isSubclass,
+        parentClass: r.parentClass ?? null,
+        hitDie: r.hitDie ?? null,
+        primaryAbility: r.primaryAbility ?? null,
+        saves: r.saves ?? null,
+        spellcasting: r.spellcasting ?? null,
+        source: r.source ?? null,
+      })),
+    };
+  },
+});
+
+export const indexSpecies = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireReader(ctx);
+    const rows = await ctx.db
+      .query("species")
+      .withIndex("by_name")
+      .take(MAX_INDEX);
+    return {
+      capped: rows.length >= MAX_INDEX,
+      rows: rows.map((r) => ({
+        _id: r._id,
+        name: r.name,
+        image: r.image ?? null,
+        size: r.size ?? null,
+        speed: r.speed ?? null,
+        creatureType: r.creatureType ?? null,
+        darkvision: r.darkvision ?? null,
+        source: r.source ?? null,
+      })),
+    };
+  },
+});
+
 /**
  * One full row, fetched only when something is opened.
  *
- * The three are separate functions rather than one taking a table name:
- * a string that selects a table is a string a caller can change, and
- * three three-line functions are cheaper than the argument validation
- * that would make one of them safe.
+ * Separate functions rather than one taking a table name: a string that
+ * selects a table is a string a caller can change, and a handful of
+ * three-line functions are cheaper than the argument validation that
+ * would make one of them safe.
  */
 export const getSpell = query({
   args: { id: v.id("spells") },
@@ -175,6 +283,38 @@ export const getItem = query({
 
 export const getMonster = query({
   args: { id: v.id("monsters") },
+  handler: async (ctx, args) => {
+    await requireReader(ctx);
+    return await ctx.db.get(args.id);
+  },
+});
+
+export const getFeat = query({
+  args: { id: v.id("feats") },
+  handler: async (ctx, args) => {
+    await requireReader(ctx);
+    return await ctx.db.get(args.id);
+  },
+});
+
+export const getBackground = query({
+  args: { id: v.id("backgrounds") },
+  handler: async (ctx, args) => {
+    await requireReader(ctx);
+    return await ctx.db.get(args.id);
+  },
+});
+
+export const getClass = query({
+  args: { id: v.id("classes") },
+  handler: async (ctx, args) => {
+    await requireReader(ctx);
+    return await ctx.db.get(args.id);
+  },
+});
+
+export const getSpecies = query({
+  args: { id: v.id("species") },
   handler: async (ctx, args) => {
     await requireReader(ctx);
     return await ctx.db.get(args.id);

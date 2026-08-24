@@ -22,7 +22,14 @@
  * instead of imported; tests/guards/integrity.mjs checks the two copies
  * still agree.
  */
-export type LookupKind = "spells" | "items" | "monsters";
+export type LookupKind =
+  | "spells"
+  | "items"
+  | "monsters"
+  | "feats"
+  | "backgrounds"
+  | "classes"
+  | "species";
 
 export type Row = Record<string, unknown>;
 
@@ -196,6 +203,55 @@ export const SPELL_LEVELS = [
     label: `Level ${i + 1}`,
   })),
 ];
+
+/**
+ * The 2024 feat groupings.
+ *
+ * A chip whose value no row carries is invisible: it renders, it is
+ * clickable, and it returns an empty list. So these strings are the
+ * ones the importer writes, and the integrity guard compares the two
+ * lists rather than trusting that they were written on the same day.
+ */
+export const FEAT_CATEGORIES = opts(
+  "Origin",
+  "General",
+  "Fighting Style",
+  "Epic Boon"
+);
+
+/** Classes and subclasses share a table; this is which is which. */
+export const CLASS_KINDS = opts("Class", "Subclass");
+
+/**
+ * How far a class's spell slots go.
+ *
+ * dnd5e stores these as slugs — "full", "half", "third", "pact" — and
+ * the importer spells them out, so these are the spelt-out forms.
+ */
+export const CASTER_PROGRESSIONS = opts("Full", "Half", "Third", "Pact");
+
+export const HIT_DICE = opts("d6", "d8", "d10", "d12");
+
+/** Written the way a class entry abbreviates them. */
+export const ABILITY_OPTIONS = opts(
+  "Str",
+  "Dex",
+  "Con",
+  "Int",
+  "Wis",
+  "Cha"
+);
+
+/**
+ * Species sizes.
+ *
+ * Small and Medium only, plus the both-of-them case that is a real
+ * entry rather than a data error — a 2024 Halfling is Small, a Human
+ * is Medium, and a Goliath is Medium going on Large. Tiny and Huge are
+ * absent because no playable species is either, and a chip nothing
+ * matches is worse than a missing one.
+ */
+export const SPECIES_SIZES = opts("Small", "Medium", "Large");
 
 export const SCHOOLS = opts(
   "Abjuration",
@@ -476,10 +532,170 @@ const MONSTER_FILTERS: FilterDef[] = [
   SOURCE,
 ];
 
+/**
+ * The character-build kinds.
+ *
+ * Shorter lists than the three above, on purpose. A filter that every
+ * row passes is a control that does nothing but take up the bar, and
+ * these tables are a few hundred rows where the spell list is
+ * thousands — Search plus one or two real distinctions is the whole
+ * job. SOURCE is on every one of them, because "what book is this
+ * from" is the question that survives at any size.
+ */
+const FEAT_FILTERS: FilterDef[] = [
+  {
+    key: "category",
+    label: "Category",
+    control: { type: "chips", options: FEAT_CATEGORIES },
+    match: (row, value) => anyOf(row.category, value as string[]),
+  },
+  {
+    key: "prerequisite",
+    label: "Prerequisite",
+    control: { type: "text" },
+    hint: "Level 4, Strength 13…",
+    advanced: true,
+    match: (row, value) => contains(row.prerequisite, value as string),
+  },
+  {
+    key: "noPrerequisite",
+    label: "No prerequisite",
+    control: { type: "toggle" },
+    // The question you actually ask at level 1, and the one a text box
+    // cannot express: "contains nothing" is not something you can type.
+    match: (row) => text(row.prerequisite).trim() === "",
+  },
+  {
+    key: "repeatable",
+    label: "Repeatable",
+    control: { type: "toggle" },
+    advanced: true,
+    match: (row) => row.repeatable === true,
+  },
+  SOURCE,
+];
+
+const BACKGROUND_FILTERS: FilterDef[] = [
+  {
+    key: "ability",
+    label: "Raises",
+    control: { type: "multi", options: ABILITY_OPTIONS },
+    // `abilities` is "Dex, Int, Cha" — a list in a string, so this is a
+    // substring test rather than anyOf, which compares the whole field.
+    match: (row, value) =>
+      (value as string[]).some((a) => contains(row.abilities, a)),
+  },
+  {
+    key: "skills",
+    label: "Skill",
+    control: { type: "text" },
+    hint: "Stealth, Arcana…",
+    match: (row, value) => contains(row.skills, value as string),
+  },
+  {
+    key: "feat",
+    label: "Origin Feat",
+    control: { type: "text" },
+    hint: "Alert, Tough…",
+    advanced: true,
+    match: (row, value) => contains(row.feat, value as string),
+  },
+  {
+    key: "tools",
+    label: "Tool",
+    control: { type: "text" },
+    hint: "Thieves' Tools…",
+    advanced: true,
+    match: (row, value) => contains(row.tools, value as string),
+  },
+  SOURCE,
+];
+
+const CLASS_FILTERS: FilterDef[] = [
+  {
+    key: "isSubclass",
+    label: "Kind",
+    control: { type: "chips", options: CLASS_KINDS },
+    // Stored as a boolean, offered as two chips. The chip values are
+    // the strings "Class" and "Subclass", so the row is turned into
+    // one of those rather than the chips being turned into booleans —
+    // which would make an empty selection mean "false" and quietly
+    // hide every subclass.
+    match: (row, value) =>
+      anyOf(row.isSubclass === true ? "Subclass" : "Class", value as string[]),
+  },
+  {
+    key: "spellcasting",
+    label: "Spellcasting",
+    control: { type: "multi", options: CASTER_PROGRESSIONS },
+    match: (row, value) => anyOf(row.spellcasting, value as string[]),
+  },
+  {
+    key: "primaryAbility",
+    label: "Primary Ability",
+    control: { type: "multi", options: ABILITY_OPTIONS },
+    advanced: true,
+    match: (row, value) =>
+      (value as string[]).some((a) => contains(row.primaryAbility, a)),
+  },
+  {
+    key: "hitDie",
+    label: "Hit Die",
+    control: { type: "multi", options: HIT_DICE },
+    advanced: true,
+    match: (row, value) => anyOf(row.hitDie, value as string[]),
+  },
+  SOURCE,
+];
+
+const SPECIES_FILTERS: FilterDef[] = [
+  {
+    key: "size",
+    label: "Size",
+    control: { type: "multi", options: SPECIES_SIZES },
+    // "Small or Medium" is a real entry, so this reads the field as
+    // text rather than matching it whole — a Halfling filtered under
+    // Small must not vanish because its field says both.
+    match: (row, value) =>
+      (value as string[]).some((s) => contains(row.size, s)),
+  },
+  {
+    key: "darkvision",
+    label: "Has Darkvision",
+    control: { type: "toggle" },
+    match: (row) => typeof row.darkvision === "number" && row.darkvision > 0,
+  },
+  {
+    key: "speed",
+    label: "Speed Range",
+    control: { type: "range" },
+    hint: "30",
+    advanced: true,
+    // The stored field is "30 ft", so the number comes out of it first.
+    match: (row, value) => {
+      const m = /(\d+)/.exec(text(row.speed));
+      return inRange(m ? Number(m[1]) : null, value as { min: string; max: string });
+    },
+  },
+  {
+    key: "creatureType",
+    label: "Creature Type",
+    control: { type: "text" },
+    hint: "Humanoid…",
+    advanced: true,
+    match: (row, value) => contains(row.creatureType, value as string),
+  },
+  SOURCE,
+];
+
 export const FILTERS: Record<LookupKind, FilterDef[]> = {
   spells: SPELL_FILTERS,
   items: ITEM_FILTERS,
   monsters: MONSTER_FILTERS,
+  feats: FEAT_FILTERS,
+  backgrounds: BACKGROUND_FILTERS,
+  classes: CLASS_FILTERS,
+  species: SPECIES_FILTERS,
 };
 
 // ---------------------------------------------------------------------

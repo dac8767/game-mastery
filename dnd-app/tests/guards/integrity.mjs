@@ -39,7 +39,15 @@ const SYSTEM_FIELDS = ["_id", "_creationTime"];
  * and the only tables whose contents can be thrown away and re-imported.
  * Several checks below turn on exactly that property.
  */
-const LOOKUP_TABLES = ["spells", "items", "monsters"];
+const LOOKUP_TABLES = [
+  "spells",
+  "items",
+  "monsters",
+  "feats",
+  "backgrounds",
+  "classes",
+  "species",
+];
 
 /**
  * Fields the query COMPUTES rather than reads from the table.
@@ -2392,6 +2400,152 @@ export const integrity = {
       }
     }
 
+    // ---- every kind has a screen, a route, and two queries ---------
+    // Four separate ways a Lookup kind is half-wired, all silent:
+    // declared with no nav entry (a screen nothing links to), no route
+    // folder (a sidebar link that 404s), or no index/get query (a table
+    // that loads nothing, or rows that will not open).
+    {
+      const lookupSrc = read("convex", "lookup.ts");
+      const navSrcLocal = read("components", "navItems.ts");
+      // getSpell, getClass, getSpecies — singular and irregular, so
+      // stated rather than derived from the plural.
+      const GETTERS = {
+        spells: "getSpell",
+        items: "getItem",
+        monsters: "getMonster",
+        feats: "getFeat",
+        backgrounds: "getBackground",
+        classes: "getClass",
+        species: "getSpecies",
+      };
+
+      for (const kind of fieldKinds) {
+        const Index = `index${kind[0].toUpperCase()}${kind.slice(1)}`;
+        if (!lookupSrc.includes(`export const ${Index} = query`)) {
+          problems.push(
+            `LookupKind "${kind}" has no ${Index} query — the screen would ` +
+              "render an empty library with nothing saying why"
+          );
+        }
+        const getter = GETTERS[kind];
+        if (!getter) {
+          problems.push(
+            `LookupKind "${kind}" has no getter named in the guard's ` +
+              "GETTERS map — add it, so the row-open query is checked too"
+          );
+        } else if (!lookupSrc.includes(`export const ${getter} = query`)) {
+          problems.push(
+            `LookupKind "${kind}" has no ${getter} query — its rows would ` +
+              "list fine and open to nothing"
+          );
+        }
+        if (!new RegExp(`id:\\s*"${kind}"`).test(navSrcLocal)) {
+          problems.push(
+            `LookupKind "${kind}" has no nav item — the screen exists and ` +
+              "nothing links to it"
+          );
+        }
+        if (!exists("app", "campaign", "[campaignId]", kind, "page.tsx")) {
+          problems.push(
+            `LookupKind "${kind}" has no route at ` +
+              `app/campaign/[campaignId]/${kind}/page.tsx — the sidebar ` +
+              "link would 404"
+          );
+        }
+      }
+
+      // ---- and its columns and filters read fields it returns -------
+      // The index query strips the heavy fields, and the columns and
+      // filters address what is left BY STRING. A column reading a
+      // field the query does not send renders an em dash on every row
+      // forever; a filter reading one silently matches nothing. Both
+      // type-check perfectly, because a Row is Record<string, unknown>.
+      const returnedFields = (kind) => {
+        const Index = `index${kind[0].toUpperCase()}${kind.slice(1)}`;
+        const at = lookupSrc.indexOf(`export const ${Index} = query`);
+        if (at === -1) return null;
+        const body = blockAfter(
+          lookupSrc.slice(at),
+          /rows: rows\.map\(\(r\) => \(/,
+          `${Index}'s row projection`
+        );
+        return new Set(
+          [...body.matchAll(/^\s*(\w+):/gm)].map((m) => m[1])
+        );
+      };
+
+      /** Fields every row carries without the projection naming them. */
+      const ALWAYS = new Set(["_id", "_creationTime"]);
+
+      const readsOf = (source, receiver) =>
+        new Set(
+          [...source.matchAll(new RegExp(`\\b${receiver}\\.(\\w+)`, "g"))].map(
+            (m) => m[1]
+          )
+        );
+
+      // The kind's slice of LOOKUP_COLUMNS: from `kind: [` to the line
+      // that closes it at the record's own indent.
+      const sliceOfRecord = (src, recordName, kind) => {
+        const rec = src.indexOf(recordName);
+        if (rec === -1) return null;
+        const start = src.indexOf(`\n  ${kind}: [`, rec);
+        if (start === -1) return null;
+        const end = src.indexOf("\n  ],", start);
+        return end === -1 ? null : src.slice(start, end);
+      };
+
+      for (const kind of fieldKinds) {
+        const returned = returnedFields(kind);
+        if (!returned) continue;
+
+        const columnSlice = sliceOfRecord(fieldsSrc, "LOOKUP_COLUMNS", kind);
+        if (!columnSlice) {
+          // NAME_COLUMN and friends are shared constants spliced in, so
+          // a kind can legitimately have no inline slice — but every
+          // kind added since does, and silently skipping all of them
+          // would make this whole check a no-op.
+          problems.push(
+            `could not read LOOKUP_COLUMNS.${kind} — the field check ` +
+              "cannot run, which is worse than it failing"
+          );
+          continue;
+        }
+        for (const field of readsOf(columnSlice, "r")) {
+          if (!returned.has(field) && !ALWAYS.has(field)) {
+            problems.push(
+              `LOOKUP_COLUMNS.${kind} reads \`${field}\`, which the index ` +
+                "query does not return — that column is an em dash on " +
+                "every row, forever"
+            );
+          }
+        }
+
+        // The filter set, reached through the FILTERS record's mapping
+        // from kind to the const holding it.
+        const m = new RegExp(`\\b${kind}:\\s*(\\w+),`).exec(
+          filtersSrc.slice(filtersSrc.indexOf("export const FILTERS"))
+        );
+        if (!m) continue;
+        const filterConst = m[1];
+        const fstart = filtersSrc.indexOf(`const ${filterConst}: FilterDef[]`);
+        if (fstart === -1) continue;
+        const fslice = filtersSrc.slice(
+          fstart,
+          filtersSrc.indexOf("\n];", fstart)
+        );
+        for (const field of readsOf(fslice, "row")) {
+          if (!returned.has(field) && !ALWAYS.has(field)) {
+            problems.push(
+              `${filterConst} matches on \`${field}\`, which ${kind}'s index ` +
+                "query does not return — that filter silently matches nothing"
+            );
+          }
+        }
+      }
+    }
+
     // A filter chip that matches nothing is invisible: it renders, it
     // is clickable, and it silently returns an empty list. The values
     // the importer produces and the values the filters offer are two
@@ -2439,6 +2593,64 @@ export const integrity = {
         problems.push(
           `the Category filter offers item kind "${kind}", which ` +
             "import-foundry.mjs never produces"
+        );
+      }
+    }
+
+    // Caster progressions: the importer spells out dnd5e's four slugs,
+    // and the filter offers the spelt-out forms. Same trap as the two
+    // above — "full" on one side and "Full" on the other is a chip
+    // that renders, is clickable, and returns nothing.
+    const importerProgressions = new Set(
+      [
+        ...foundrySrc
+          .slice(
+            foundrySrc.indexOf("const CASTER_PROGRESSION"),
+            foundrySrc.indexOf("function classToRow")
+          )
+          .matchAll(/:\s*"([^"]+)"/g),
+      ].map((m) => m[1])
+    );
+    if (importerProgressions.size === 0) {
+      throw new Error("read no caster progressions out of import-foundry.mjs");
+    }
+    for (const p of valuesOf(filtersSrc, "CASTER_PROGRESSIONS")) {
+      if (!importerProgressions.has(p)) {
+        problems.push(
+          `the Spellcasting filter offers "${p}", which import-foundry.mjs ` +
+            "never produces — the chip would match nothing"
+        );
+      }
+    }
+
+    // The class/subclass chips are matched against a string the FILTER
+    // builds from a boolean, not against anything the importer writes —
+    // so the pair that has to agree is the chip list and the matcher.
+    {
+      const kinds = valuesOf(filtersSrc, "CLASS_KINDS");
+      const matcher = filtersSrc.slice(
+        filtersSrc.indexOf("const CLASS_FILTERS"),
+        filtersSrc.indexOf("const SPECIES_FILTERS")
+      );
+      for (const k of kinds) {
+        if (!matcher.includes(`"${k}"`)) {
+          problems.push(
+            `CLASS_KINDS offers "${k}", which CLASS_FILTERS never produces ` +
+              "from a row — the chip would match nothing"
+          );
+        }
+      }
+    }
+
+    // Feat categories: humanize() turns dnd5e's camelCase subtypes into
+    // these, so the chips have to be in the humanised form. "epicBoon"
+    // becomes "Epic Boon", not "EpicBoon" or "epic boon".
+    for (const c of valuesOf(filtersSrc, "FEAT_CATEGORIES")) {
+      if (!/^[A-Z][a-z]*(?: [A-Z][a-z]*)*$/.test(c)) {
+        problems.push(
+          `the feat Category filter offers "${c}", which is not the shape ` +
+            "humanize() produces — a camelCase subtype comes out Title " +
+            "Cased with spaces, so this chip would match nothing"
         );
       }
     }

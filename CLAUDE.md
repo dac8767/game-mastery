@@ -81,6 +81,10 @@ node scripts/import-foundry.mjs ~/Downloads/foundry-everything.json k17ezhmgzwdz
 npx convex import --table spells foundry-import/spells.jsonl --replace --yes
 npx convex import --table items foundry-import/items.jsonl --replace --yes
 npx convex import --table monsters foundry-import/monsters.jsonl --replace --yes
+npx convex import --table feats foundry-import/feats.jsonl --replace --yes
+npx convex import --table backgrounds foundry-import/backgrounds.jsonl --replace --yes
+npx convex import --table classes foundry-import/classes.jsonl --replace --yes
+npx convex import --table species foundry-import/species.jsonl --replace --yes
 npm run dev
 ```
 
@@ -99,10 +103,15 @@ Why each line is there:
   also pushes it but then stays running, so nothing after it would ever
   execute. A schema change has to land before the import, or the import
   is validated against the old one.
-- `--yes` so the whole block runs unattended. These three tables are
+- `--yes` so the whole block runs unattended. These seven tables are
   derived reference data with no write path — `--replace` is what they
   are for.
 - Drop the tables that did not change; keep the shape of the block.
+- If a table's SHAPE changed rather than its contents, `npx convex dev
+  --once` will be rejected by the rows already in it. `node
+  scripts/clear-lookup.mjs` empties all seven first; the import puts
+  them back. Adding a NEW table needs none of that — it is empty
+  already.
 
 ## Layout
 
