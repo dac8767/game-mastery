@@ -159,10 +159,19 @@ export function LookupTool({
   const grouped = useMemo(() => familyRows(kind, library), [kind, library]);
   const listed = grouped ? grouped.rows : library;
 
-  /** How many children a row folds in, for the count beside its name. */
+  /**
+   * How many children a row folds in, for the count beside its name.
+   *
+   * Keyed on the CLEANED name, because that is what the grouping keys
+   * on — a row called "Elf (PHB)" is filed under "elf", and looking it
+   * up by its raw name finds nothing and shows no count.
+   */
   const memberCount = (row: Record<string, unknown>) =>
     grouped?.childrenOf.get(
-      String(row.name ?? "").trim().toLowerCase().replace(/\s+/g, " ")
+      splitSource(row.name, row.source)
+        .name.trim()
+        .toLowerCase()
+        .replace(/\s+/g, " ")
     )?.length ?? 0;
 
   const matched = useMemo(
@@ -414,8 +423,8 @@ export function LookupTool({
                         id={id}
                         members={
                           grouped?.childrenOf.get(
-                            String(row.name ?? "")
-                              .trim()
+                            splitSource(row.name, row.source)
+                              .name.trim()
                               .toLowerCase()
                               .replace(/\s+/g, " ")
                           ) ?? null
@@ -466,38 +475,46 @@ function ExpandedRow({
    */
   members?: Record<string, unknown>[] | null;
 }) {
+  /* An inferred parent has no row to fetch — it exists because its
+     children name it, not because the library holds it. Asking Convex
+     for one sends a synthetic id to a validator expecting a real one,
+     which is an ArgumentValidationError rather than an empty result.
+
+     Computed ONCE and applied to every query below. It used to gate
+     only the classes query, because classes were the only kind that
+     had inferred parents at the time — so the day species grew them
+     too, the species query fetched `absent:(vrgtr)` and the tab
+     crashed. A per-kind guard is a guard somebody has to remember. */
+  const real = !id.startsWith(ABSENT_PARENT_ID);
+  const on = (want: LookupKind) => kind === want && real;
+
   const spell = useQuery(
     api.lookup.getSpell,
-    kind === "spells" ? { id: id as Id<"spells"> } : "skip"
+    on("spells") ? { id: id as Id<"spells"> } : "skip"
   );
   const item = useQuery(
     api.lookup.getItem,
-    kind === "items" ? { id: id as Id<"items"> } : "skip"
+    on("items") ? { id: id as Id<"items"> } : "skip"
   );
   const monster = useQuery(
     api.lookup.getMonster,
-    kind === "monsters" ? { id: id as Id<"monsters"> } : "skip"
+    on("monsters") ? { id: id as Id<"monsters"> } : "skip"
   );
   const feat = useQuery(
     api.lookup.getFeat,
-    kind === "feats" ? { id: id as Id<"feats"> } : "skip"
+    on("feats") ? { id: id as Id<"feats"> } : "skip"
   );
   const background = useQuery(
     api.lookup.getBackground,
-    kind === "backgrounds" ? { id: id as Id<"backgrounds"> } : "skip"
+    on("backgrounds") ? { id: id as Id<"backgrounds"> } : "skip"
   );
-  /* An inferred class has no row to fetch — it exists because its
-     subclasses name it, not because the library holds it. Asking
-     Convex for it would send a synthetic id to a validator expecting a
-     real one, which is an error, not an empty result. */
-  const absent = id.startsWith(ABSENT_PARENT_ID);
   const klass = useQuery(
     api.lookup.getClass,
-    kind === "classes" && !absent ? { id: id as Id<"classes"> } : "skip"
+    on("classes") ? { id: id as Id<"classes"> } : "skip"
   );
   const speciesRow = useQuery(
     api.lookup.getSpecies,
-    kind === "species" ? { id: id as Id<"species"> } : "skip"
+    on("species") ? { id: id as Id<"species"> } : "skip"
   );
 
   // Keyed, for the same reason the index is: a chain ending in a bare
@@ -512,7 +529,7 @@ function ExpandedRow({
     species: speciesRow,
   }[kind] as Record<string, unknown> | null | undefined;
 
-  if (absent) {
+  if (!real) {
     return (
       <div className="lk-panel">
         <article className="lk lk-classes">

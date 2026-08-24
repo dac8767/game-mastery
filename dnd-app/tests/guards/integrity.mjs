@@ -865,6 +865,70 @@ export const integrity = {
       }
     }
 
+    // ---- no row is fetched for a parent that has no row ------------
+    // An inferred parent's id is synthetic. Sending one to a getter is
+    // an ArgumentValidationError from Convex, which reaches the
+    // browser as a red overlay rather than as an empty result.
+    //
+    // The gate used to be written per kind, and only the classes query
+    // had it — because classes were the only kind with inferred
+    // parents when it was written. The day species grew them too, the
+    // species query fetched `absent:(vrgtr)` and the tab crashed. So
+    // the rule is that EVERY getter is gated, checked against
+    // convex/lookup.ts's own list of them rather than a list here.
+    {
+      const src = stripComments(read("components", "LookupTool.tsx"));
+      const at = src.indexOf("function ExpandedRow");
+      if (at === -1) throw new Error("no ExpandedRow in LookupTool.tsx");
+      const body = src.slice(at, src.indexOf("\nfunction ", at + 1));
+
+      const getters = [
+        ...read("convex", "lookup.ts").matchAll(
+          /export const (get\w+) = query/g
+        ),
+      ].map((m) => m[1]);
+      if (getters.length === 0) {
+        throw new Error("read no getters out of convex/lookup.ts");
+      }
+
+      for (const getter of getters) {
+        const call = body.indexOf(`api.lookup.${getter},`);
+        if (call === -1) {
+          problems.push(
+            `ExpandedRow never calls ${getter} — that kind's rows would ` +
+              "open onto nothing"
+          );
+          continue;
+        }
+        // The condition is the rest of that useQuery call, up to the
+        // "skip" that ends it.
+        const arg = body.slice(call, body.indexOf('"skip"', call));
+        if (!/\bon\(/.test(arg)) {
+          problems.push(
+            `ExpandedRow's ${getter} call does not go through the shared ` +
+              "guard — an inferred parent's synthetic id would be sent to " +
+              "Convex and the tab would crash"
+          );
+        }
+      }
+
+      // And the guard itself has to still be the one thing it is.
+      if (!/const real = !id\.startsWith\(ABSENT_PARENT_ID\)/.test(body)) {
+        problems.push(
+          "ExpandedRow no longer derives `real` from ABSENT_PARENT_ID — " +
+            "the sentinel and the check have to agree, and nothing else " +
+            "connects them"
+        );
+      }
+      if (!/const on = \(want: LookupKind\) => kind === want && real/.test(body)) {
+        problems.push(
+          "ExpandedRow's `on` no longer folds in `real` — every getter " +
+            "would be gated on the kind alone, which is the bug this " +
+            "check exists for"
+        );
+      }
+    }
+
     // ---- a subclass row opens BESIDE its button, not inside it -----
     // The same parser trap the UiText check above is about, one screen
     // over. A subclass's entry contains buttons of its own — the

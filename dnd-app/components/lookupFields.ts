@@ -231,6 +231,20 @@ function groupByParent(
   /** The parent this row belongs under, or null if it is a parent. */
   parentOf: (row: Record<string, unknown>) => string | null
 ): FamilyGrouping {
+  /**
+   * A row's name with its book suffix off, which is the name every
+   * parent lookup here is against.
+   *
+   * It used to compare RAW names, and a library whose rows all carry a
+   * suffix — "Elf (PHB)", "High Elf (PHB)" — then failed to recognise
+   * that the base was present: the parent was found by the cleaned
+   * name "Elf", the roll call was taken on "elf (phb)", and the table
+   * grew an inferred Elf heading beside the real Elf row. Both halves
+   * have to read the name the same way.
+   */
+  const rowName = (r: Record<string, unknown>) =>
+    splitSource(r.name, r.source).name;
+
   const parents: Record<string, unknown>[] = [];
   const childrenOf = new Map<string, Record<string, unknown>[]>();
   /** The parent name as WRITTEN, for headings we supply ourselves. */
@@ -240,7 +254,7 @@ function groupByParent(
   for (const row of rows) {
     if (parentOf(row) === null) {
       parents.push(row);
-      havePar.add(famKey(row.name));
+      havePar.add(famKey(rowName(row)));
     }
   }
 
@@ -322,7 +336,20 @@ export function classRows(
 export function speciesRows(
   rows: Record<string, unknown>[]
 ): FamilyGrouping {
-  const names = new Set(rows.map((r) => famKey(r.name)));
+  /**
+   * The name with its book suffix already off.
+   *
+   * "Dhampir (VRGtR)" and "Hexblood (VRGtR)" both end in the same
+   * parenthetical, so two rows shared it, so it became a base — and
+   * the list grew an inferred species called "(VRGtR)" that crashed
+   * the moment you opened it. The suffix is a SOURCE, and splitSource
+   * already knows how to tell one from a qualifier: it strips the
+   * book and leaves "Elf (High)" alone.
+   */
+  const cleanName = (row: Record<string, unknown>) =>
+    splitSource(row.name, row.source).name;
+
+  const names = new Set(rows.map((r) => famKey(cleanName(r))));
 
   /** The base a name would vary, by either naming form. */
   const candidates = (raw: unknown): string[] => {
@@ -342,8 +369,13 @@ export function speciesRows(
     }
     // No self-check needed: a qualified base is always shorter than the
     // name it came from, and the suffix loop skips a take that would
-    // swallow the whole name. Only the empty string has to go.
-    return out.filter((c) => c);
+    // swallow the whole name.
+    //
+    // A candidate that is ENTIRELY a parenthetical is refused outright.
+    // cleanName takes the book off first, so this only fires on a
+    // suffix splitSource declined to strip — and whatever that is, a
+    // species is not called "(Something)".
+    return out.filter((c) => c && !/^\(.*\)$/.test(c));
   };
 
   /**
@@ -364,7 +396,7 @@ export function speciesRows(
    */
   const sharing = new Map<string, Set<string>>();
   for (const row of rows) {
-    for (const c of candidates(row.name)) {
+    for (const c of candidates(cleanName(row))) {
       const key = famKey(c);
       const seen = sharing.get(key) ?? new Set<string>();
       seen.add(String(row._id));
@@ -404,7 +436,9 @@ export function speciesRows(
   // A row never names itself — `candidates` drops that — so the set
   // being non-empty means somebody ELSE pointed here.
   return groupByParent(rows, (r) =>
-    (sharing.get(famKey(r.name))?.size ?? 0) > 0 ? null : baseOf(r.name)
+    (sharing.get(famKey(cleanName(r)))?.size ?? 0) > 0
+      ? null
+      : baseOf(cleanName(r))
   );
 }
 

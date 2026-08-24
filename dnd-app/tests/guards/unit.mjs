@@ -3410,6 +3410,104 @@ export const unit = {
       sr.rows.some((r) => r.name === "Dragonborn") &&
         !sr.childrenOf.has("dragonborn")
     );
+    // The crash. Foundry disambiguates compendium entries by book, so
+    // "Dhampir (VRGtR)" and "Hexblood (VRGtR)" end in the same
+    // parenthetical — two rows share it, so it qualified as a base,
+    // and the list grew a species called "(VRGtR)" whose synthetic id
+    // went to Convex the moment it was opened.
+    check(
+      "a shared BOOK suffix is not a species",
+      (() => {
+        const r = look.speciesRows([
+          { _id: "1", name: "Dhampir (VRGtR)", source: "VRGtR" },
+          { _id: "2", name: "Hexblood (VRGtR)", source: "VRGtR" },
+          { _id: "3", name: "Reborn (VRGtR)", source: "VRGtR" },
+        ]);
+        return r.rows.length === 3 && r.childrenOf.size === 0;
+      })()
+    );
+    // The same with nothing to compare the suffix against, which is
+    // where the source-matching half of splitSource cannot help.
+    check(
+      "and not even with no source field to match it against",
+      (() => {
+        const r = look.speciesRows([
+          { _id: "1", name: "Dhampir (VRGtR)" },
+          { _id: "2", name: "Hexblood (VRGtR)" },
+        ]);
+        return r.rows.length === 2 && r.childrenOf.size === 0;
+      })()
+    );
+    check(
+      "no inferred parent is ever named only a parenthetical",
+      look
+        .speciesRows([
+          { _id: "1", name: "Dhampir (VRGtR)", source: "VRGtR" },
+          { _id: "2", name: "Hexblood (VRGtR)", source: "VRGtR" },
+        ])
+        .rows.every((r) => !/^\(.*\)$/.test(String(r.name)))
+    );
+    // A parenthetical splitSource DECLINES to strip. "Homebrew" is not
+    // a book abbreviation — one capital, a real word — so it stays on
+    // the name, and without a rule refusing a wholly-parenthesised
+    // base it would become one the moment two rows shared it.
+    check(
+      "a parenthetical that is not a book is still never a base",
+      (() => {
+        const r = look.speciesRows([
+          { _id: "1", name: "Dhampir (Homebrew)" },
+          { _id: "2", name: "Hexblood (Homebrew)" },
+        ]);
+        return r.rows.length === 2 && r.childrenOf.size === 0;
+      })()
+    );
+
+    // Grouping reads the CLEANED name. With book suffixes on both the
+    // base and the variant, matching on raw names finds nothing —
+    // "High Elf (PHB)" does not end in "Elf (PHB)" the way it ends in
+    // "Elf" — and the family silently stops grouping.
+    check(
+      "a family whose rows all carry a book suffix still groups",
+      (() => {
+        const r = look.speciesRows([
+          { _id: "e", name: "Elf (PHB)", source: "PHB" },
+          { _id: "1", name: "High Elf (PHB)", source: "PHB" },
+          { _id: "2", name: "Wood Elf (PHB)", source: "PHB" },
+        ]);
+        return (
+          r.rows.length === 1 && (r.childrenOf.get("elf") ?? []).length === 2
+        );
+      })()
+    );
+
+    // With ONE variant the shared-suffix rule cannot help — two rows
+    // have to share a name for that — so this is the case that proves
+    // the base is recognised by its own cleaned name.
+    check(
+      "a lone variant groups under a base that carries a book suffix",
+      (() => {
+        const r = look.speciesRows([
+          { _id: "e", name: "Elf (PHB)", source: "PHB" },
+          { _id: "1", name: "High Elf (PHB)", source: "PHB" },
+        ]);
+        return (
+          r.rows.length === 1 && (r.childrenOf.get("elf") ?? []).length === 1
+        );
+      })()
+    );
+
+    // And the form that DOES group must survive the fix.
+    check(
+      "a qualified variant still groups under its base",
+      (look
+        .speciesRows([
+          { _id: "g", name: "Genasi", source: "MPMM" },
+          { _id: "1", name: "Genasi (Air)", source: "MPMM" },
+          { _id: "2", name: "Genasi (Fire)", source: "MPMM" },
+        ])
+        .childrenOf.get("genasi") ?? []).length === 2
+    );
+
     // The two that make a suffix rule dangerous.
     check(
       "Half-Elf is its own species, not an Elf variant",
