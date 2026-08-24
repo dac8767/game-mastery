@@ -857,6 +857,64 @@ export const integrity = {
       }
     }
 
+    // ---- a drawn nav icon must have a drawing ----------------------
+    // `art: "people"` names a component in NavIcon.tsx, by string.
+    // Getting it wrong does not throw and does not render nothing: the
+    // component falls back to the CHARACTER, so the icon is simply the
+    // old one and the change looks like it did not take. Which is the
+    // whole failure — you go back and edit navItems.ts again.
+    {
+      const iconSrc = read("components", "NavIcon.tsx");
+      const artBlock = blockAfter(
+        iconSrc,
+        /const ART: Record<string, \(\) => React\.JSX\.Element> =/,
+        "the ART map in NavIcon.tsx"
+      );
+      const drawn = [...artBlock.matchAll(/^\s*(\w+):/gm)].map((m) => m[1]);
+      if (drawn.length === 0) {
+        throw new Error("read no drawings out of NavIcon's ART map");
+      }
+
+      const asked = [...navSrc.matchAll(/\bart:\s*"([^"]+)"/g)].map(
+        (m) => m[1]
+      );
+      for (const name of asked) {
+        if (!drawn.includes(name)) {
+          problems.push(
+            `a nav item asks for the drawn icon "${name}", which NavIcon's ` +
+              "ART map does not have — it would fall back to the character " +
+              "and look like the icon simply never changed"
+          );
+        }
+      }
+      // And the other direction: a drawing nothing asks for is dead
+      // code that looks like a working feature.
+      for (const name of drawn) {
+        if (!asked.includes(name)) {
+          problems.push(
+            `NavIcon draws "${name}" and no nav item asks for it — either ` +
+              "an item lost its `art` key or the drawing is unused"
+          );
+        }
+      }
+      // Every site that renders an item's icon has to go through
+      // NavIcon, or the drawing appears in one place and the old
+      // character in the others.
+      for (const [file, source] of sourceFiles("components")) {
+        if (file.endsWith("NavIcon.tsx")) continue;
+        // The CHILD position — `<span …>{item.icon}</span>` — and not
+        // the prop that fixes it, which is the same three tokens with
+        // an `icon=` in front and was what this first flagged.
+        if (/>\s*\{\s*(?:item|nav|tool)\.icon\s*\}/.test(source)) {
+          problems.push(
+            `${file} renders a nav item's \`icon\` directly instead of ` +
+              "through NavIcon — an item with a drawn icon would show the " +
+              "character there and the drawing everywhere else"
+          );
+        }
+      }
+    }
+
     // The way out of a preview must not be gated on not being in one.
     //
     // View as Player turns isDm off so the DM-only screens go away —
@@ -2470,7 +2528,7 @@ export const integrity = {
           "must never be written by an app"
       );
     }
-    for (const c of ["Bug Report", "Suggestion", "Other"]) {
+    for (const c of ["Bug Report", "Feature Request", "Suggestion", "Other"]) {
       if (!feedback.includes(`"${c}"`)) {
         problems.push(`feedback category "${c}" is missing from CATEGORIES`);
       }

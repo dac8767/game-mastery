@@ -430,7 +430,24 @@ function LookupDetail({
  */
 function Art({ row, className }: { row: Record<string, unknown>; className: string }) {
   const src = artSrc(row.image, process.env.NEXT_PUBLIC_MAP_SERVER);
+  const [broken, setBroken] = useState(false);
   if (!src) return null;
+
+  /* A row whose file will not load keeps its square, empty and dashed.
+     It used to hide the <img> outright, which made "this row has no
+     art" and "the artwork mirror is not there" the same picture of
+     nothing — so a mirror that had gone missing looked exactly like a
+     library that never had pictures, on every row at once, with
+     nothing anywhere saying otherwise. The title says which it is. */
+  if (broken) {
+    return (
+      <span
+        className={`${className} lk-art-missing`}
+        title={`No file at ${src} — the artwork mirror is missing or out of date. Run: npm run art-check`}
+      />
+    );
+  }
+
   return (
     /* eslint-disable-next-line @next/next/no-img-element */
     <img
@@ -438,11 +455,7 @@ function Art({ row, className }: { row: Record<string, unknown>; className: stri
       src={src}
       alt=""
       loading="lazy"
-      // A missing file is common while the mirror is catching up, and a
-      // broken-image icon on every row is worse than no picture.
-      onError={(e) => {
-        e.currentTarget.style.display = "none";
-      }}
+      onError={() => setBroken(true)}
     />
   );
 }
@@ -471,8 +484,21 @@ function BigArt({ row }: { row: Record<string, unknown> }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [zoomed]);
 
-  if (!src || broken) return null;
+  if (!src) return null;
   const name = typeof row.name === "string" ? row.name : "";
+
+  /* Same as the row thumbnail: the panel says the art is missing
+     rather than quietly closing the gap where it was. This is the one
+     place with room to say why in words. */
+  if (broken) {
+    return (
+      <p className="lk-art-gone">
+        The artwork for this entry is not in the mirror.
+        <br />
+        <code>{src}</code>
+      </p>
+    );
+  }
 
   return (
     <>

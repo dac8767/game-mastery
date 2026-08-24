@@ -8,6 +8,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { navHref } from "@/components/navItems";
+import { NavIcon } from "@/components/NavIcon";
 import { THEMES, ThemeName } from "@/components/themes";
 import {
   BUILTIN_BY_KEY,
@@ -140,7 +141,7 @@ export function RibbonBar({ campaignId }: { campaignId: Id<"campaigns"> }) {
           className={`rib-btn${big ? " rib-btn-big" : ""}`}
           title={tool.label}
         >
-          <span className="rib-icon">{tool.icon}</span>
+          <NavIcon icon={tool.icon} art={tool.art} className="rib-icon" />
           {big && <span className="rib-label">{tool.label}</span>}
         </Link>
       );

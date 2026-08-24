@@ -629,6 +629,16 @@ button {
   opacity: 0.9;
 }
 
+/* A drawn icon in a slot sized for a character. The span is
+   text-align: center, which does nothing for an inline-block SVG on a
+   line of its own — this centres it and stops the baseline dropping it
+   below the label beside it. */
+.nav-icon svg,
+.rib-icon svg {
+  display: block;
+  margin: 0 auto;
+}
+
 .soon {
   margin-left: auto;
   font-size: 0.6rem;
@@ -1043,6 +1053,56 @@ body.col-resizing {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The way into a record, first in every row. Opening one used to have
+   no visible control at all: you clicked the portrait, or a cell you
+   could not edit, and learned that by trying — while every cell you
+   COULD edit went into edit instead. */
+.expand-th {
+  cursor: default;
+  padding: 0.55rem 0.3rem;
+}
+
+.expand-cell {
+  padding: 0.45rem 0.3rem;
+  text-align: center;
+  overflow: visible;
+}
+
+.expand-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  /* Quiet until the row is under the pointer — 198 of these at full
+     strength would be a column of arrows with a roster behind it. */
+  color: var(--text-dim);
+  opacity: 0.55;
+  cursor: pointer;
+}
+
+.npc-table tr:hover .expand-btn {
+  opacity: 1;
+}
+
+.expand-btn:hover {
+  background: var(--bg-raised);
+  color: var(--accent);
+  opacity: 1;
+}
+
+/* Never hidden by the hover rule: a keyboard has no pointer, so an
+   opacity that only hover lifts makes tabbing through the rows a walk
+   between invisible stops. */
+.expand-btn:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .npc-table tbody tr:hover td {
@@ -2278,6 +2338,41 @@ body.col-resizing {
   gap: 1rem;
   padding-top: 0.5rem;
   border-top: 1px solid var(--border);
+}
+
+/* The confirmation is one line in a window whose only other content is
+   its heading, so it gets room rather than sitting hard against it. */
+.feedback-sent {
+  padding: 0.4rem 0 0.8rem;
+}
+
+/* What is attached, by name, each one removable. A count alone could
+   not say WHICH files, which is the thing you want to check before
+   sending — and left no way to take one back off. */
+.feedback-shots {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.feedback-shots li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--bg-inset);
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+
+.feedback-shot-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 520px) {
@@ -4691,6 +4786,31 @@ button.cal-day:hover {
   background: var(--bg-inset);
 }
 
+/* An entry that HAS a path whose file will not load. Distinct from an
+   entry with no art, which draws nothing at all — telling those two
+   apart is the whole point, because a mirror that has gone missing
+   otherwise looks like a library that never had pictures. */
+.lk-art-missing {
+  display: inline-block;
+  border: 1px dashed var(--border);
+  background: none;
+}
+
+.lk-art-gone {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.lk-art-gone code {
+  font-size: 0.72rem;
+  word-break: break-all;
+}
+
 .lk-td.primary {
   flex-direction: row;
   align-items: center;
@@ -6882,14 +7002,15 @@ button.cal-day:hover {
 }
 
 /* ---------- the toolbar, rebuilt ----------
-   + New NPC on the left, everything that changes the list on the right,
-   in the order you reach for them: Reset, Fields, Filter, Group, Sort,
-   View, Search. */
+   + New NPC and the count on the left, everything that changes the list
+   on the right, in the order you reach for them: Filter, Group, Sort,
+   View, Search, and then ⋮ for the two settings you touch once a
+   week. */
 
 .toolbar-left {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
 .bar-icon {
@@ -6902,10 +7023,18 @@ button.cal-day:hover {
   color: inherit;
 }
 
+/* An icon with no words beside it needs its padding squared up, or the
+   button is wider than it is tall and reads as a truncated label. */
+.bar-btn.icon-only {
+  padding: 0.4rem 0.45rem;
+}
+
+/* An SVG, centred by the flexbox. It was "⌄", a CHARACTER, which a text
+   renderer puts on the baseline like a letter — so it hung below the
+   words beside it and no line-height could lift it. */
 .bar-caret {
+  flex: none;
   color: var(--text-dim);
-  font-size: 0.8rem;
-  line-height: 1;
 }
 
 /* The view chip and its menu. Relative so the menu hangs off it rather
@@ -6950,6 +7079,10 @@ button.cal-day:hover {
   font: inherit;
   font-size: 0.85rem;
   text-align: left;
+  /* One line each. The menu sizes itself to the longest option rather
+     than wrapping "Reset layout to default" over two lines, which read
+     as two entries. */
+  white-space: nowrap;
   cursor: pointer;
 }
 

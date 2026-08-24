@@ -29,11 +29,24 @@ const BACKEND = {
 export const FEEDBACK_APP = "Game Mastery";
 
 /**
- * The only three categories. Free text let ScriptCraft's table drift
- * into holding both "Bug" and "Bug Report"; a fixed list is the cheap
- * half of the fix.
+ * The only categories. Free text let ScriptCraft's table drift into
+ * holding both "Bug" and "Bug Report"; a fixed list is the cheap half
+ * of the fix.
+ *
+ * "Feature Request" is deliberately beside "Suggestion" rather than
+ * replacing it. They are not the same report: a suggestion is "this
+ * would read better the other way round", a feature request is "the
+ * app should do a thing it does not do", and the second is a much
+ * bigger piece of work to be told about. Sorting them apart at the
+ * moment of writing costs nothing; sorting them apart afterwards means
+ * reading every one.
  */
-export const CATEGORIES = ["Bug Report", "Suggestion", "Other"] as const;
+export const CATEGORIES = [
+  "Bug Report",
+  "Feature Request",
+  "Suggestion",
+  "Other",
+] as const;
 export type Category = (typeof CATEGORIES)[number];
 
 export type FeedbackPayload = {

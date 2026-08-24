@@ -6,6 +6,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { api } from "@/convex/_generated/api";
+import { NavIcon } from "@/components/NavIcon";
 import { ThemeSync } from "@/components/ThemeSync";
 import { FeedbackForm } from "@/components/FeedbackForm";
 import { UiProvider } from "@/components/UiEditor";
@@ -60,7 +61,7 @@ function NavList({
           return (
             <li key={item.id}>
               <span className="nav-item disabled">
-                <span className="nav-icon">{item.icon}</span>
+                <NavIcon icon={item.icon} art={item.art} />
                 {item.label}
                 <span className="soon">soon</span>
               </span>
@@ -74,7 +75,7 @@ function NavList({
               href={href}
               className={`nav-item${pathname === href ? " active" : ""}`}
             >
-              <span className="nav-icon">{item.icon}</span>
+              <NavIcon icon={item.icon} art={item.art} />
               {item.label}
             </Link>
           </li>

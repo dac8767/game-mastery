@@ -61,12 +61,22 @@ export const TEXT_PIECES: TextPiece[] = [
   { id: "npc.bar.group", value: "Group", screen: "NPC list" },
   { id: "npc.bar.filter", value: "Filter", screen: "NPC list" },
   { id: "npc.bar.sort", value: "Sort", screen: "NPC list" },
-  { id: "npc.bar.columns", value: "Fields", screen: "NPC list" },
+  // ---- and the two behind the ⋮ menu at the end of it --------------
+  // Reset and Fields were on the bar beside Filter, Group and Sort.
+  // Those three are what you are doing to the list right now; these two
+  // are settings you touch once and then not again for a week, and six
+  // buttons in a row all look equally likely.
   {
-    id: "npc.bar.reset",
-    value: "Reset",
+    id: "npc.more.fields",
+    value: "Hide/Show fields",
     screen: "NPC list",
-    note: "Puts the columns, widths and order back to the defaults",
+    note: "In the ⋮ menu — which columns the grid shows",
+  },
+  {
+    id: "npc.more.reset",
+    value: "Reset layout to default",
+    screen: "NPC list",
+    note: "In the ⋮ menu — columns, widths and order back to the defaults",
   },
   { id: "npc.view.grid", value: "Grid", screen: "NPC list" },
   { id: "npc.view.tiles", value: "Tiles", screen: "NPC list" },

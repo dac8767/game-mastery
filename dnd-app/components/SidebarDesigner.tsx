@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { NavIcon } from "@/components/NavIcon";
 import {
   ALL_NAV_ITEMS,
   NAV_ITEM_BY_ID,
@@ -280,7 +281,7 @@ export function SidebarDesigner() {
                               <span className="tpl-grip" aria-hidden="true">
                                 ⠿
                               </span>
-                              <span className="nav-icon">{nav.icon}</span>
+                              <NavIcon icon={nav.icon} art={nav.art} />
                               {nav.label}
                               {nav.slug === undefined && (
                                 <span className="soon">soon</span>
@@ -379,7 +380,7 @@ export function SidebarDesigner() {
                       <span className="tpl-grip" aria-hidden="true">
                         ⠿
                       </span>
-                      <span className="nav-icon">{nav.icon}</span>
+                      <NavIcon icon={nav.icon} art={nav.art} />
                       {nav.label}
                       {nav.slug === undefined && (
                         <span className="soon">soon</span>

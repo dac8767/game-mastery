@@ -26,6 +26,16 @@ import {
 } from "@/components/npcColumns";
 
 /**
+ * The expand column's width, in pixels.
+ *
+ * Fixed and outside the layout: it is the way into a record rather than
+ * a fact about the NPC, so it cannot be hidden, reordered or dragged
+ * narrower. The table's own width has to count it or the last column
+ * runs off the end of the wrapper.
+ */
+const EXPAND_COL = 34;
+
+/**
  * The NPC roster — an Airtable-style grid over npcs.listForCampaign.
  *
  * Search, filter, group, sort, and layout all run in the browser against
@@ -203,9 +213,7 @@ function ViewPicker({
       >
         {mode === "grid" ? <GridIcon /> : <TilesIcon />}
         <UiText id={mode === "grid" ? "npc.view.grid" : "npc.view.tiles"} />
-        <span className="bar-caret" aria-hidden="true">
-          ⌄
-        </span>
+        <CaretIcon />
       </button>
 
       {open && (
@@ -249,6 +257,142 @@ function ViewPicker({
                 </select>
               </label>
             )}
+          </div>
+        </>
+      )}
+    </span>
+  );
+}
+
+/**
+ * The chevron on the View chip.
+ *
+ * Drawn rather than typed. It was "⌄" — U+2304 DOWN ARROWHEAD — which
+ * a text renderer sits on the BASELINE like a letter, so it hung below
+ * the words beside it and no amount of line-height fixed it: the glyph
+ * is where the font says it is. An SVG is centred by the flexbox like
+ * the other icons on the bar, because it is a box rather than a
+ * character.
+ */
+function CaretIcon() {
+  return (
+    <svg
+      className="bar-caret"
+      viewBox="0 0 16 16"
+      width="10"
+      height="10"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        d="M3 6l5 5 5-5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** The expand icon on each row: two arrows going opposite ways. */
+function ExpandIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="13"
+      height="13"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        d="M9.5 2.5H13.5V6.5M6.5 13.5H2.5V9.5M13.5 2.5L9 7M2.5 13.5L7 9"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** Three vertical dots: the things you reach for once a week. */
+function MoreIcon() {
+  return (
+    <svg
+      className="bar-icon"
+      viewBox="0 0 16 16"
+      width="14"
+      height="14"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle cx="8" cy="3" r="1.5" fill="currentColor" />
+      <circle cx="8" cy="8" r="1.5" fill="currentColor" />
+      <circle cx="8" cy="13" r="1.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+/**
+ * The overflow menu, right of the search box.
+ *
+ * Reset and Fields lived on the bar beside Filter, Group and Sort, and
+ * did not belong there: those three are what you are doing to the list
+ * right now and carry a count saying so, while these two are settings
+ * you touch once and then not again for a week. Six buttons in a row
+ * all look equally likely; four plus a menu says which is which.
+ */
+function MoreMenu({
+  onResetLayout,
+  onFields,
+  fieldsOpen,
+}: {
+  onResetLayout: () => void;
+  onFields: () => void;
+  fieldsOpen: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <span className="view-picker">
+      <button
+        type="button"
+        className={`bar-btn icon-only${open ? " open" : ""}`}
+        aria-expanded={open}
+        aria-label="More"
+        title="More"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <MoreIcon />
+      </button>
+
+      {open && (
+        <>
+          <span className="view-scrim" onClick={() => setOpen(false)} />
+          <div className="view-menu" role="menu">
+            <button
+              type="button"
+              className={`view-option${fieldsOpen ? " on" : ""}`}
+              onClick={() => {
+                onFields();
+                setOpen(false);
+              }}
+            >
+              <UiText id="npc.more.fields" />
+            </button>
+            <button
+              type="button"
+              className="view-option"
+              onClick={() => {
+                onResetLayout();
+                setOpen(false);
+              }}
+            >
+              <UiText id="npc.more.reset" />
+            </button>
           </div>
         </>
       )}
@@ -731,32 +875,28 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
           >
             <UiText id="npc.bar.new" />
           </button>
+
+          {/* The count, beside the button that changes it. It was down
+              on the substrip under the toolbar, a row of its own for
+              one short phrase, and a long way from anything it relates
+              to. */}
+          <span className="npc-count">
+            {sorted.length === all.length
+              ? `${all.length} NPCs`
+              : `${sorted.length} of ${all.length}`}
+          </span>
         </div>
 
         <div className="toolbar-right">
-          {/* Reset, Fields, Filter, Group, Sort, View, Search — the
-              order runs from "start over" through "what is shown" to
-              "which of it", which is the order you reach for them in.
+          {/* Filter, Group, Sort, View, Search, and then the menu — the
+              order runs from "what is shown" to "which of it" to the
+              settings you touch once a week.
 
               A count, not the setting. "Group Species · Filter 2 · Sort
               Last seen" was three settings read out at you every time
               you looked at the screen; the number is the part you need
               at a glance, and the panel behind the button is where the
               detail belongs. */}
-          <button
-            type="button"
-            className="bar-btn"
-            title="Put the columns, widths and order back to the defaults"
-            onClick={prefs.resetLayout}
-          >
-            <UiText id="npc.bar.reset" />
-          </button>
-          <BarButton
-            labelId="npc.bar.columns"
-            count={0}
-            open={panel === "columns"}
-            onClick={() => togglePanel("columns")}
-          />
           <BarButton
             labelId="npc.bar.filter"
             count={activeFilterCount}
@@ -784,17 +924,27 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
           />
 
           <SearchBox value={search} onChange={setSearch} />
+
+          <MoreMenu
+            fieldsOpen={panel === "columns"}
+            onFields={() => togglePanel("columns")}
+            onResetLayout={prefs.resetLayout}
+          />
         </div>
       </div>
       )}
 
-      {!selectedNpc && (
+      {/* The substrip is now only for things that are TRUE right now —
+          a preview in progress, filters worth clearing. With the count
+          moved up it is usually nothing, and an empty strip taking a
+          row is the reason the count was down here in the first
+          place. */}
+      {!selectedNpc &&
+        (result.previewingAsPlayer ||
+          search ||
+          activeFilterCount > 0 ||
+          prefs.groupBy) && (
       <div className="npc-substrip">
-        <span className="npc-count">
-          {sorted.length === all.length
-            ? `${all.length} NPCs`
-            : `${sorted.length} of ${all.length}`}
-        </span>
         {result.previewingAsPlayer && (
           <span className="preview-flag">
             Viewing as a player — hidden NPCs and DM fields withheld
@@ -1064,8 +1214,18 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
         />
       ) : (
         <div className="npc-table-wrap">
-          <table className="npc-table" style={{ width: `${totalWidth}px` }}>
+          <table
+            className="npc-table"
+            style={{ width: `${totalWidth + EXPAND_COL}px` }}
+          >
+          {/* The expand column, ahead of everything the layout
+              arranges. It is not a COLUMN in the useViewPrefs sense —
+              it cannot be hidden, reordered or resized, because it is
+              the way into the record rather than a fact about the NPC,
+              and a layout that could hide it would hide the only
+              visible way to open one. */}
           <colgroup>
+            <col style={{ width: `${EXPAND_COL}px` }} />
             {shown.map(({ state }) => (
               <col key={state.key} style={{ width: `${state.width}px` }} />
             ))}
@@ -1073,6 +1233,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
 
           <thead>
             <tr>
+              <th className="expand-th" aria-label="Open" />
               {shown.map(({ state, def }) => (
                 <th
                   key={state.key}
@@ -1105,7 +1266,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
                   className="group-row"
                   onClick={() => toggleGroup(groupValue)}
                 >
-                  <td colSpan={shown.length}>
+                  <td colSpan={shown.length + 1}>
                     <span className="caret">
                       {collapsed.has(groupValue) ? "▸" : "▾"}
                     </span>
@@ -1207,6 +1368,22 @@ function Row({
         .filter(Boolean)
         .join(" ")}
     >
+      {/* Opening the record had no visible control at all: you clicked
+          the portrait, or a cell you could not edit, and learned that
+          by trying. A row of 198 with no picture had nowhere obvious to
+          click, and every editable cell went into edit instead. */}
+      <td className="expand-cell">
+        <button
+          type="button"
+          className="expand-btn"
+          title={`Open ${npc.name || "this NPC"}`}
+          aria-label={`Open ${npc.name || "this NPC"}`}
+          onClick={onOpen}
+        >
+          <ExpandIcon />
+        </button>
+      </td>
+
       {shown.map(({ state, def }) => {
         const isEditing = editing?.id === npc._id && editing.key === def.key;
 

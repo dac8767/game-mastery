@@ -16,6 +16,16 @@ import {
 } from "@/components/feedbackClient";
 
 /**
+ * As many screenshots as one report carries.
+ *
+ * A cap rather than none, because a failed submission is queued in
+ * localStorage with its attachments as data URLs — twenty screenshots
+ * would blow the quota, and the quota failing is how a report is lost
+ * at the exact moment it could not be sent.
+ */
+const SHOT_MAX = 6;
+
+/**
  * The feedback form.
  *
  * Name and email prefill from the signed-in account rather than asking
@@ -83,22 +93,17 @@ export function FeedbackForm({ onClose }: { onClose: () => void }) {
   }
 
   if (state === "sent") {
+    /* One heading, one sentence, one way out.
+       It had a "Thanks" heading over a "Thank you!" sentence and a
+       Close in the header over a Close button below — a four-line
+       window saying two things twice. The heading says what happened,
+       the line thanks you once, and the shell's own Close is the only
+       Close, which is also the one the form state uses. */
     return (
-      <FeedbackShell onClose={onClose} title="Thanks">
-        {/* Says what happened and nothing about where it goes. The old
-            wording named Derek and the queue it lands in, which reads
-            oddly to a player who has never heard of either. */}
-        <p className="settings-note">
-          Your feedback has been sent. Thank you!
+      <FeedbackShell onClose={onClose} title="Feedback sent">
+        <p className="settings-note feedback-sent">
+          Thanks — it&apos;s on its way.
         </p>
-        {/* The button sat directly under the message with nothing
-            between them, so the two read as one block and the Close in
-            the header looked like the only way out. */}
-        <div className="feedback-actions">
-          <button type="button" className="npc-btn primary" onClick={onClose}>
-            Close
-          </button>
-        </div>
       </FeedbackShell>
     );
   }
@@ -184,13 +189,57 @@ export function FeedbackForm({ onClose }: { onClose: () => void }) {
             type="file"
             accept="image/*"
             multiple
-            onChange={(e) => setShots(Array.from(e.target.files ?? []))}
+            /* Each pick ADDS to what is attached rather than replacing
+               it. A file input reports only its own last selection, so
+               picking one screenshot and then going back for a second
+               silently dropped the first — the box said "1 image
+               attached" and the report arrived with the wrong one. The
+               input is cleared after each pick so choosing the same
+               file twice in a row still fires a change event. */
+            onChange={(e) => {
+              const picked = Array.from(e.target.files ?? []);
+              e.target.value = "";
+              if (picked.length === 0) return;
+              setShots((current) => {
+                const merged = [...current];
+                for (const file of picked) {
+                  // Same name and size, picked twice, is the same
+                  // screenshot — attaching it again helps nobody.
+                  const already = merged.some(
+                    (f) => f.name === file.name && f.size === file.size
+                  );
+                  if (!already && merged.length < SHOT_MAX) merged.push(file);
+                }
+                return merged;
+              });
+            }}
           />
         </label>
 
         {shots.length > 0 && (
+          <ul className="feedback-shots">
+            {shots.map((file, i) => (
+              <li key={`${file.name}-${file.size}-${i}`}>
+                <span className="feedback-shot-name">{file.name}</span>
+                <button
+                  type="button"
+                  className="text-button"
+                  title="Take this one off the report"
+                  onClick={() =>
+                    setShots((current) => current.filter((_, j) => j !== i))
+                  }
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {shots.length >= SHOT_MAX && (
           <p className="settings-note">
-            {shots.length} image{shots.length === 1 ? "" : "s"} attached.
+            {SHOT_MAX} is as many as one report carries. Remove one to
+            attach another.
           </p>
         )}
 

@@ -17,6 +17,20 @@ export type NavItem = {
   id: string;
   label: string;
   icon: string;
+  /**
+   * A DRAWN icon instead of the character, by name.
+   *
+   * Names a drawing in components/NavIcon.tsx, which is where the JSX
+   * has to live — this module is plain .ts and is read by things that
+   * do not compile React. `icon` stays required and is what anything
+   * without a renderer falls back to.
+   *
+   * A name with no drawing behind it fails the integrity guard rather
+   * than falling back quietly, because falling back quietly means the
+   * icon is simply the old one and the change looks like it did not
+   * take.
+   */
+  art?: string;
   /** Path segment under /campaign/[id]. "" is the campaign itself. */
   slug?: string;
   /**
@@ -40,7 +54,10 @@ export const TABLE_ITEM: NavItem = {
 /** Content scoped to the campaign. Titled with the campaign's name. */
 export const CAMPAIGN_ITEMS: NavItem[] = [
   { id: "sessions", label: "Sessions", icon: "✦" },
-  { id: "npcs", label: "NPCs", icon: "☾", slug: "npcs" },
+  // A drawn group of people rather than the moon it used to share with
+  // the campaign block above it — two different things in one sidebar
+  // wearing the same symbol.
+  { id: "npcs", label: "NPCs", icon: "☾", art: "people", slug: "npcs" },
   { id: "shops", label: "Shops", icon: "⌂" },
   { id: "locations", label: "Locations", icon: "⌖", slug: "locations" },
   { id: "calendar", label: "Calendar", icon: "◷", slug: "calendar" },
