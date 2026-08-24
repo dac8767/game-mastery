@@ -172,23 +172,46 @@ function BarButton({
   count,
   open,
   onClick,
+  onClose,
+  children,
 }: {
   /** A registry id, so edit mode can rename it in place. */
   labelId: string;
   count: number;
   open: boolean;
   onClick: () => void;
+  /** Dismiss, for the click-anywhere-else scrim. */
+  onClose?: () => void;
+  /** The panel this button opens, hung under it. */
+  children?: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      className={`bar-btn${open ? " open" : ""}${count > 0 ? " on" : ""}`}
-      aria-expanded={open}
-      onClick={onClick}
-    >
-      <UiText id={labelId} />
-      {count > 0 && <span className="bar-count">{count}</span>}
-    </button>
+    <span className="bar-pop">
+      <button
+        type="button"
+        className={`bar-btn${open ? " open" : ""}${count > 0 ? " on" : ""}`}
+        aria-expanded={open}
+        onClick={onClick}
+      >
+        <UiText id={labelId} />
+        {count > 0 && <span className="bar-count">{count}</span>}
+      </button>
+
+      {/* Hung UNDER the button rather than pushed into the list.
+          These used to be blocks in the flow, so opening Filter moved
+          every row down the page and closing it moved them back —
+          which is the layout jumping under your pointer at the exact
+          moment you were aiming at a row. */}
+      {open && children && (
+        <>
+          {/* Catches the click that dismisses, without a document
+              listener that would also fire on the button that opened
+              it. */}
+          <span className="view-scrim" onClick={onClose} />
+          <div className="bar-panel">{children}</div>
+        </>
+      )}
+    </span>
   );
 }
 
@@ -363,16 +386,21 @@ function MoreIcon() {
 function MoreMenu({
   onResetLayout,
   onFields,
+  onCloseFields,
   fieldsOpen,
+  children,
 }: {
   onResetLayout: () => void;
   onFields: () => void;
+  onCloseFields: () => void;
   fieldsOpen: boolean;
+  /** The Fields panel, hung under this button when it is open. */
+  children?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <span className="view-picker">
+    <span className="view-picker bar-pop">
       <button
         type="button"
         className={`bar-btn icon-only${open ? " open" : ""}`}
@@ -409,6 +437,16 @@ function MoreMenu({
               <UiText id="npc.more.reset" />
             </button>
           </div>
+        </>
+      )}
+
+      {/* Fields opens from the menu above and hangs off the same
+          button, so the panel appears where the thing that opened it
+          was rather than shoving the table down the page. */}
+      {fieldsOpen && children && (
+        <>
+          <span className="view-scrim" onClick={onCloseFields} />
+          <div className="bar-panel">{children}</div>
         </>
       )}
     </span>
@@ -974,19 +1012,100 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
             count={activeFilterCount}
             open={panel === "filter"}
             onClick={() => togglePanel("filter")}
-          />
+            onClose={() => setPanel(null)}
+          >
+            <FilterPanel
+            conditions={prefs.filters}
+            conjunction={prefs.filterConjunction}
+            fields={filterableFields}
+            valueOptions={valueOptions}
+            onChange={prefs.setFilters}
+            onConjunctionChange={prefs.setFilterConjunction}
+            />
+          </BarButton>
           <BarButton
             labelId="npc.bar.group"
             count={prefs.groupBy ? 1 : 0}
             open={panel === "group"}
             onClick={() => togglePanel("group")}
-          />
+            onClose={() => setPanel(null)}
+          >
+            <div className="filter-panel">
+            <div className="filter-title">Group</div>
+            <label className="npc-select">
+              <span><UiText id="npc.panel.groupBy" /></span>
+              <select
+                value={prefs.groupBy}
+                onChange={(e) => prefs.setGroupBy(e.target.value)}
+              >
+                <option value="">None</option>
+                {facetOptions.map((f) => (
+                  <option key={f.key} value={f.key}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {prefs.groupBy && (
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => prefs.setGroupBy("")}
+              >
+                Remove grouping
+              </button>
+            )}
+            </div>
+          </BarButton>
           <BarButton
             labelId="npc.bar.sort"
             count={sortCount}
             open={panel === "sort"}
             onClick={() => togglePanel("sort")}
-          />
+            onClose={() => setPanel(null)}
+          >
+            <div className="filter-panel">
+            <div className="filter-title">Sort</div>
+            <label className="npc-select">
+              <span><UiText id="npc.panel.sortBy" /></span>
+              <select
+                value={prefs.sortKey}
+                onChange={(e) => prefs.setSortKey(e.target.value)}
+              >
+                {sortableFields.map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="npc-btn"
+              onClick={() => prefs.setSortAsc((v) => !v)}
+            >
+              <UiText
+                id={
+                  prefs.sortAsc
+                    ? "npc.panel.ascending"
+                    : "npc.panel.descending"
+                }
+              />
+            </button>
+            {sortCount > 0 && (
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => {
+                  prefs.setSortKey(DEFAULT_SORT_KEY);
+                  prefs.setSortAsc(DEFAULT_SORT_ASC);
+                }}
+              >
+                Back to the default
+              </button>
+            )}
+            </div>
+          </BarButton>
 
           <ViewPicker
             mode={prefs.viewMode}
@@ -1000,8 +1119,121 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
           <MoreMenu
             fieldsOpen={panel === "columns"}
             onFields={() => togglePanel("columns")}
+            onCloseFields={() => setPanel(null)}
             onResetLayout={prefs.resetLayout}
-          />
+          >
+            <div className="column-panel">
+            <div className="facet-label">
+              Columns — yours alone; nobody else&apos;s view changes
+            </div>
+
+            <input
+              className="column-find"
+              type="search"
+              placeholder="Find a field"
+              value={columnSearch}
+              onChange={(e) => setColumnSearch(e.target.value)}
+            />
+
+            <ul className="column-list">
+              {prefs.columns.map((state) => {
+                const def = COLUMN_BY_KEY.get(state.key);
+                if (!def || (def.dmOnly && !isDm)) return null;
+                if (
+                  columnSearch.trim() &&
+                  !def.label
+                    .toLowerCase()
+                    .includes(columnSearch.trim().toLowerCase())
+                ) {
+                  return null;
+                }
+
+                const isPrimary = state.key === PRIMARY_COLUMN;
+                return (
+                  <li
+                    key={state.key}
+                    className={[
+                      "column-item",
+                      dragKey === state.key ? "dragging" : "",
+                      dropKey === state.key ? "drop-target" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    draggable
+                    onDragStart={(e) => {
+                      // WebKit refuses the drag outright without this.
+                      e.dataTransfer.setData("text/plain", state.key);
+                      e.dataTransfer.effectAllowed = "move";
+                      setDragKey(state.key);
+                    }}
+                    onDragEnd={() => {
+                      setDragKey(null);
+                      setDropKey(null);
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                      if (dropKey !== state.key) setDropKey(state.key);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const from =
+                        e.dataTransfer.getData("text/plain") || dragKey;
+                      setDragKey(null);
+                      setDropKey(null);
+                      if (from) reorderColumn(from, state.key);
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className={`column-switch${state.visible ? " on" : ""}`}
+                      role="switch"
+                      aria-checked={state.visible}
+                      aria-label={`Show ${def.label}`}
+                      disabled={isPrimary}
+                      title={
+                        isPrimary
+                          ? "The primary field always shows"
+                          : state.visible
+                            ? "Hide this field"
+                            : "Show this field"
+                      }
+                      onClick={() => toggleColumn(state.key)}
+                    >
+                      <span className="knob" />
+                    </button>
+
+                    <span className="column-name">{def.label}</span>
+                    {def.dmOnly && <span className="dm-tag">DM</span>}
+
+                    {/* Grip is a hint, not the handle — the whole row is
+                        draggable, which is a much larger target. */}
+                    <span className="column-grip" aria-hidden="true">
+                      ⠿
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <div className="column-panel-actions">
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => setAllColumns(false)}
+              >
+                Hide all
+              </button>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => setAllColumns(true)}
+              >
+                Show all
+              </button>
+            </div>
+            </div>
+          </MoreMenu>
         </div>
       </div>
       )}
@@ -1039,203 +1271,9 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
         </p>
       )}
 
-      {panel === "group" && (
-        <div className="filter-panel">
-          <div className="filter-title">Group</div>
-          <label className="npc-select">
-            <span><UiText id="npc.panel.groupBy" /></span>
-            <select
-              value={prefs.groupBy}
-              onChange={(e) => prefs.setGroupBy(e.target.value)}
-            >
-              <option value="">None</option>
-              {facetOptions.map((f) => (
-                <option key={f.key} value={f.key}>
-                  {f.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {prefs.groupBy && (
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => prefs.setGroupBy("")}
-            >
-              Remove grouping
-            </button>
-          )}
-        </div>
-      )}
 
-      {panel === "sort" && (
-        <div className="filter-panel">
-          <div className="filter-title">Sort</div>
-          <label className="npc-select">
-            <span><UiText id="npc.panel.sortBy" /></span>
-            <select
-              value={prefs.sortKey}
-              onChange={(e) => prefs.setSortKey(e.target.value)}
-            >
-              {sortableFields.map((c) => (
-                <option key={c.key} value={c.key}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            className="npc-btn"
-            onClick={() => prefs.setSortAsc((v) => !v)}
-          >
-            <UiText
-              id={
-                prefs.sortAsc
-                  ? "npc.panel.ascending"
-                  : "npc.panel.descending"
-              }
-            />
-          </button>
-          {sortCount > 0 && (
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => {
-                prefs.setSortKey(DEFAULT_SORT_KEY);
-                prefs.setSortAsc(DEFAULT_SORT_ASC);
-              }}
-            >
-              Back to the default
-            </button>
-          )}
-        </div>
-      )}
 
-      {panel === "columns" && (
-        <div className="column-panel">
-          <div className="facet-label">
-            Columns — yours alone; nobody else&apos;s view changes
-          </div>
 
-          <input
-            className="column-find"
-            type="search"
-            placeholder="Find a field"
-            value={columnSearch}
-            onChange={(e) => setColumnSearch(e.target.value)}
-          />
-
-          <ul className="column-list">
-            {prefs.columns.map((state) => {
-              const def = COLUMN_BY_KEY.get(state.key);
-              if (!def || (def.dmOnly && !isDm)) return null;
-              if (
-                columnSearch.trim() &&
-                !def.label
-                  .toLowerCase()
-                  .includes(columnSearch.trim().toLowerCase())
-              ) {
-                return null;
-              }
-
-              const isPrimary = state.key === PRIMARY_COLUMN;
-              return (
-                <li
-                  key={state.key}
-                  className={[
-                    "column-item",
-                    dragKey === state.key ? "dragging" : "",
-                    dropKey === state.key ? "drop-target" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  draggable
-                  onDragStart={(e) => {
-                    // WebKit refuses the drag outright without this.
-                    e.dataTransfer.setData("text/plain", state.key);
-                    e.dataTransfer.effectAllowed = "move";
-                    setDragKey(state.key);
-                  }}
-                  onDragEnd={() => {
-                    setDragKey(null);
-                    setDropKey(null);
-                  }}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = "move";
-                    if (dropKey !== state.key) setDropKey(state.key);
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    const from =
-                      e.dataTransfer.getData("text/plain") || dragKey;
-                    setDragKey(null);
-                    setDropKey(null);
-                    if (from) reorderColumn(from, state.key);
-                  }}
-                >
-                  <button
-                    type="button"
-                    className={`column-switch${state.visible ? " on" : ""}`}
-                    role="switch"
-                    aria-checked={state.visible}
-                    aria-label={`Show ${def.label}`}
-                    disabled={isPrimary}
-                    title={
-                      isPrimary
-                        ? "The primary field always shows"
-                        : state.visible
-                          ? "Hide this field"
-                          : "Show this field"
-                    }
-                    onClick={() => toggleColumn(state.key)}
-                  >
-                    <span className="knob" />
-                  </button>
-
-                  <span className="column-name">{def.label}</span>
-                  {def.dmOnly && <span className="dm-tag">DM</span>}
-
-                  {/* Grip is a hint, not the handle — the whole row is
-                      draggable, which is a much larger target. */}
-                  <span className="column-grip" aria-hidden="true">
-                    ⠿
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-
-          <div className="column-panel-actions">
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => setAllColumns(false)}
-            >
-              Hide all
-            </button>
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => setAllColumns(true)}
-            >
-              Show all
-            </button>
-          </div>
-        </div>
-      )}
-
-      {panel === "filter" && (
-        <FilterPanel
-          conditions={prefs.filters}
-          conjunction={prefs.filterConjunction}
-          fields={filterableFields}
-          valueOptions={valueOptions}
-          onChange={prefs.setFilters}
-          onConjunctionChange={prefs.setFilterConjunction}
-        />
-      )}
 
       {/* An open record takes the list's place in the layout rather than
           covering it: same flex slot, so it gets the whole area the

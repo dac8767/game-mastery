@@ -865,6 +865,61 @@ export const integrity = {
       }
     }
 
+    // ---- the list's panels float, and every float can be dismissed --
+    // Filter, Group, Sort and Fields hang under their own button. Two
+    // ways that regresses, and only one of them is visible:
+    //
+    //   back into the flow  — the table jumps down the page when you
+    //                         open one. Obvious, and reported once.
+    //   without a scrim     — the panel opens and nothing closes it
+    //                         but the button that opened it. Quiet,
+    //                         and the thing people actually get stuck
+    //                         on.
+    {
+      const src = stripComments(read("components", "NpcTable.tsx"));
+
+      // A panel rendered as a block in the screen's own flow.
+      for (const m of src.matchAll(/\{panel === "(\w+)" && \(/g)) {
+        problems.push(
+          `the ${m[1]} panel is rendered in the screen's flow — opening it ` +
+            "would push the whole table down the page. It belongs under " +
+            "its button, inside a bar-pop"
+        );
+      }
+
+      // Every floating panel needs something to dismiss it. Checked
+      // pairwise: each bar-panel must have a scrim within the same
+      // conditional block above it.
+      const panels = [...src.matchAll(/className="bar-panel"/g)];
+      if (panels.length === 0) {
+        problems.push(
+          "no bar-panel in NpcTable — the toolbar's panels are meant to " +
+            "float under their buttons"
+        );
+      }
+      for (const m of panels) {
+        const before = src.slice(Math.max(0, m.index - 300), m.index);
+        if (!/className="view-scrim"/.test(before)) {
+          problems.push(
+            "a bar-panel is rendered with no view-scrim above it — " +
+              "clicking outside it would not close it, and the only way " +
+              "out would be the button that opened it"
+          );
+        }
+      }
+
+      // And the scrim has to actually do something.
+      for (const m of src.matchAll(/className="view-scrim"([^>]*)>/g)) {
+        if (!/onClick=/.test(m[1])) {
+          problems.push(
+            "a view-scrim has no onClick — it would swallow the click " +
+              "that was meant to dismiss the panel and close nothing, " +
+              "which is worse than not being there"
+          );
+        }
+      }
+    }
+
     // ---- no row is fetched for a parent that has no row ------------
     // An inferred parent's id is synthetic. Sending one to a getter is
     // an ArgumentValidationError from Convex, which reaches the

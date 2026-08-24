@@ -2165,6 +2165,54 @@ body.col-resizing {
 
 /* ---------- Filter conditions ---------- */
 
+/* Filter, Group, Sort and Fields hang UNDER their own button.
+
+   They were blocks in the flow, so opening one pushed the whole table
+   down the page and closing it pulled it back up — the list moving
+   under your pointer at the moment you were aiming at a row. Anchored
+   here they cover the rows instead, which is what every table with
+   these controls does.
+
+   Right-aligned because the buttons live at the right-hand end of a
+   wide toolbar, so a left-aligned panel would hang off the screen. */
+.bar-pop {
+  position: relative;
+  display: inline-flex;
+}
+
+.bar-panel {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  z-index: 41;
+  width: max-content;
+  min-width: 16rem;
+  /* Never taller than the window. The Fields list is one row per
+     column and there are fifty of them. */
+  max-height: min(70vh, 32rem);
+  overflow-y: auto;
+  padding: 0.9rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+/* Inside a popover the panels are already framed, so they drop their
+   own card — and stack, rather than flowing inline the way they could
+   afford to across the full width of the page. */
+.bar-panel > .filter-panel,
+.bar-panel > .column-panel {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  max-width: none;
+  display: grid;
+  gap: 0.5rem;
+  justify-items: start;
+}
+
 .filter-panel {
   padding: 0.9rem;
   margin-bottom: 0.75rem;
