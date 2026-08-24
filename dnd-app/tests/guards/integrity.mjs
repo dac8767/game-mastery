@@ -874,9 +874,9 @@ export const integrity = {
     // back subtly wrong rather than erroring.
     {
       const src = stripComments(read("components", "LookupTool.tsx"));
-      const at = src.indexOf("function SubclassRow");
+      const at = src.indexOf("function FamilyRow");
       if (at === -1) {
-        throw new Error("no SubclassRow in LookupTool.tsx — has it moved?");
+        throw new Error("no FamilyRow in LookupTool.tsx — has it moved?");
       }
       const body = src.slice(at, src.indexOf("\nfunction ", at + 1));
 
@@ -884,16 +884,16 @@ export const integrity = {
       const headClose = body.indexOf("</button>", headOpen);
       const entry = body.indexOf("<ExpandedRow");
       if (headOpen === -1 || headClose === -1) {
-        throw new Error("could not read SubclassRow's head button");
+        throw new Error("could not read FamilyRow's head button");
       }
       if (entry === -1) {
         problems.push(
-          "SubclassRow no longer renders ExpandedRow — the caret would " +
+          "FamilyRow no longer renders ExpandedRow — the caret would " +
             "open onto nothing, which is a list that pretends to expand"
         );
       } else if (entry < headClose) {
         problems.push(
-          "SubclassRow renders the entry INSIDE its head button — the " +
+          "FamilyRow renders the entry INSIDE its head button — the " +
             "entry has buttons of its own, so the parser restructures the " +
             "tree and hydration comes back wrong"
         );

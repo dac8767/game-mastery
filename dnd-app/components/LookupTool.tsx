@@ -14,9 +14,10 @@ import {
   abilityCells,
   artSrc,
   buildFacts,
-  ABSENT_CLASS_ID,
+  ABSENT_PARENT_ID,
+  FAMILY_LABEL,
   buildSubtitle,
-  classRows,
+  familyRows,
   columnTemplate,
   blocks as readBlocks,
   features,
@@ -151,15 +152,18 @@ export function LookupTool({
   );
   const folded = all.length - library.length;
 
-  /* Classes only: the table lists CLASSES, and each one carries its
-     subclasses inside its own entry. 134 rows of which a dozen are
-     classes is not a list of classes — it is an alphabetised pile with
-     Aberrant Sorcery above Barbarian. */
-  const grouped = useMemo(
-    () => (kind === "classes" ? classRows(library) : null),
-    [kind, library]
-  );
+  /* Classes and species: the table lists the PARENTS, and each one
+     carries its children inside its own entry. An alphabetised pile is
+     not a list of the things you choose between — it puts Aberrant
+     Sorcery above Barbarian, and Astral Elf above Dwarf. */
+  const grouped = useMemo(() => familyRows(kind, library), [kind, library]);
   const listed = grouped ? grouped.rows : library;
+
+  /** How many children a row folds in, for the count beside its name. */
+  const memberCount = (row: Record<string, unknown>) =>
+    grouped?.childrenOf.get(
+      String(row.name ?? "").trim().toLowerCase().replace(/\s+/g, " ")
+    )?.length ?? 0;
 
   const matched = useMemo(
     () =>
@@ -375,6 +379,15 @@ export function LookupTool({
                               <span className="lk-cell">
                                 {c.get(row) ?? "—"}
                               </span>
+                              {/* How many variants are folded in here,
+                                  answerable without opening the row —
+                                  which is the question you are asking
+                                  while scanning the list. */}
+                              {memberCount(row) > 0 && (
+                                <span className="lk-fam-count">
+                                  {memberCount(row)}
+                                </span>
+                              )}
                             </span>
                           ) : (
                             <span className="lk-cell">{c.get(row) ?? "—"}</span>
@@ -399,8 +412,8 @@ export function LookupTool({
                       <ExpandedRow
                         kind={kind}
                         id={id}
-                        subclasses={
-                          grouped?.subclassesOf.get(
+                        members={
+                          grouped?.childrenOf.get(
                             String(row.name ?? "")
                               .trim()
                               .toLowerCase()
@@ -439,12 +452,19 @@ export function LookupTool({
 function ExpandedRow({
   kind,
   id,
-  subclasses,
+  members,
 }: {
   kind: LookupKind;
   id: string;
-  /** A class's own subclasses. Null for every other kind. */
-  subclasses?: Record<string, unknown>[] | null;
+  /**
+   * A parent's own children — subclasses, or species variants. Null
+   * for the kinds that are flat.
+   *
+   * Named `members` rather than `children` on purpose: `children` is
+   * React's own prop, and a component taking both would be reading two
+   * different things out of one word.
+   */
+  members?: Record<string, unknown>[] | null;
 }) {
   const spell = useQuery(
     api.lookup.getSpell,
@@ -470,7 +490,7 @@ function ExpandedRow({
      subclasses name it, not because the library holds it. Asking
      Convex for it would send a synthetic id to a validator expecting a
      real one, which is an error, not an empty result. */
-  const absent = id.startsWith(ABSENT_CLASS_ID);
+  const absent = id.startsWith(ABSENT_PARENT_ID);
   const klass = useQuery(
     api.lookup.getClass,
     kind === "classes" && !absent ? { id: id as Id<"classes"> } : "skip"
@@ -502,8 +522,8 @@ function ExpandedRow({
             usually because the only write-up of the class is the 2024
             one, which a 5e game does not use.
           </p>
-          {subclasses && subclasses.length > 0 && (
-            <SubclassList subclasses={subclasses} />
+          {members && members.length > 0 && (
+            <FamilyList kind={kind} members={members} />
           )}
         </article>
       </div>
@@ -516,9 +536,7 @@ function ExpandedRow({
       {row === null && (
         <p className="muted lookup-hint">That entry is no longer there.</p>
       )}
-      {row && (
-        <LookupDetail kind={kind} row={row} subclasses={subclasses} />
-      )}
+      {row && <LookupDetail kind={kind} row={row} members={members} />}
     </div>
   );
 }
@@ -536,11 +554,11 @@ function ExpandedRow({
 function LookupDetail({
   kind,
   row,
-  subclasses,
+  members,
 }: {
   kind: LookupKind;
   row: Record<string, unknown>;
-  subclasses?: Record<string, unknown>[] | null;
+  members?: Record<string, unknown>[] | null;
 }) {
   const body = readBlocks(row.blocks);
   const source = typeof row.source === "string" ? row.source : "";
@@ -580,8 +598,8 @@ function LookupDetail({
       {/* A class's subclasses, under everything that applies whichever
           one you take. Below the description rather than beside it:
           the general rules come first because you read them first. */}
-      {kind === "classes" && subclasses && subclasses.length > 0 && (
-        <SubclassList subclasses={subclasses} />
+      {members && members.length > 0 && (
+        <FamilyList kind={kind} members={members} />
       )}
 
       {kind === "spells" && typeof row.materials === "string" && row.materials && (
@@ -598,20 +616,26 @@ function LookupDetail({
  * you take. Below the description rather than beside it: the general
  * rules come first because you read them first.
  */
-function SubclassList({
-  subclasses,
+function FamilyList({
+  kind,
+  members,
 }: {
-  subclasses: Record<string, unknown>[];
+  kind: LookupKind;
+  members: Record<string, unknown>[];
 }) {
   return (
     <section className="lk-subclasses">
       <h3 className="lk-h">
-        Subclasses{" "}
-        <span className="lk-subclass-count">{subclasses.length}</span>
+        {FAMILY_LABEL[kind] ?? "Variants"}{" "}
+        <span className="lk-subclass-count">{members.length}</span>
       </h3>
       <div className="lk-subrows">
-        {subclasses.map((sub) => (
-          <SubclassRow key={String(sub._id)} sub={sub} />
+        {members.map((member) => (
+          <FamilyRow
+            key={String(member._id)}
+            kind={kind}
+            member={member}
+          />
         ))}
       </div>
     </section>
@@ -619,7 +643,7 @@ function SubclassList({
 }
 
 /**
- * One subclass, as a row that opens.
+ * One child, as a row that opens.
  *
  * The second level of the same gesture the table uses: a caret, a
  * name, and the entry underneath when you want it. It was a plain
@@ -627,19 +651,26 @@ function SubclassList({
  * it — on a screen whose whole point is that a class and its options
  * are one thing you read together.
  *
- * Its own `open` state rather than the table's. Which subclasses you
- * have unfolded belongs to the class entry you are reading, and
- * closing the class should not leave them remembered — the table's Set
- * is keyed by id and would.
+ * Its own `open` state rather than the table's. Which children you
+ * have unfolded belongs to the entry you are reading, and closing the
+ * parent should not leave them remembered — the table's Set is keyed
+ * by id and would.
  *
  * The body is the SAME ExpandedRow the table uses. A subclass is a row
- * in the classes table like any other; it is only the list it sits in
- * that is different, so nothing here re-implements how one is drawn.
+ * in the classes table like any other, and a Wood Elf a row in the
+ * species table; it is only the list it sits in that is different, so
+ * nothing here re-implements how one is drawn.
  */
-function SubclassRow({ sub }: { sub: Record<string, unknown> }) {
+function FamilyRow({
+  kind,
+  member,
+}: {
+  kind: LookupKind;
+  member: Record<string, unknown>;
+}) {
   const [open, setOpen] = useState(false);
-  const clean = splitSource(sub.name, sub.source);
-  const id = String(sub._id);
+  const clean = splitSource(member.name, member.source);
+  const id = String(member._id);
 
   return (
     <div className={`lk-subrow${open ? " open" : ""}`}>
@@ -661,7 +692,7 @@ function SubclassRow({ sub }: { sub: Record<string, unknown> }) {
       {/* Outside the head button, not inside it — a button holding the
           entry would nest the artwork's own button and the whole thing
           would fail hydration. */}
-      {open && <ExpandedRow kind="classes" id={id} />}
+      {open && <ExpandedRow kind={kind} id={id} />}
     </div>
   );
 }

@@ -3303,12 +3303,12 @@ export const unit = {
     );
     check(
       "a class carries its own subclasses",
-      (cr.subclassesOf.get("fighter") ?? []).map((r) => r.name).join() ===
+      (cr.childrenOf.get("fighter") ?? []).map((r) => r.name).join() ===
         "Battle Master,Champion"
     );
     check(
       "and they are in name order regardless of input order",
-      (cr.subclassesOf.get("fighter") ?? [])[0].name === "Battle Master"
+      (cr.childrenOf.get("fighter") ?? [])[0].name === "Battle Master"
     );
     // The case that was reported as "classes are not grouping". A
     // library can hold the 2024 printing of every base class and the
@@ -3317,7 +3317,7 @@ export const unit = {
     // parent ROW then finds nothing and the list is a flat pile.
     check(
       "a subclass whose class is absent is still grouped under it",
-      (cr.subclassesOf.get("sorcerer") ?? []).some(
+      (cr.childrenOf.get("sorcerer") ?? []).some(
         (r) => r.name === "Bladesinger"
       )
     );
@@ -3335,19 +3335,19 @@ export const unit = {
       "its id is marked, so nothing tries to fetch a row that is not there",
       cr.rows
         .filter((r) => r.absent === true)
-        .every((r) => String(r._id).startsWith(look.ABSENT_CLASS_ID))
+        .every((r) => String(r._id).startsWith(look.ABSENT_PARENT_ID))
     );
     check(
       "nothing real is lost overall",
       cr.rows.filter((r) => r.absent !== true).length +
-        [...cr.subclassesOf.values()].reduce((n, l) => n + l.length, 0) ===
+        [...cr.childrenOf.values()].reduce((n, l) => n + l.length, 0) ===
         CLASSES.length
     );
     check(
       "and nothing real is counted twice",
       new Set([
         ...cr.rows.filter((r) => r.absent !== true).map((r) => r._id),
-        ...[...cr.subclassesOf.values()].flat().map((r) => r._id),
+        ...[...cr.childrenOf.values()].flat().map((r) => r._id),
       ]).size === CLASSES.length
     );
     // A subclass that names no class at all cannot be grouped, so it
@@ -3368,12 +3368,172 @@ export const unit = {
           { _id: "a", name: "Fighter", isSubclass: false },
           { _id: "b", name: "Champion", isSubclass: true, parentClass: "  fighter " },
         ])
-        .subclassesOf.get("fighter") ?? []).length === 1
+        .childrenOf.get("fighter") ?? []).length === 1
     );
     check(
       "a library of only classes has no subclass map entries",
       look.classRows([{ _id: "x", name: "Bard", isSubclass: false }])
-        .subclassesOf.size === 0
+        .childrenOf.size === 0
+    );
+
+    // ---- species group by NAME, because nothing else says so -------
+    // A subclass carries `parentClass`. A species carries nothing:
+    // High Elf and Wood Elf are separate documents that only happen to
+    // be named after the thing they vary. So the parent is read out of
+    // the name — and the interesting half is everything it must NOT
+    // group, because a name rule invents families very easily.
+    const SPECIES = [
+      { _id: "e", name: "Elf" },
+      { _id: "e1", name: "High Elf" },
+      { _id: "e2", name: "Wood Elf" },
+      { _id: "e3", name: "Drow Elf" },
+      { _id: "d", name: "Dwarf" },
+      { _id: "d1", name: "Hill Dwarf" },
+      { _id: "h", name: "Half-Elf" },
+      { _id: "y", name: "Yuan-ti Pureblood" },
+      { _id: "dr", name: "Dragonborn" },
+    ];
+    const sr = look.speciesRows(SPECIES);
+
+    check(
+      "a variant named after its base is filed under it",
+      (sr.childrenOf.get("elf") ?? []).map((r) => r.name).join() ===
+        "Drow Elf,High Elf,Wood Elf"
+    );
+    check(
+      "and the base is the row, not one of the variants",
+      sr.rows.some((r) => r.name === "Elf") &&
+        !sr.rows.some((r) => r.name === "High Elf")
+    );
+    check(
+      "a species with no variants stays a plain row",
+      sr.rows.some((r) => r.name === "Dragonborn") &&
+        !sr.childrenOf.has("dragonborn")
+    );
+    // The two that make a suffix rule dangerous.
+    check(
+      "Half-Elf is its own species, not an Elf variant",
+      sr.rows.some((r) => r.name === "Half-Elf") &&
+        !(sr.childrenOf.get("elf") ?? []).some((r) => r.name === "Half-Elf")
+    );
+    check(
+      "a name whose last word is not a species invents no family",
+      sr.rows.some((r) => r.name === "Yuan-ti Pureblood") &&
+        !sr.childrenOf.has("pureblood")
+    );
+    check(
+      "nothing is lost",
+      sr.rows.filter((r) => r.absent !== true).length +
+        [...sr.childrenOf.values()].reduce((n, l) => n + l.length, 0) ===
+        SPECIES.length
+    );
+    // The other naming form exports use.
+    check(
+      "the qualified form groups too",
+      (look
+        .speciesRows([
+          { _id: "g", name: "Genasi" },
+          { _id: "g1", name: "Genasi (Air)" },
+          { _id: "g2", name: "Genasi (Fire)" },
+        ])
+        .childrenOf.get("genasi") ?? []).length === 2
+    );
+    // The MOST SPECIFIC base wins, and a real species stays a parent.
+    // Both rows here end in "Yanki", so two rows share that word and it
+    // qualifies as an inferred base — taking the first candidate filed
+    // the real Gith Yanki under an invented Yanki.
+    check(
+      "the longest base wins, not the first one that qualifies",
+      (() => {
+        const r = look.speciesRows([
+          { _id: "a", name: "Gith Yanki" },
+          { _id: "b", name: "Duthka Gith Yanki" },
+        ]);
+        return (
+          (r.childrenOf.get("gith yanki") ?? []).length === 1 &&
+          !r.childrenOf.has("yanki")
+        );
+      })()
+    );
+    check(
+      "a species others are named after stays a parent, never a child",
+      (() => {
+        const r = look.speciesRows([
+          { _id: "a", name: "Gith Yanki" },
+          { _id: "b", name: "Duthka Gith Yanki" },
+        ]);
+        return (
+          r.rows.length === 1 &&
+          r.rows[0].name === "Gith Yanki" &&
+          r.rows[0].absent !== true
+        );
+      })()
+    );
+    check(
+      "and a more specific REAL base beats a shorter real one",
+      (() => {
+        const r = look.speciesRows([
+          { _id: "e", name: "Elf" },
+          { _id: "w", name: "Wood Elf" },
+          { _id: "g", name: "Grey Wood Elf" },
+          { _id: "h", name: "High Elf" },
+        ]);
+        return (r.childrenOf.get("wood elf") ?? []).some(
+          (x) => x.name === "Grey Wood Elf"
+        );
+      })()
+    );
+    // Reached through the dispatch the screen actually calls, so
+    // dropping species from it cannot pass unnoticed.
+    check(
+      "familyRows routes species to the species grouping",
+      (look.familyRows("species", [
+        { _id: "e", name: "Elf" },
+        { _id: "w", name: "Wood Elf" },
+      ])?.childrenOf.get("elf") ?? []).length === 1
+    );
+    check(
+      "familyRows routes classes to the class grouping",
+      (look.familyRows("classes", [
+        { _id: "f", name: "Fighter", isSubclass: false },
+        { _id: "c", name: "Champion", isSubclass: true, parentClass: "Fighter" },
+      ])?.childrenOf.get("fighter") ?? []).length === 1
+    );
+    check(
+      "and leaves the flat kinds alone",
+      ["spells", "items", "monsters", "feats", "backgrounds"].every(
+        (k) => look.familyRows(k, [{ _id: "x", name: "Thing" }]) === null
+      )
+    );
+    // A variant whose base is not in the library still groups, same as
+    // a subclass whose class the edition rule dropped — and for the
+    // same reason: in a 5e campaign the edition rule drops the 2024
+    // "Elf" and keeps the 2014 High Elf and Wood Elf.
+    check(
+      "two variants of an absent base group under an inferred heading",
+      (() => {
+        const r = look.speciesRows([
+          { _id: "x", name: "High Elf" },
+          { _id: "y", name: "Wood Elf" },
+        ]);
+        return (
+          r.rows.length === 1 &&
+          r.rows[0].name === "Elf" &&
+          r.rows[0].absent === true &&
+          (r.childrenOf.get("elf") ?? []).length === 2
+        );
+      })()
+    );
+    // ONE is not a family. This is the whole safety property of
+    // inferring a base from names.
+    check(
+      "a single name ending in a word invents nothing",
+      (() => {
+        const r = look.speciesRows([
+          { _id: "x", name: "Yuan-ti Pureblood" },
+        ]);
+        return r.rows.length === 1 && r.childrenOf.size === 0;
+      })()
     );
 
     // ---- a source hiding in the name -------------------------------
@@ -4021,7 +4181,7 @@ export const unit = {
         return (
           g.rows.length === 1 &&
           g.rows[0].name === "Fighter" &&
-          (g.subclassesOf.get("fighter") ?? []).length === 2
+          (g.childrenOf.get("fighter") ?? []).length === 2
         );
       })()
     );

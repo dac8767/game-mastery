@@ -189,98 +189,240 @@ export function buildSubtitle(
   return "";
 }
 
-/** Marks a class the list infers from its subclasses. See classRows. */
-export const ABSENT_CLASS_ID = "absent:";
+/** Marks a parent the list infers from its children. See familyRows. */
+export const ABSENT_PARENT_ID = "absent:";
 
 /**
- * The classes list shows CLASSES. Subclasses belong to one.
+ * A list of parents, each holding its own children.
  *
- * 134 rows of which about a dozen are classes is not a list of
- * classes — it is an alphabetised pile in which Aberrant Sorcery,
- * Abjurer and Arcane Trickster come before Barbarian, and the twelve
- * things you actually pick from are scattered through it.
- *
- * So the table shows the classes, and a class's own entry carries its
- * subclasses underneath the general rules that apply whichever one you
- * take.
- *
- * ---------------------------------------------------------------------
- * Grouping is by the parent's NAME, not by finding the parent's ROW.
- *
- * That distinction is the whole of this function, and it is not
- * hypothetical. A Foundry export can easily hold the 2024 printing of
- * every base class and the 2014 printing of every subclass — which is
- * exactly what Derek's does. Run the 5e edition rule over that and
- * every base class is dropped while the subclasses survive, so
- * matching subclasses to a surviving Fighter ROW finds nothing and the
- * screen falls back to a flat pile of subclasses. Which is what
- * "classes are not grouping by the main class" looked like.
- *
- * A subclass knows the name of its class whether or not that class's
- * entry is in the library, so that name is what groups them. Where
- * nothing supplies the class itself, the group still appears, headed
- * by a row marked `absent` — Fighter exists in 5e even when this
- * library only has the 2024 write-up of it, and showing its subclasses
- * under a heading is better than showing them loose or not at all.
+ * Two kinds are read this way and for the same reason: an
+ * alphabetised pile is not a list of the things you choose between.
+ * 134 class rows of which a dozen are classes puts Aberrant Sorcery,
+ * Abjurer and Arcane Trickster above Barbarian; a species list does
+ * the same with Air Genasi, Astral Elf and Bugbear above Dwarf.
  */
-export function classRows(rows: Record<string, unknown>[]): {
+export interface FamilyGrouping {
+  /** What the table lists: parents, plus anything with no parent. */
   rows: Record<string, unknown>[];
-  subclassesOf: Map<string, Record<string, unknown>[]>;
-} {
-  const key = (v: unknown) =>
-    String(v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  /** Each parent's children, by the parent's normalised name. */
+  childrenOf: Map<string, Record<string, unknown>[]>;
+}
 
-  const classes = rows.filter((r) => r.isSubclass !== true);
-  const haveClass = new Set(classes.map((r) => key(r.name)));
+const famKey = (v: unknown) =>
+  String(v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 
-  const subclassesOf = new Map<string, Record<string, unknown>[]>();
-  /** Its own row: a subclass that does not say whose it is. */
-  const unattached: Record<string, unknown>[] = [];
-  /** parentClass as WRITTEN, for headings we have to supply ourselves. */
-  const writtenName = new Map<string, string>();
+/**
+ * The shared half: given each row's parent NAME, build the grouping.
+ *
+ * Grouping is by the parent's name, never by finding the parent's ROW.
+ * That distinction is not hypothetical — a Foundry export can hold the
+ * 2024 printing of every base class and the 2014 printing of every
+ * subclass, which Derek's does, so the 5e edition rule drops the
+ * parents and keeps the children. Matching on a surviving row then
+ * finds nothing and the screen falls back to a flat pile, which is
+ * exactly what "not grouping by the main class" looked like.
+ *
+ * Where nothing supplies the parent, the group still appears, headed
+ * by a row marked `absent`. Fighter exists in 5e even when the only
+ * write-up of it in this library is the 2024 one.
+ */
+function groupByParent(
+  rows: Record<string, unknown>[],
+  /** The parent this row belongs under, or null if it is a parent. */
+  parentOf: (row: Record<string, unknown>) => string | null
+): FamilyGrouping {
+  const parents: Record<string, unknown>[] = [];
+  const childrenOf = new Map<string, Record<string, unknown>[]>();
+  /** The parent name as WRITTEN, for headings we supply ourselves. */
+  const written = new Map<string, string>();
+  const havePar = new Set<string>();
 
   for (const row of rows) {
-    if (row.isSubclass !== true) continue;
-    const parent = key(row.parentClass);
-    if (!parent) {
+    if (parentOf(row) === null) {
+      parents.push(row);
+      havePar.add(famKey(row.name));
+    }
+  }
+
+  /** Its own row: a child that does not say whose it is. */
+  const unattached: Record<string, unknown>[] = [];
+
+  for (const row of rows) {
+    const parent = parentOf(row);
+    if (parent === null) continue;
+    const key = famKey(parent);
+    if (!key) {
       unattached.push(row);
       continue;
     }
-    if (!writtenName.has(parent)) {
-      writtenName.set(parent, String(row.parentClass ?? "").trim());
-    }
-    const list = subclassesOf.get(parent);
+    if (!written.has(key)) written.set(key, parent.trim());
+    const list = childrenOf.get(key);
     if (list) list.push(row);
-    else subclassesOf.set(parent, [row]);
+    else childrenOf.set(key, [row]);
   }
 
-  // A heading for every class named by a subclass but not supplied by
-  // the library. Synthetic, and says so: it carries no hit die or
-  // saving throws because nothing here knows them.
+  // A heading for every parent named by a child but not supplied by
+  // the library. Synthetic, and says so: it carries none of the
+  // parent's own facts, because nothing here knows them.
   const inferred: Record<string, unknown>[] = [];
-  for (const parent of subclassesOf.keys()) {
-    if (haveClass.has(parent)) continue;
+  for (const key of childrenOf.keys()) {
+    if (havePar.has(key)) continue;
     inferred.push({
-      _id: `${ABSENT_CLASS_ID}${parent}`,
-      name: writtenName.get(parent) ?? parent,
+      _id: `${ABSENT_PARENT_ID}${key}`,
+      name: written.get(key) ?? key,
       isSubclass: false,
       absent: true,
     });
   }
 
-  // Each class's subclasses in name order, so the entry reads the same
-  // way whatever the table happens to be sorted by.
-  for (const list of subclassesOf.values()) {
+  // Children in name order, so a parent reads the same way whatever
+  // the table happens to be sorted by.
+  for (const list of childrenOf.values()) {
     list.sort((a, b) =>
       String(a.name ?? "").localeCompare(String(b.name ?? ""))
     );
   }
 
-  return {
-    rows: [...classes, ...inferred, ...unattached],
-    subclassesOf,
-  };
+  return { rows: [...parents, ...inferred, ...unattached], childrenOf };
 }
+
+/**
+ * Classes, each holding its subclasses.
+ *
+ * A subclass says which class it belongs to — dnd5e stores it as
+ * `classIdentifier` and the importer writes it as `parentClass` — so
+ * the parent is read rather than guessed.
+ */
+export function classRows(
+  rows: Record<string, unknown>[]
+): FamilyGrouping {
+  return groupByParent(rows, (r) =>
+    r.isSubclass === true ? String(r.parentClass ?? "") : null
+  );
+}
+
+/**
+ * Species, each holding its variations.
+ *
+ * Unlike a subclass, a species carries NO field saying what it is a
+ * variant of — dnd5e has no `parentRace`. High Elf and Wood Elf are
+ * separate documents that happen to be named after the thing they
+ * vary. So the parent is read out of the name, in the two forms
+ * exports actually use:
+ *
+ *   "High Elf"    -> Elf     a variant NAMED after its base
+ *   "Elf (High)"  -> Elf     the base, qualified
+ *
+ * And only when that base is a species this library actually has. That
+ * condition is what stops the rule inventing families: "Yuan-ti
+ * Pureblood" does not become a Pureblood variant, because there is no
+ * Pureblood. A hyphen does not count as a separator either, so
+ * Half-Elf stays its own species rather than becoming an Elf.
+ */
+export function speciesRows(
+  rows: Record<string, unknown>[]
+): FamilyGrouping {
+  const names = new Set(rows.map((r) => famKey(r.name)));
+
+  /** The base a name would vary, by either naming form. */
+  const candidates = (raw: unknown): string[] => {
+    const name = String(raw ?? "").trim();
+    const out: string[] = [];
+
+    // "Elf (High)" — the base is what comes before the qualifier.
+    const qualified = /^(.*\S)\s*\([^()]+\)$/.exec(name);
+    if (qualified) out.push(qualified[1].trim());
+
+    // "High Elf" — the last word, or the last two. Space-separated
+    // only: Half-Elf is one word to this and stays its own species.
+    const words = name.split(/\s+/);
+    for (const take of [1, 2]) {
+      if (words.length <= take) continue;
+      out.push(words.slice(words.length - take).join(" "));
+    }
+    // No self-check needed: a qualified base is always shorter than the
+    // name it came from, and the suffix loop skips a take that would
+    // swallow the whole name. Only the empty string has to go.
+    return out.filter((c) => c);
+  };
+
+  /**
+   * A base is a species this library HAS, or one that two or more
+   * rows are named after.
+   *
+   * The second half is what stops the same trap classes fell into. In
+   * a 5e campaign the edition rule drops the 2024 "Elf" while keeping
+   * the 2014 High Elf, Wood Elf and Drow Elf — so requiring the base
+   * to be present would leave them ungrouped in exactly the case where
+   * grouping matters most.
+   *
+   * TWO, not one. One row ending in a word proves nothing: "Yuan-ti
+   * Pureblood" alone would make Pureblood a species. Two rows sharing
+   * a trailing name is what a family looks like, and inventing one
+   * from that is a much smaller claim than inventing one from a single
+   * name's last word.
+   */
+  const sharing = new Map<string, Set<string>>();
+  for (const row of rows) {
+    for (const c of candidates(row.name)) {
+      const key = famKey(c);
+      const seen = sharing.get(key) ?? new Set<string>();
+      seen.add(String(row._id));
+      sharing.set(key, seen);
+    }
+  }
+  const isBase = (key: string) =>
+    names.has(key) || (sharing.get(key)?.size ?? 0) >= 2;
+
+  const baseOf = (raw: unknown): string | null => {
+    const cs = candidates(raw).filter((c) => isBase(famKey(c)));
+    if (cs.length === 0) return null;
+
+    // MOST SPECIFIC first, with an existing species breaking a tie.
+    //
+    // Taking the first candidate instead put "Duthka Gith Yanki" under
+    // an invented "Yanki" — both rows end in that word, so two rows
+    // share it and it qualified — while the real Gith Yanki was left a
+    // parent of nothing beside it. Length is what settles that, and it
+    // settles the other direction too: where a library has both Elf
+    // and Wood Elf, a Grey Wood Elf belongs under the Wood Elf.
+    cs.sort(
+      (a, b) =>
+        b.length - a.length ||
+        Number(names.has(famKey(b))) - Number(names.has(famKey(a)))
+    );
+    return cs[0];
+  };
+
+  // A row that anything else is NAMED AFTER is a parent, and is never
+  // also filed as somebody's child.
+  //
+  // Testing `names.has(r.name)` here as well looked like belt and
+  // braces and was neither: `names` holds every row's own name, so it
+  // is true for everything and the condition reduced to the sharing
+  // check with an extra term that could only ever mislead a reader.
+  // A row never names itself — `candidates` drops that — so the set
+  // being non-empty means somebody ELSE pointed here.
+  return groupByParent(rows, (r) =>
+    (sharing.get(famKey(r.name))?.size ?? 0) > 0 ? null : baseOf(r.name)
+  );
+}
+
+/** The grouping for a kind, or null for the kinds that are flat. */
+export function familyRows(
+  kind: LookupKind,
+  rows: Record<string, unknown>[]
+): FamilyGrouping | null {
+  if (kind === "classes") return classRows(rows);
+  if (kind === "species") return speciesRows(rows);
+  return null;
+}
+
+/** What a kind calls its children, where it has any. */
+export const FAMILY_LABEL: Partial<Record<LookupKind, string>> = {
+  classes: "Subclasses",
+  species: "Variants",
+};
 
 /**
  * The labelled facts a build entry has that are not its prose.

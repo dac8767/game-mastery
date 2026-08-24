@@ -4829,11 +4829,22 @@ button.cal-day:hover {
   gap: 0.5rem;
 }
 
+/* A ROW, not a column. It stacked because it used to hold the name
+   over a grey source sub-line; that line is a column of its own now,
+   so a column here only put the family count on a second line and made
+   grouped rows taller than every other row in the table. */
 .lk-name-cell {
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
   gap: 0.05rem;
   min-width: 0;
+}
+
+/* The name itself may be long; the count never is. */
+.lk-name-cell > .lk-cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Rules on the left, picture beside them, both starting at the top —
@@ -6557,6 +6568,19 @@ button.cal-day:hover {
   background: var(--bg-inset);
   color: var(--text-dim);
   font-size: 0.72rem;
+}
+
+/* "Elf 4" — how many variants fold into this row, without opening it.
+   Quiet, because it is a fact about the row rather than a warning. */
+.lk-fam-count {
+  flex: none;
+  margin-left: 0.4rem;
+  padding: 0.02rem 0.35rem;
+  border-radius: 999px;
+  background: var(--bg-inset);
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  font-weight: 500;
 }
 
 /* One row per subclass, each opening in place — the same gesture the
