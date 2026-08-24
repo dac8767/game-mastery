@@ -2238,23 +2238,48 @@ export const integrity = {
         "DM_ONLY_FIELDS",
         "convex/npcs.ts"
       );
-      const dmColumns = stringProps(
-        stripComments(read("components", "npcColumns.ts")),
-        "key",
-        "npcColumns.ts"
+      // DERIVED, not a literal list.
+      //
+      // This used to check a hard-coded ["hidden", "dmNotes", "secret"],
+      // which had both failure modes at once: it could not see a FOURTH
+      // DM-only field added to updateNpc and forgotten here — the exact
+      // thing it exists to catch — and it failed on a field legitimately
+      // retired, which is how it got read as noise. The invariant is a
+      // relation between three lists, so all three are read.
+      const columnsSrc = stripComments(read("components", "npcColumns.ts"));
+      const dmColumns = [
+        ...columnsSrc.matchAll(/key:\s*"(\w+)"[^}]*dmOnly:\s*true/g),
+      ].map((m) => m[1]);
+      if (dmColumns.length === 0) {
+        throw new Error("read no dmOnly columns out of npcColumns.ts");
+      }
+
+      const updateAt = npcsSrc.indexOf("export const updateNpc");
+      if (updateAt === -1) throw new Error("no updateNpc in convex/npcs.ts");
+      const updateArgs = topLevelKeys(
+        blockAfter(npcsSrc.slice(updateAt), /args:/, "updateNpc args"),
+        "updateNpc args"
       );
-      // Every DM-only column that updateNpc actually accepts has to be
-      // on the refusal list.
-      for (const key of ["hidden", "dmNotes", "secret"]) {
-        if (!listed.includes(key)) {
+
+      // Every DM-only column updateNpc actually accepts must be on the
+      // refusal list, or a player editing an NPC they created writes it.
+      for (const key of dmColumns) {
+        if (updateArgs.includes(key) && !listed.includes(key)) {
           problems.push(
-            `updateNpc accepts \`${key}\` but DM_ONLY_FIELDS does not list ` +
-              "it — a player editing an NPC they created could write it"
+            `updateNpc accepts \`${key}\`, a dmOnly column, but ` +
+              "DM_ONLY_FIELDS does not list it — a player editing an NPC " +
+              "they created could write it"
           );
         }
-        if (!dmColumns.includes(key)) {
+      }
+      // And nothing on the refusal list may be a field updateNpc does
+      // not take. That entry refuses nothing, and reads like cover.
+      for (const key of listed) {
+        if (!updateArgs.includes(key)) {
           problems.push(
-            `DM_ONLY_FIELDS names \`${key}\`, which is not a column`
+            `DM_ONLY_FIELDS names \`${key}\`, which updateNpc does not ` +
+              "accept — it guards nothing and makes the list look longer " +
+              "than the protection it provides"
           );
         }
       }

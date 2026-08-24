@@ -46,12 +46,12 @@ export const RULES_VERSIONS: { value: RulesVersion; label: string; note: string 
     {
       value: "2014",
       label: "5e (2014)",
-      note: "Player's Handbook, Monster Manual and Dungeon Master's Guide as first published, plus Tasha's, Xanathar's and the rest.",
+      note: "Player's Handbook, Monster Manual and Dungeon Master's Guide as first published, plus Tasha's, Xanathar's and the rest. The 2024 species, feats, backgrounds and classes do not show at all — a 5e character cannot be built from them.",
     },
     {
       value: "2024",
       label: "5.5e (2024)",
-      note: "The 2024 revision of the three core books. Everything with no 2024 counterpart still shows.",
+      note: "The 2024 revision of the three core books. Everything with no 2024 counterpart still shows — Warforged has no 2024 printing, and dropping it would throw away the only copy there is.",
     },
   ];
 
@@ -74,14 +74,47 @@ export function editionOf(source: unknown): RulesVersion {
 }
 
 /**
- * Keep one edition's version of anything that exists in both.
+ * Kinds where an entry from the OTHER edition is not usable at all.
  *
- * This is a DEDUPLICATION, not a filter by book. A name that appears
- * once — Tasha's items, an adventure's monsters, a 2024 monster with no
- * predecessor — has nothing to choose between, so it survives whichever
- * edition it belongs to. Filtering by book instead would empty a 5.5e
- * table of everything outside the three core books, which is not what
- * "we play 2024" means.
+ * A character-build option belongs to a rules edition the way a
+ * reference entry does not. The 2024 Goliath is not "a Goliath you
+ * could also use in a 5e game" — it is built on 2024's species rules,
+ * and a 5e table has no place to put it. The same goes for a 2024
+ * feat, background, class or subclass.
+ *
+ * Spells, items and monsters are the opposite, which is why they are
+ * not on this list. A 2024 monster with no 2014 predecessor is a
+ * stat block: drop it into a 5e game and it works. Excluding those
+ * would empty a 5e Monsters table of everything printed since 2024
+ * for no reason anyone asked for.
+ */
+const EDITION_EXCLUSIVE: LookupKind[] = [
+  "species",
+  "feats",
+  "backgrounds",
+  "classes",
+];
+
+/**
+ * The library this campaign actually plays with.
+ *
+ * Two rules, and which one applies depends on the kind:
+ *
+ *   Everything — a name printed in BOTH editions collapses to this
+ *   campaign's one. Aasimar (MotM) and Aasimar (PHB 2024) are one
+ *   species with two printings, so a 2024 table shows the 2024 one
+ *   and a 2014 table shows the older one.
+ *
+ *   Build kinds — a 2024-only entry does not appear in a 2014
+ *   campaign at all. This is the half that is NOT a deduplication:
+ *   there is nothing to choose between, and it still goes, because a
+ *   5e game cannot use a 2024 species.
+ *
+ * The asymmetry is deliberate and is not a bug. A 2014-only entry
+ * still shows in a 2024 campaign: Warforged has no 2024 printing and
+ * a 5.5e table that dropped it would be throwing away the one copy
+ * that exists. Only the newer direction is exclusive, because the
+ * newer books REPLACE rather than extend.
  *
  * Matching is by name, case- and space-insensitively, because that is
  * the only thing the two printings of a longsword reliably share.
@@ -91,10 +124,25 @@ export function editionOf(source: unknown): RulesVersion {
  */
 export function applyEdition<T extends Row>(
   rows: T[],
-  edition: RulesVersion
+  edition: RulesVersion,
+  /**
+   * Required, not optional. A call site that omitted it would compile
+   * and would quietly get the old rule back — a 5e Species table with
+   * the 2024 books in it, and nothing anywhere saying so.
+   */
+  kind: LookupKind
 ): T[] {
+  // A 2014 campaign cannot use a 2024 build option, whether or not
+  // anything older shares its name. Done BEFORE the grouping, so a
+  // 2024-only name is gone rather than being the only candidate left
+  // in its group and surviving as the fallback.
+  const usable =
+    EDITION_EXCLUSIVE.includes(kind) && edition === "2014"
+      ? rows.filter((r) => editionOf(r.source) === "2014")
+      : rows;
+
   const byName = new Map<string, T[]>();
-  for (const row of rows) {
+  for (const row of usable) {
     const key = String(row.name ?? "").trim().toLowerCase().replace(/\s+/g, " ");
     const group = byName.get(key);
     if (group) group.push(row);
@@ -107,7 +155,7 @@ export function applyEdition<T extends Row>(
     for (const r of wanted.length > 0 ? wanted : group) keep.add(r);
   }
 
-  return rows.filter((r) => keep.has(r));
+  return usable.filter((r) => keep.has(r));
 }
 
 /** What a control looks like. */

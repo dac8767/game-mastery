@@ -17,7 +17,7 @@ import { InvitePanel } from "@/components/InvitePanel";
 import { resolveTab, visibleTabs } from "@/components/settingsTabs";
 
 /**
- * Settings, in five tabs.
+ * Settings, in four tabs.
  *
  * The tabs are declared in settingsTabs.ts and both the strip and the
  * panels read that one list, so a tab cannot exist without a panel or a
@@ -25,9 +25,8 @@ import { resolveTab, visibleTabs } from "@/components/settingsTabs";
  *
  * The division is by WHOSE setting a thing is rather than by subject.
  * Most of this page is personal and stops at your own browser; the
- * Campaign, Game Master and Players tabs are shared and DM-only, and
- * each says so at the top rather than relying on you to remember which
- * kind you are looking at.
+ * Campaign tab is shared and DM-only, and says so at the top rather
+ * than relying on you to remember which kind you are looking at.
  *
  * The theme list is shared with the ribbon's theme control rather than
  * repeated here: a theme offered in one place and not the other is a
@@ -238,6 +237,13 @@ export function SettingsPanel({
         <>
           <CampaignDetails campaignId={campaignId} />
 
+          {/* Who is at the table, moved in from a Players tab of its
+              own. It held exactly these two panels, and both answer
+              the same question this tab does — what IS this campaign —
+              so it was a second tab you had to know to look in. */}
+          <CampaignRoster campaignId={campaignId} />
+          <InvitePanel campaignId={campaignId} />
+
           <section className="settings-block">
             <h2>Rules edition</h2>
             <p className="settings-note">
@@ -272,12 +278,6 @@ export function SettingsPanel({
         </>
       )}
 
-      {tab === "players" && (
-        <>
-          <CampaignRoster campaignId={campaignId} />
-          <InvitePanel campaignId={campaignId} />
-        </>
-      )}
 
       {tab === "interface" && (
         <>

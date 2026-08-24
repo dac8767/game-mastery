@@ -342,7 +342,11 @@ export function NpcDetail({
           leaving, and who is allowed to see it. Across the top, away
           from the fields, because neither is a fact about the NPC. */}
       <div className="record-bar">
-        <button type="button" className="npc-btn primary" onClick={onClose}>
+        <button
+          type="button"
+          className="npc-btn primary record-back"
+          onClick={onClose}
+        >
           <UiText id="record.bar.back" />
         </button>
 

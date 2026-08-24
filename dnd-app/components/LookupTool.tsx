@@ -133,7 +133,10 @@ export function LookupTool({
   // Applied BEFORE the filters, so the counts in the bar describe the
   // library this campaign actually plays with rather than both editions
   // stacked on top of each other.
-  const library = useMemo(() => applyEdition(all, edition), [all, edition]);
+  const library = useMemo(
+    () => applyEdition(all, edition, kind),
+    [all, edition, kind]
+  );
   const folded = all.length - library.length;
 
   const matched = useMemo(

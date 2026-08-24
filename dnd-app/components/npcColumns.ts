@@ -138,7 +138,13 @@ export const COLUMNS: ColumnDef[] = [
   // them regardless of what a player's saved layout asks for.
   { key: "hidden", label: "Hidden", kind: "boolean", defaultWidth: 90, defaultVisible: false, dmOnly: true, editable: true },
   { key: "secret", label: "Secret", kind: "longtext", defaultWidth: 200, defaultVisible: false, dmOnly: true, editable: true },
-  { key: "dmNotes", label: "DM Notes", kind: "longtext", defaultWidth: 200, defaultVisible: false, dmOnly: true, editable: true },
+  // `dmNotes` is NOT a column any more. The record grew a DM Notes
+  // thread beside this field, so the screen showed two things with the
+  // same name and the same job — and the field was the weaker one: one
+  // box everybody overwrites, against a thread that says who wrote
+  // what and when. The text is moved into the thread by
+  // npcs.migrateDmNotes; the schema keeps the field so a row written
+  // before that runs still validates.
 ];
 
 export const COLUMN_BY_KEY = new Map(COLUMNS.map((c) => [c.key, c]));

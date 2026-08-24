@@ -15,8 +15,8 @@
  *   User         you: your name, your access, and the DM controls if
  *                you run this game — they belong to a person, not to a
  *                separate tab that only ever had one occupant
- *   Campaign     this campaign, as a thing with a name and a picture
- *   Players      who is at the table and what they play
+ *   Campaign     this campaign as a thing: its name, its picture, its
+ *                rules edition, and who is at the table
  *   Interface    how the app looks and reads, yours alone
  *
  * That is why the theme and the date format are together and away from
@@ -30,13 +30,18 @@
  * in step with the real one to avoid lying about the layout. The
  * arranging did not move here from there; it moved OUT of settings
  * entirely.
+ *
+ * A Players tab went the other way, and is the opposite case: it held
+ * the roster and the invite panel, both of which answer the same
+ * question Campaign does — what IS this campaign — so it was a second
+ * tab you had to know to look in for half the answer. Those panels
+ * moved INTO Campaign rather than being removed.
  */
 
 export type SettingsTab =
   | "system"
   | "user"
   | "campaign"
-  | "players"
   | "interface";
 
 export interface SettingsTabDef {
@@ -63,13 +68,8 @@ export const SETTINGS_TABS: SettingsTabDef[] = [
   {
     id: "campaign",
     label: "Campaign",
-    blurb: "This campaign, as everyone else sees it. Campaign-wide.",
-    dmOnly: true,
-  },
-  {
-    id: "players",
-    label: "Players",
-    blurb: "Who is at the table and what they play. Campaign-wide.",
+    blurb:
+      "This campaign, as everyone else sees it — its name, its rules edition, and who is at the table. Campaign-wide.",
     dmOnly: true,
   },
   {

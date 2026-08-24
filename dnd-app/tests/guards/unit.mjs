@@ -839,10 +839,21 @@ export const unit = {
     );
 
     check("a valid tab is kept", st.resolveTab("interface", false) === "interface");
-    check("a DM keeps a DM tab", st.resolveTab("players", true) === "players");
+    check(
+      "a DM keeps a DM tab",
+      st.resolveTab("campaign", true) === "campaign"
+    );
     check(
       "a player asking for a DM tab is redirected, not shown a blank page",
-      st.resolveTab("players", false) === st.visibleTabs(false)[0].id
+      st.resolveTab("campaign", false) === st.visibleTabs(false)[0].id
+    );
+    // Players was folded into Campaign. A saved selection pointing at
+    // it has to land somewhere real rather than blanking the page —
+    // same fallback the rename of General relied on.
+    check(
+      "the retired Players tab falls back rather than blanking the page",
+      st.resolveTab("players", true) === st.SETTINGS_TABS[0].id &&
+        !st.SETTINGS_TABS.some((t) => t.id === "players")
     );
     check(
       "losing the DM role moves you off a DM tab",
@@ -3789,8 +3800,10 @@ export const unit = {
       { name: "Amulet of the Devout", source: "TCoE" },
       { name: "Dragon of Icespire Peak", source: "DIP" },
     ];
+    // "items" throughout: these are the REFERENCE kinds, where a
+    // 2024-only entry is a thing you can still use in a 5e game.
     const names = (ed) =>
-      filt.applyEdition(library, ed).map((r) => `${r.name}/${r.source}`);
+      filt.applyEdition(library, ed, "items").map((r) => `${r.name}/${r.source}`);
 
     check(
       "5.5e keeps the 2024 half of every duplicate",
@@ -3823,10 +3836,73 @@ export const unit = {
     );
     check(
       "neither edition loses a name entirely",
-      new Set(filt.applyEdition(library, "2014").map((r) => r.name)).size ===
-        new Set(library.map((r) => r.name)).size &&
-        new Set(filt.applyEdition(library, "2024").map((r) => r.name)).size ===
-          new Set(library.map((r) => r.name)).size
+      new Set(filt.applyEdition(library, "2014", "items").map((r) => r.name))
+        .size === new Set(library.map((r) => r.name)).size &&
+        new Set(filt.applyEdition(library, "2024", "items").map((r) => r.name))
+          .size === new Set(library.map((r) => r.name)).size
+    );
+
+    // ---- and the build kinds, where 2024 is EXCLUSIVE --------------
+    // A character-build option belongs to an edition the way a stat
+    // block does not: the 2024 Goliath is built on 2024's species
+    // rules, and a 5e table has nowhere to put it. So the fallback
+    // that keeps a 2024-only monster is exactly wrong here.
+    const speciesLib = [
+      { name: "Aasimar", source: "MotM" },
+      { name: "Aasimar", source: "PHB 2024" },
+      { name: "Goliath", source: "PHB 2024" },
+      { name: "Warforged", source: "ERLW" },
+    ];
+    const spec = (ed) =>
+      filt
+        .applyEdition(speciesLib, ed, "species")
+        .map((r) => `${r.name}/${r.source}`);
+
+    check(
+      "5e drops a 2024 species even when nothing shares its name",
+      !spec("2014").includes("Goliath/PHB 2024")
+    );
+    check(
+      "and keeps the older printing of one that has both",
+      spec("2014").includes("Aasimar/MotM") &&
+        !spec("2014").includes("Aasimar/PHB 2024")
+    );
+    check(
+      "5.5e keeps the 2024 printing and drops its older twin",
+      spec("2024").includes("Aasimar/PHB 2024") &&
+        !spec("2024").includes("Aasimar/MotM")
+    );
+    // The asymmetry, stated as a test because it looks like an
+    // oversight otherwise: only the NEWER direction is exclusive.
+    check(
+      "a 2014-only species still shows in a 5.5e campaign",
+      spec("2024").includes("Warforged/ERLW")
+    );
+    check(
+      "every build kind gets the same rule, not just species",
+      ["feats", "backgrounds", "classes"].every(
+        (k) =>
+          !filt
+            .applyEdition(
+              [{ name: "Grappler", source: "PHB 2024" }],
+              "2014",
+              k
+            )
+            .length
+      )
+    );
+    // And the reference kinds are UNCHANGED, which is the other half
+    // of the report: a 2024-only monster is still a monster.
+    check(
+      "a reference kind still keeps a 2024-only entry in a 5e campaign",
+      ["spells", "items", "monsters"].every(
+        (k) =>
+          filt.applyEdition(
+            [{ name: "Goliath", source: "PHB 2024" }],
+            "2014",
+            k
+          ).length === 1
+      )
     );
     check(
       "input order is preserved",

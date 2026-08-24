@@ -93,7 +93,19 @@ export const dmVisibility = {
       "npcs.createNpc must gate on requireDm"
     );
     // The player-writable mutation must reach exactly one field.
-    const notesBody = npcs.slice(npcs.indexOf("export const setPlayerNotes"));
+    //
+    // Bounded to setPlayerNotes' OWN body. It used to run to the end of
+    // the file, so the first later mutation to patch dmNotes — the
+    // migration that exists to clear it — was reported as setPlayerNotes
+    // writing it. A check that fails on unrelated code below it is one
+    // that gets loosened rather than heeded.
+    const notesStart = npcs.indexOf("export const setPlayerNotes");
+    if (notesStart === -1) throw new Error("no setPlayerNotes in convex/npcs.ts");
+    const notesEnd = npcs.indexOf("\nexport const ", notesStart + 1);
+    const notesBody = npcs.slice(
+      notesStart,
+      notesEnd === -1 ? undefined : notesEnd
+    );
     for (const field of ["dmNotes", "secret", "hidden:"]) {
       if (new RegExp(`ctx\\.db\\.patch[\\s\\S]{0,200}${field}`).test(notesBody)) {
         problems.push(
@@ -255,8 +267,15 @@ export const dmVisibility = {
     }
 
     // ---- the client must not re-derive DM state --------------------
+    // `dmNotes` is deliberately NOT here any more: it stopped being a
+    // column when the record's DM Notes thread replaced it, so there
+    // is no picker entry to mark dmOnly. The field still exists on the
+    // document until npcs.migrateDmNotes has been run everywhere, and
+    // the checks that matter for it — that the query nulls it for a
+    // player, and that nothing player-writable can patch it — are
+    // above and below this and still run.
     const columns = read("components", "npcColumns.ts");
-    for (const field of ["hidden", "secret", "dmNotes"]) {
+    for (const field of ["hidden", "secret"]) {
       const decl = columns.match(
         new RegExp(`key: "${field}"[^}]*`, "m")
       );

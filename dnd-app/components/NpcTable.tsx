@@ -887,6 +887,14 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
           </span>
         </div>
 
+        {/* Between the count and the controls, centred by the flex
+            gap on either side of it. It was down on the substrip, a
+            row below the bar and hard against the left edge — a state
+            you are IN, filed under the row for things you have DONE. */}
+        {result.previewingAsPlayer && (
+          <span className="preview-flag">Viewing as a player</span>
+        )}
+
         <div className="toolbar-right">
           {/* Filter, Group, Sort, View, Search, and then the menu — the
               order runs from "what is shown" to "which of it" to the
@@ -939,17 +947,8 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
           moved up it is usually nothing, and an empty strip taking a
           row is the reason the count was down here in the first
           place. */}
-      {!selectedNpc &&
-        (result.previewingAsPlayer ||
-          search ||
-          activeFilterCount > 0 ||
-          prefs.groupBy) && (
+      {!selectedNpc && (search || activeFilterCount > 0 || prefs.groupBy) && (
       <div className="npc-substrip">
-        {result.previewingAsPlayer && (
-          <span className="preview-flag">
-            Viewing as a player — hidden NPCs and DM fields withheld
-          </span>
-        )}
         {(search || activeFilterCount > 0 || prefs.groupBy) && (
           <button
             type="button"

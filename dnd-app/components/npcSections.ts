@@ -46,7 +46,16 @@ export const HEADER_KEYS = ["portraitPath", "name", "nickname"];
  * it is a switch about who may see them at all — so it belongs with
  * the name rather than in a list of attributes.
  */
-export const NOTES_KEYS = ["playerNotes", "dmNotes"];
+/**
+ * The notes rail's own fields, pinned out of the arrangeable tabs.
+ *
+ * `dmNotes` used to be here too, and that is what put two DM Notes on
+ * the record: this pinned FIELD, and the DM notes THREAD beside it.
+ * The thread won — it says who wrote what and when, where the field
+ * was one box everybody overwrote — so the field is no longer placed
+ * anywhere, and npcs.migrateDmNotes moves what was in it.
+ */
+export const NOTES_KEYS = ["playerNotes"];
 export const PINNED_KEYS = ["hidden", ...NOTES_KEYS];
 
 /**

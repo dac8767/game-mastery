@@ -193,8 +193,10 @@ export const updateNpc = mutation({
     portraitPath: clearableText,
 
     // DM-only fields — reachable only through this DM-gated mutation.
+    // `dmNotes` is deliberately not among them: it stopped being a
+    // field on the record when the DM notes thread replaced it, and an
+    // argument nothing sends is a way in nobody is watching.
     hidden: v.optional(v.boolean()),
-    dmNotes: clearableText,
     secret: clearableText,
   },
   handler: async (ctx, args) => {
@@ -251,7 +253,7 @@ export const updateNpc = mutation({
  * silent kind of failure the guards exist for, so integrity.mjs
  * compares this list against the DM-only columns.
  */
-const DM_ONLY_FIELDS = ["hidden", "dmNotes", "secret"] as const;
+const DM_ONLY_FIELDS = ["hidden", "secret"] as const;
 
 /**
  * Any campaign member: edit the shared Player Notes on an NPC.
@@ -614,6 +616,102 @@ export const addNote = mutation({
       body,
       imageIds: (args.imageIds ?? []).slice(0, NOTE_LIMITS.images),
     });
+  },
+});
+
+/**
+ * Move the old `dmNotes` FIELD into the DM notes thread.
+ *
+ * The record grew a DM Notes thread beside a `dmNotes` text field that
+ * predated it, so the screen showed two things with the same name and
+ * the same purpose. The field is the one that goes — a thread says who
+ * wrote what and when, and a field is one box everybody overwrites.
+ *
+ * Run once per campaign. IDEMPOTENT: it only touches NPCs whose field
+ * still has something in it, and clears the field as it goes, so a
+ * second run does nothing rather than filing every note twice. That
+ * matters more than usual here — the obvious way to check whether it
+ * worked is to run it again.
+ *
+ * Nothing is deleted before it is copied. The clear happens in the
+ * same transaction as the insert, so there is no window where the text
+ * has left the field and is not yet a note.
+ */
+export const migrateDmNotes = mutation({
+  args: { campaignId: v.id("campaigns") },
+  handler: async (ctx, args) => {
+    // DM-gated like every other write to a DM-only field. The notes it
+    // creates go in the DM channel, which requireChannel would demand
+    // this for anyway.
+    const userId = await requireDm(ctx, args.campaignId);
+
+    const npcs = await ctx.db
+      .query("npcs")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
+      .collect();
+
+    let moved = 0;
+    let skipped = 0;
+
+    for (const npc of npcs) {
+      const raw = (npc.dmNotes ?? "").trim();
+      if (!raw) continue;
+
+      // The field was a PLAIN TEXTAREA and the thread stores HTML, so
+      // the text is escaped rather than passed through. Anything with
+      // a "<" in it would otherwise arrive as markup — and the one
+      // thing worse than losing the note is silently rewriting it.
+      const body = sanitizeNoteHtml(
+        raw
+          .split(/\n{2,}/)
+          .map(
+            (para) =>
+              "<p>" +
+              para
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/\n/g, "<br>") +
+              "</p>"
+          )
+          .join("")
+      );
+
+      if (isEmptyNote(body)) {
+        // Whitespace and markup only. Clear it — it is not worth a
+        // note and leaving it means the field never empties and the
+        // migration never finishes.
+        await ctx.db.patch(npc._id, { dmNotes: undefined });
+        skipped++;
+        continue;
+      }
+
+      const existing = await ctx.db
+        .query("npcNotes")
+        .withIndex("by_npc", (q) => q.eq("npcId", npc._id))
+        .take(NOTE_LIMITS.perThread * 2);
+      if (
+        existing.filter((n) => n.channel === "dm").length >=
+        NOTE_LIMITS.perThread
+      ) {
+        // A full thread is the one case where clearing WOULD lose the
+        // text, so this leaves the field alone and reports it.
+        skipped++;
+        continue;
+      }
+
+      await ctx.db.insert("npcNotes", {
+        campaignId: args.campaignId,
+        npcId: npc._id,
+        authorId: userId,
+        channel: "dm",
+        body,
+      });
+      await ctx.db.patch(npc._id, { dmNotes: undefined });
+      moved++;
+    }
+
+    return { npcs: npcs.length, moved, skipped };
   },
 });
 

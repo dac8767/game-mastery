@@ -1244,21 +1244,18 @@ body.col-resizing {
   align-items: center;
 }
 
-/* The way out on the left, and on the right the two decisions ABOUT
-   the record rather than in it. The first of those takes the gap; the
-   rest sit beside it. */
-.record-bar > .record-delete,
-.record-bar > .record-confirm {
-  margin-left: auto;
-}
+/* The way out is pinned LEFT, by pushing everything else away from
+   it rather than by pulling the others right.
 
-.record-bar > :last-child:not(.record-hide-btn) {
-  margin-left: auto;
-}
-
-.record-bar > .record-delete ~ .record-hide-btn,
-.record-bar > .record-confirm ~ .record-hide-btn {
-  margin-left: 0;
+   It used to be three rules keyed on what happened to be beside it,
+   one of which gave `:last-child` a left auto-margin so the right-hand
+   group would sit right. For the DM that worked. For a player there IS
+   no right-hand group — no Delete, no Hide — so Back was the last
+   child, took the auto-margin itself, and the way out of the record
+   moved to the opposite corner depending on who you were. One margin
+   on the thing being positioned, and nothing to keep in step. */
+.record-bar > .record-back {
+  margin-right: auto;
 }
 
 .record-pane {
@@ -1705,12 +1702,27 @@ body.col-resizing {
   font-weight: 600;
 }
 
+/* Centred in the toolbar between the count and the controls, by
+   taking the space on both sides rather than by being positioned. The
+   auto margins collapse to nothing when the bar is too narrow to
+   spare any, so on a small window it just sits between them instead
+   of forcing a wrap. */
 .preview-flag {
+  margin: 0 auto;
   color: var(--injured);
   border: 1px solid var(--injured);
   border-radius: 999px;
   padding: 0.1rem 0.6rem;
   font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+/* .toolbar-right already claims the gap on its left. With the flag
+   between them, two things would be competing for it and the flag
+   would sit off-centre — so the flag takes both sides and the right
+   group just follows it. */
+.npc-toolbar > .preview-flag ~ .toolbar-right {
+  margin-left: 0;
 }
 
 .npc-substrip .reset-layout {
@@ -6900,15 +6912,10 @@ button.cal-day:hover {
   opacity: 1;
 }
 
-.record-delete {
-  margin-left: auto;
-}
-
 .record-confirm {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  margin-left: auto;
   padding: 0.25rem 0.5rem;
   border: 1px solid var(--bloodied);
   border-radius: 8px;
