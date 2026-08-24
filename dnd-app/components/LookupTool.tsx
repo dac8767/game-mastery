@@ -609,20 +609,60 @@ function SubclassList({
         Subclasses{" "}
         <span className="lk-subclass-count">{subclasses.length}</span>
       </h3>
-      <ul className="lk-subclass-list">
-        {subclasses.map((sub) => {
-          const clean = splitSource(sub.name, sub.source);
-          return (
-            <li key={String(sub._id)}>
-              <span className="lk-subclass-name">{clean.name}</span>
-              {clean.source && (
-                <span className="lk-subclass-src">{clean.source}</span>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+      <div className="lk-subrows">
+        {subclasses.map((sub) => (
+          <SubclassRow key={String(sub._id)} sub={sub} />
+        ))}
+      </div>
     </section>
+  );
+}
+
+/**
+ * One subclass, as a row that opens.
+ *
+ * The second level of the same gesture the table uses: a caret, a
+ * name, and the entry underneath when you want it. It was a plain
+ * list, which told you a Champion exists and then made you go and find
+ * it — on a screen whose whole point is that a class and its options
+ * are one thing you read together.
+ *
+ * Its own `open` state rather than the table's. Which subclasses you
+ * have unfolded belongs to the class entry you are reading, and
+ * closing the class should not leave them remembered — the table's Set
+ * is keyed by id and would.
+ *
+ * The body is the SAME ExpandedRow the table uses. A subclass is a row
+ * in the classes table like any other; it is only the list it sits in
+ * that is different, so nothing here re-implements how one is drawn.
+ */
+function SubclassRow({ sub }: { sub: Record<string, unknown> }) {
+  const [open, setOpen] = useState(false);
+  const clean = splitSource(sub.name, sub.source);
+  const id = String(sub._id);
+
+  return (
+    <div className={`lk-subrow${open ? " open" : ""}`}>
+      <button
+        type="button"
+        className="lk-subrow-head"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="lk-subcaret" aria-hidden="true">
+          {open ? "▾" : "▸"}
+        </span>
+        <span className="lk-subclass-name">{clean.name}</span>
+        {clean.source && (
+          <span className="lk-subclass-src">{clean.source}</span>
+        )}
+      </button>
+
+      {/* Outside the head button, not inside it — a button holding the
+          entry would nest the artwork's own button and the whole thing
+          would fail hydration. */}
+      {open && <ExpandedRow kind="classes" id={id} />}
+    </div>
   );
 }
 

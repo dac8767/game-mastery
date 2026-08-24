@@ -865,6 +865,41 @@ export const integrity = {
       }
     }
 
+    // ---- a subclass row opens BESIDE its button, not inside it -----
+    // The same parser trap the UiText check above is about, one screen
+    // over. A subclass's entry contains buttons of its own — the
+    // artwork opens a lightbox — so rendering it inside the row's own
+    // <button> would have the parser close that button early, React
+    // hydrate a different tree than it rendered, and the page come
+    // back subtly wrong rather than erroring.
+    {
+      const src = stripComments(read("components", "LookupTool.tsx"));
+      const at = src.indexOf("function SubclassRow");
+      if (at === -1) {
+        throw new Error("no SubclassRow in LookupTool.tsx — has it moved?");
+      }
+      const body = src.slice(at, src.indexOf("\nfunction ", at + 1));
+
+      const headOpen = body.indexOf('className="lk-subrow-head"');
+      const headClose = body.indexOf("</button>", headOpen);
+      const entry = body.indexOf("<ExpandedRow");
+      if (headOpen === -1 || headClose === -1) {
+        throw new Error("could not read SubclassRow's head button");
+      }
+      if (entry === -1) {
+        problems.push(
+          "SubclassRow no longer renders ExpandedRow — the caret would " +
+            "open onto nothing, which is a list that pretends to expand"
+        );
+      } else if (entry < headClose) {
+        problems.push(
+          "SubclassRow renders the entry INSIDE its head button — the " +
+            "entry has buttons of its own, so the parser restructures the " +
+            "tree and hydration comes back wrong"
+        );
+      }
+    }
+
     // ---- a filter must read its value the shape it is stored in ----
     // FilterValue is a union, and every `match` casts to whichever
     // member it believes it has. A cast is an assertion, not a check,

@@ -6559,23 +6559,58 @@ button.cal-day:hover {
   font-size: 0.72rem;
 }
 
-.lk-subclass-list {
-  list-style: none;
-  margin: 0.5rem 0 0;
-  padding: 0;
+/* One row per subclass, each opening in place — the same gesture the
+   table above uses, one level in. Deliberately full-width rows rather
+   than the grid of chips this replaced: a chip cannot hold an entry,
+   and a row that opens can. */
+.lk-subrows {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
-  gap: 0.3rem 1rem;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
 }
 
-.lk-subclass-list li {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  padding: 0.2rem 0.4rem;
-  border-radius: 6px;
+.lk-subrow {
+  border: 1px solid transparent;
+  border-radius: 8px;
   background: var(--bg-inset);
+  overflow: hidden;
+}
+
+.lk-subrow.open {
+  border-color: var(--border);
+  background: var(--bg);
+}
+
+.lk-subrow-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
   font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lk-subrow-head:hover {
+  color: var(--accent);
+}
+
+.lk-subrow-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Fixed width so the names line up whichever way the caret points. */
+.lk-subcaret {
+  flex: none;
+  width: 0.8rem;
+  color: var(--text-dim);
+  font-size: 0.7rem;
 }
 
 .lk-subclass-name {
@@ -6587,6 +6622,27 @@ button.cal-day:hover {
   flex: none;
   color: var(--text-dim);
   font-size: 0.72rem;
+}
+
+/* The nested entry. Its own panel padding would stack on the row's, so
+   it takes the row's width and indents to the caret instead. */
+.lk-subrow > .lk-panel {
+  margin: 0 0 0.4rem;
+  padding-left: 1.3rem;
+}
+
+/* A level down, so the heading is a level down. At the same size as
+   the class above it the two read as peers, which is the one thing
+   this arrangement exists to say they are not. */
+.lk-subrow .lk-name {
+  font-size: 1.15rem;
+}
+
+/* Nothing to reserve a picture column for: a subclass has no artwork
+   of its own worth a column, and the empty track was most of the
+   height of an open one. */
+.lk-subrow .lk-columns {
+  display: block;
 }
 
 /* The Lookup screen's tab strip sits above the filter bar, so the
