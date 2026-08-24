@@ -15,6 +15,7 @@ import {
   artSrc,
   buildFacts,
   buildSubtitle,
+  classRows,
   columnTemplate,
   blocks as readBlocks,
   features,
@@ -24,6 +25,7 @@ import {
   monsterTraitLines,
   sortByColumn,
   spellCells,
+  splitSource,
 } from "@/components/lookupFields";
 import {
   FilterState,
@@ -148,11 +150,21 @@ export function LookupTool({
   );
   const folded = all.length - library.length;
 
+  /* Classes only: the table lists CLASSES, and each one carries its
+     subclasses inside its own entry. 134 rows of which a dozen are
+     classes is not a list of classes — it is an alphabetised pile with
+     Aberrant Sorcery above Barbarian. */
+  const grouped = useMemo(
+    () => (kind === "classes" ? classRows(library) : null),
+    [kind, library]
+  );
+  const listed = grouped ? grouped.rows : library;
+
   const matched = useMemo(
     () =>
       sortByColumn(
         kind,
-        applyFilters(kind, library, filters),
+        applyFilters(kind, listed, filters),
         sort.key,
         sort.desc
       ),
@@ -262,7 +274,7 @@ export function LookupTool({
             state={filters}
             setState={setFilters}
             matched={matched.length}
-            total={library.length}
+            total={listed.length}
           />
 
           {/* Never a silently shorter list: the edition is a campaign
@@ -351,13 +363,15 @@ export function LookupTool({
                         >
                           {c.primary && <Art row={row} className="lk-art" />}
                           {c.primary ? (
+                            /* The source used to sit under the name as
+                               a grey sub-line, which made it
+                               unsortable, unfilterable, and part of
+                               the widest column on the screen. It is a
+                               column of its own now. */
                             <span className="lk-name-cell">
                               <span className="lk-cell">
                                 {c.get(row) ?? "—"}
                               </span>
-                              {typeof row.source === "string" && (
-                                <span className="lk-cell-sub">{row.source}</span>
-                              )}
                             </span>
                           ) : (
                             <span className="lk-cell">{c.get(row) ?? "—"}</span>
@@ -378,7 +392,20 @@ export function LookupTool({
                       </button>
                     </div>
 
-                    {isOpen && <ExpandedRow kind={kind} id={id} />}
+                    {isOpen && (
+                      <ExpandedRow
+                        kind={kind}
+                        id={id}
+                        subclasses={
+                          grouped?.subclassesOf.get(
+                            String(row.name ?? "")
+                              .trim()
+                              .toLowerCase()
+                              .replace(/\s+/g, " ")
+                          ) ?? null
+                        }
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -406,7 +433,16 @@ export function LookupTool({
  * unmounts the hook and the subscription with it, rather than leaving
  * one query per row you have ever looked at.
  */
-function ExpandedRow({ kind, id }: { kind: LookupKind; id: string }) {
+function ExpandedRow({
+  kind,
+  id,
+  subclasses,
+}: {
+  kind: LookupKind;
+  id: string;
+  /** A class's own subclasses. Null for every other kind. */
+  subclasses?: Record<string, unknown>[] | null;
+}) {
   const spell = useQuery(
     api.lookup.getSpell,
     kind === "spells" ? { id: id as Id<"spells"> } : "skip"
@@ -454,7 +490,9 @@ function ExpandedRow({ kind, id }: { kind: LookupKind; id: string }) {
       {row === null && (
         <p className="muted lookup-hint">That entry is no longer there.</p>
       )}
-      {row && <LookupDetail kind={kind} row={row} />}
+      {row && (
+        <LookupDetail kind={kind} row={row} subclasses={subclasses} />
+      )}
     </div>
   );
 }
@@ -472,9 +510,11 @@ function ExpandedRow({ kind, id }: { kind: LookupKind; id: string }) {
 function LookupDetail({
   kind,
   row,
+  subclasses,
 }: {
   kind: LookupKind;
   row: Record<string, unknown>;
+  subclasses?: Record<string, unknown>[] | null;
 }) {
   const body = readBlocks(row.blocks);
   const source = typeof row.source === "string" ? row.source : "";
@@ -510,6 +550,31 @@ function LookupDetail({
 
         <BigArt row={row} />
       </div>
+
+      {/* A class's subclasses, under everything that applies whichever
+          one you take. Below the description rather than beside it:
+          the general rules come first because you read them first. */}
+      {kind === "classes" && subclasses && subclasses.length > 0 && (
+        <section className="lk-subclasses">
+          <h3 className="lk-h">
+            Subclasses{" "}
+            <span className="lk-subclass-count">{subclasses.length}</span>
+          </h3>
+          <ul className="lk-subclass-list">
+            {subclasses.map((sub) => {
+              const clean = splitSource(sub.name, sub.source);
+              return (
+                <li key={String(sub._id)}>
+                  <span className="lk-subclass-name">{clean.name}</span>
+                  {clean.source && (
+                    <span className="lk-subclass-src">{clean.source}</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {kind === "spells" && typeof row.materials === "string" && row.materials && (
         <p className="lk-footnote">* — ({row.materials})</p>

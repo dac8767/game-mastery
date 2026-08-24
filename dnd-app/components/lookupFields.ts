@@ -29,6 +29,24 @@ export const LOOKUP_TITLES: Record<LookupKind, string> = {
   species: "Species",
 };
 
+/**
+ * The tab strip's order, which is the only order these appear in.
+ *
+ * Derek's, not alphabetical and not the order the tables were built
+ * in: the three you reach for at the table first, then the four you
+ * reach for while making a character. One list, read by the strip and
+ * by the guard that checks every kind is reachable.
+ */
+export const LOOKUP_TABS: LookupKind[] = [
+  "spells",
+  "items",
+  "monsters",
+  "species",
+  "backgrounds",
+  "feats",
+  "classes",
+];
+
 const str = (v: unknown): string | null => {
   if (typeof v === "string") return v.trim() || null;
   if (typeof v === "number") return String(v);
@@ -169,6 +187,63 @@ export function buildSubtitle(
   }
 
   return "";
+}
+
+/**
+ * The classes list shows CLASSES. Subclasses belong to one.
+ *
+ * 134 rows of which about a dozen are classes is not a list of
+ * classes — it is an alphabetised pile in which Aberrant Sorcery,
+ * Abjurer and Arcane Trickster come before Barbarian, and the twelve
+ * things you actually pick from are scattered through it.
+ *
+ * So the table shows the classes, and a class's own entry carries its
+ * subclasses underneath the general rules that apply whichever one you
+ * take.
+ *
+ * A subclass whose parent is not in the list is NOT dropped. An export
+ * with Bladesinger and no Wizard is a real thing — a module that ships
+ * subclasses alone — and hiding them would lose rows with nothing
+ * anywhere saying so. They stay in the list as their own entries.
+ */
+export function classRows(rows: Record<string, unknown>[]): {
+  rows: Record<string, unknown>[];
+  subclassesOf: Map<string, Record<string, unknown>[]>;
+} {
+  const key = (v: unknown) =>
+    String(v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+
+  const classNames = new Set(
+    rows.filter((r) => r.isSubclass !== true).map((r) => key(r.name))
+  );
+
+  const subclassesOf = new Map<string, Record<string, unknown>[]>();
+  const orphans: Record<string, unknown>[] = [];
+
+  for (const row of rows) {
+    if (row.isSubclass !== true) continue;
+    const parent = key(row.parentClass);
+    if (!parent || !classNames.has(parent)) {
+      orphans.push(row);
+      continue;
+    }
+    const list = subclassesOf.get(parent);
+    if (list) list.push(row);
+    else subclassesOf.set(parent, [row]);
+  }
+
+  // Each class's subclasses in name order, so the entry reads the same
+  // way whatever the table happens to be sorted by.
+  for (const list of subclassesOf.values()) {
+    list.sort((a, b) =>
+      String(a.name ?? "").localeCompare(String(b.name ?? ""))
+    );
+  }
+
+  return {
+    rows: [...rows.filter((r) => r.isSubclass !== true), ...orphans],
+    subclassesOf,
+  };
 }
 
 /**
@@ -425,14 +500,97 @@ const RARITY_ORDER = [
 /** Sorts last rather than first — unknown is not the same as lowest. */
 const LAST = Number.POSITIVE_INFINITY;
 
+/**
+ * A trailing "(XGtE)" on a name is a SOURCE, not part of the name.
+ *
+ * Foundry compendiums disambiguate by suffix — "Arcane Archer (XGtE)",
+ * "Arcana Domain (SCAG)" — which reads fine in a compendium browser
+ * and badly in a table that has a Source column beside it, where the
+ * same four letters then appear twice on every row.
+ *
+ * Done HERE rather than in the importer, deliberately. The suffix is
+ * genuinely part of what Foundry calls the document, so rewriting it
+ * at rest would be editing the source data to suit one screen — and
+ * doing it at read time means it works on the rows already imported
+ * rather than only after the next re-import.
+ *
+ * Two cases, and nothing else is touched:
+ *
+ *   the parenthetical IS the row's source   -> strip it, it is said twice
+ *   there is no source, and it looks like   -> strip it, and it becomes
+ *   a book abbreviation                        the source
+ *
+ * A parenthetical that disagrees with the source is left alone. "Bag
+ * of Holding (Greater)" is not a book, and guessing which is which is
+ * how a name gets quietly truncated.
+ */
+export function splitSource(
+  name: unknown,
+  source: unknown
+): { name: string; source: string | null } {
+  const raw = typeof name === "string" ? name.trim() : "";
+  const src = typeof source === "string" ? source.trim() : "";
+  const fallback = { name: raw, source: src || null };
+
+  const m = /^(.*\S)\s*\(([^()]{2,12})\)$/.exec(raw);
+  if (!m) return fallback;
+
+  const base = m[1].trim();
+  const paren = m[2].trim();
+  if (!base) return fallback;
+
+  const same = (a: string, b: string) =>
+    a.toLowerCase().replace(/\s+/g, " ") === b.toLowerCase().replace(/\s+/g, " ");
+
+  if (src) {
+    return same(paren, src) ? { name: base, source: src } : fallback;
+  }
+
+  // No source to compare against. A book abbreviation is short, has no
+  // spaces, and carries more than one capital — which "Greater" and
+  // "Cantrip" do not, and "XGtE", "SCAG" and "BGDiA" all do.
+  const looksLikeBook =
+    /^[A-Za-z0-9'’.:+-]{2,10}$/.test(paren) &&
+    (paren.match(/[A-Z]/g) ?? []).length >= 2;
+
+  return looksLikeBook ? { name: base, source: paren } : fallback;
+}
+
 const NAME_COLUMN: LookupColumn = {
   key: "name",
   label: "Name",
   width: "minmax(11rem, 2fr)",
   primary: true,
-  get: (r) => str(r.name),
+  get: (r) => splitSource(r.name, r.source).name,
+  // Sorted on the CLEAN name, so "Arcane Archer (XGtE)" files under A
+  // for Arcane rather than wherever the suffix happens to put it.
+  sort: (r) => splitSource(r.name, r.source).name.toLowerCase(),
 };
 
+/**
+ * Which book an entry came from, as a column of its own.
+ *
+ * It used to be a grey sub-line under the name, which made it
+ * unsortable, unfilterable, and part of the widest column on the
+ * screen. Every kind gets the same one, appended last.
+ */
+const SOURCE_COLUMN: LookupColumn = {
+  key: "source",
+  label: "Source",
+  width: "7rem",
+  get: (r) => splitSource(r.name, r.source).source,
+  // Blank last, like every other mostly-empty column here.
+  sort: (r) => splitSource(r.name, r.source).source?.toLowerCase() ?? "￿",
+};
+
+/**
+ * Every kind ends with SOURCE_COLUMN.
+ *
+ * Appended per kind rather than spliced in by the renderer, so the
+ * column is reorderable and resizable like any other — it is a column,
+ * not a decoration, and the layout code should not have to know that
+ * one of them is special.
+ */
 export const LOOKUP_COLUMNS: Record<LookupKind, LookupColumn[]> = {
   monsters: [
     {
@@ -450,6 +608,7 @@ export const LOOKUP_COLUMNS: Record<LookupKind, LookupColumn[]> = {
     { key: "habitat", label: "Habitat", width: "10rem", get: (r) => str(r.habitat) },
     { key: "hp", label: "HP", width: "4.5rem", align: "center", get: (r) => str(r.hp), sort: (r) => (typeof r.hp === "number" ? r.hp : LAST) },
     { key: "ac", label: "AC", width: "4.5rem", align: "center", get: (r) => str(r.ac), sort: (r) => (typeof r.ac === "number" ? r.ac : LAST) },
+    SOURCE_COLUMN,
   ],
   spells: [
     {
@@ -466,6 +625,7 @@ export const LOOKUP_COLUMNS: Record<LookupKind, LookupColumn[]> = {
     { key: "range", label: "Range/Area", width: "10rem", get: (r) => spellRangeArea(r) },
     { key: "components", label: "Components", width: "7rem", get: (r) => str(r.components) },
     { key: "duration", label: "Duration", width: "9rem", get: (r) => spellDuration(r) },
+    SOURCE_COLUMN,
   ],
   items: [
     NAME_COLUMN,
@@ -502,6 +662,7 @@ export const LOOKUP_COLUMNS: Record<LookupKind, LookupColumn[]> = {
       get: (r) => (typeof r.weight === "number" ? `${r.weight} lb` : null),
       sort: (r) => (typeof r.weight === "number" ? r.weight : LAST),
     },
+    SOURCE_COLUMN,
   ],
   feats: [
     NAME_COLUMN,
@@ -525,6 +686,7 @@ export const LOOKUP_COLUMNS: Record<LookupKind, LookupColumn[]> = {
       get: (r) => (r.repeatable === true ? "Yes" : null),
       sort: (r) => (r.repeatable === true ? 0 : 1),
     },
+    SOURCE_COLUMN,
   ],
   backgrounds: [
     NAME_COLUMN,
@@ -532,6 +694,7 @@ export const LOOKUP_COLUMNS: Record<LookupKind, LookupColumn[]> = {
     { key: "feat", label: "Origin Feat", width: "10rem", get: (r) => str(r.feat) },
     { key: "skills", label: "Skills", width: "minmax(10rem, 1.4fr)", get: (r) => str(r.skills) },
     { key: "tools", label: "Tool", width: "9rem", get: (r) => str(r.tools) },
+    SOURCE_COLUMN,
   ],
   classes: [
     NAME_COLUMN,
@@ -563,6 +726,7 @@ export const LOOKUP_COLUMNS: Record<LookupKind, LookupColumn[]> = {
       get: (r) => str(r.spellcasting),
       sort: (r) => str(r.spellcasting) ?? "￿",
     },
+    SOURCE_COLUMN,
   ],
   species: [
     NAME_COLUMN,
@@ -591,6 +755,7 @@ export const LOOKUP_COLUMNS: Record<LookupKind, LookupColumn[]> = {
       sort: (r) => (typeof r.darkvision === "number" ? r.darkvision : LAST),
     },
     { key: "creatureType", label: "Type", width: "8rem", get: (r) => str(r.creatureType) },
+    SOURCE_COLUMN,
   ],
 };
 

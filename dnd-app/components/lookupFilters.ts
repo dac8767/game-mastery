@@ -96,6 +96,38 @@ const EDITION_EXCLUSIVE: LookupKind[] = [
 ];
 
 /**
+ * Collapse rows that are the same entry twice.
+ *
+ * Not the same as the edition rule, and it has to run first. Two
+ * "Artisan / PHB 2024" rows are not two printings to choose between —
+ * they are one background imported twice, and the edition rule keeps
+ * BOTH because both match the wanted edition. A Foundry world that has
+ * the same compendium loaded from two modules produces this by the
+ * dozen.
+ *
+ * Same NAME and same SOURCE is the bar. "Archaeologist / ToA" and
+ * "Archaeologist / EFotA" are two different backgrounds that share a
+ * name, and collapsing those would lose one.
+ *
+ * The first survives, in input order, so which copy you get does not
+ * depend on the sort you happen to be using.
+ */
+export function dedupeExact<T extends Row>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const row of rows) {
+    const key =
+      String(row.name ?? "").trim().toLowerCase().replace(/\s+/g, " ") +
+      "\u0000" +
+      String(row.source ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
+
+/**
  * The library this campaign actually plays with.
  *
  * Two rules, and which one applies depends on the kind:
@@ -136,10 +168,16 @@ export function applyEdition<T extends Row>(
   // anything older shares its name. Done BEFORE the grouping, so a
   // 2024-only name is gone rather than being the only candidate left
   // in its group and surviving as the fallback.
+  // Exact duplicates go FIRST, and inside this function rather than
+  // beside it at the call site — the edition rule keeps every row of
+  // the wanted edition, so a name imported twice under one source
+  // survives twice, and a caller that forgot to dedupe would see it.
+  const distinct = dedupeExact(rows);
+
   const usable =
     EDITION_EXCLUSIVE.includes(kind) && edition === "2014"
-      ? rows.filter((r) => editionOf(r.source) === "2014")
-      : rows;
+      ? distinct.filter((r) => editionOf(r.source) === "2014")
+      : distinct;
 
   const byName = new Map<string, T[]>();
   for (const row of usable) {

@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { Doc } from "./_generated/dataModel";
 import { requireDm, requireMember, requireUser } from "./auth";
 import { Id } from "./_generated/dataModel";
@@ -636,14 +636,27 @@ export const addNote = mutation({
  * Nothing is deleted before it is copied. The clear happens in the
  * same transaction as the insert, so there is no window where the text
  * has left the field and is not yet a note.
+ *
+ * INTERNAL, and it takes no identity.
+ *
+ * It was a public DM-gated mutation run with `--identity`, which meant
+ * the command to run it carried a YOUR_USER_ID placeholder — a
+ * paste-ready line that is not actually paste-ready, and pasting it
+ * gets "Unable to decode ID: Invalid ID length 12" from deep inside
+ * the auth check. An internal function is not reachable from a
+ * browser at all, so the gate it needed was the one thing making it
+ * awkward to run.
+ *
+ * The notes are authored by the campaign's DM rather than by whoever
+ * ran the command, which is also more correct: these are the DM's
+ * notes, and they were the DM's before this moved them.
  */
-export const migrateDmNotes = mutation({
+export const migrateDmNotes = internalMutation({
   args: { campaignId: v.id("campaigns") },
   handler: async (ctx, args) => {
-    // DM-gated like every other write to a DM-only field. The notes it
-    // creates go in the DM channel, which requireChannel would demand
-    // this for anyway.
-    const userId = await requireDm(ctx, args.campaignId);
+    const campaign = await ctx.db.get(args.campaignId);
+    if (!campaign) throw new Error("Campaign not found");
+    const userId = campaign.dmId;
 
     const npcs = await ctx.db
       .query("npcs")

@@ -6528,6 +6528,67 @@ button.cal-day:hover {
   border-top: 1px solid var(--border);
 }
 
+/* A class's subclasses, listed inside its own entry. Deliberately a
+   plain list rather than a second table: it says which ones exist, and
+   the entry you are already reading says what the class is. */
+.lk-subclasses {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.lk-subclass-count {
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: var(--bg-inset);
+  color: var(--text-dim);
+  font-size: 0.72rem;
+}
+
+.lk-subclass-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.3rem 1rem;
+}
+
+.lk-subclass-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 6px;
+  background: var(--bg-inset);
+  font-size: 0.85rem;
+}
+
+.lk-subclass-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.lk-subclass-src {
+  flex: none;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+}
+
+/* The Lookup screen's tab strip sits above the filter bar, so the
+   strip's own bottom margin is all the gap either needs. */
+.lookup-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.lookup-screen > .settings-tabs {
+  margin-bottom: 0.6rem;
+}
+
 /* A chip that goes somewhere.
 
    Same shape as the chip beside it, because it IS the same thing —

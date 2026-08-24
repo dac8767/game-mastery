@@ -896,12 +896,14 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
     // `kind === "species" ? "species" : "locations"` sent EVERY other
     // kind to Locations, so a fifth link target added later would have
     // navigated somewhere plausible and wrong instead of failing.
-    const screen =
-      kind === "species" ? "species" : kind === "location" ? "locations" : null;
-    if (!screen) return;
-    router.push(
-      `/campaign/${campaignId}/${screen}?open=${encodeURIComponent(value)}`
-    );
+    const to =
+      kind === "species"
+        ? `lookup?tab=species&open=${encodeURIComponent(value)}`
+        : kind === "location"
+          ? `locations?open=${encodeURIComponent(value)}`
+          : null;
+    if (!to) return;
+    router.push(`/campaign/${campaignId}/${to}`);
   };
 
   if (result === undefined || !prefs.ready) {

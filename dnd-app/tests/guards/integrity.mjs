@@ -895,8 +895,11 @@ export const integrity = {
 
       // Which screen each kind is sent to, and what has to be true
       // there. `npc` and `group` are handled inside this screen.
+      // Species lives on the Lookup screen's species TAB now, not on a
+      // route of its own — so the link is /lookup?tab=species&open=…
+      // and the route it has to reach is the lookup page.
       const DESTINATIONS = {
-        species: ["app", "campaign", "[campaignId]", "species", "page.tsx"],
+        species: ["app", "campaign", "[campaignId]", "lookup", "page.tsx"],
         location: ["app", "campaign", "[campaignId]", "locations", "page.tsx"],
       };
       const READERS = {
@@ -2551,19 +2554,54 @@ export const integrity = {
               "list fine and open to nothing"
           );
         }
-        if (!new RegExp(`id:\\s*"${kind}"`).test(navSrcLocal)) {
+      }
+
+      // Every kind must be a TAB, and the tab strip must have a route.
+      //
+      // This used to demand a nav item and a route PER KIND, which was
+      // right while there were seven sidebar entries and is exactly
+      // wrong now: they are tabs on one page. The invariant did not go
+      // away, it moved — a kind missing from LOOKUP_TABS is a table
+      // with no way to reach it, which is the same loss the per-route
+      // version was guarding against.
+      const tabs = [
+        ...between(
+          fieldsSrc,
+          "export const LOOKUP_TABS",
+          "];",
+          "LOOKUP_TABS"
+        ).matchAll(/"(\w+)"/g),
+      ].map((m) => m[1]);
+      if (tabs.length === 0) {
+        throw new Error("read no tabs out of LOOKUP_TABS");
+      }
+      for (const kind of fieldKinds) {
+        if (!tabs.includes(kind)) {
           problems.push(
-            `LookupKind "${kind}" has no nav item — the screen exists and ` +
-              "nothing links to it"
+            `LookupKind "${kind}" is not in LOOKUP_TABS — its table exists ` +
+              "and there is no tab that reaches it"
           );
         }
-        if (!exists("app", "campaign", "[campaignId]", kind, "page.tsx")) {
+      }
+      for (const tab of tabs) {
+        if (!fieldKinds.includes(tab)) {
           problems.push(
-            `LookupKind "${kind}" has no route at ` +
-              `app/campaign/[campaignId]/${kind}/page.tsx — the sidebar ` +
-              "link would 404"
+            `LOOKUP_TABS offers "${tab}", which is not a LookupKind — the ` +
+              "tab would render a table with no columns behind it"
           );
         }
+      }
+      if (!exists("app", "campaign", "[campaignId]", "lookup", "page.tsx")) {
+        problems.push(
+          "there is no route at app/campaign/[campaignId]/lookup/page.tsx — " +
+            "the sidebar's Lookup link would 404 and every tab with it"
+        );
+      }
+      if (!/id: "lookup"/.test(navSrcLocal)) {
+        problems.push(
+          "navItems has no `lookup` entry — the whole reference library " +
+            "would exist with nothing linking to it"
+        );
       }
 
       // ---- and its columns and filters read fields it returns -------

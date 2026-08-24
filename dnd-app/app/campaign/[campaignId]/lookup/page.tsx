@@ -5,9 +5,9 @@ import { useParams } from "next/navigation";
 import { Id } from "@/convex/_generated/dataModel";
 import { SignInForm } from "@/components/SignInForm";
 import { AppShell } from "@/components/AppShell";
-import { LookupTool } from "@/components/LookupTool";
+import { LookupScreen } from "@/components/LookupScreen";
 
-export default function SpellsPage() {
+export default function LookupPage() {
   const params = useParams<{ campaignId: string }>();
   const campaignId = params.campaignId as Id<"campaigns">;
 
@@ -20,8 +20,8 @@ export default function SpellsPage() {
         <SignInForm />
       </Unauthenticated>
       <Authenticated>
-        <AppShell campaignId={campaignId} breadcrumb="Spells">
-          <LookupTool kind="spells" campaignId={campaignId} />
+        <AppShell campaignId={campaignId} breadcrumb="Lookup">
+          <LookupScreen campaignId={campaignId} />
         </AppShell>
       </Authenticated>
     </>

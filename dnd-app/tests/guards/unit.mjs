@@ -3283,6 +3283,135 @@ export const unit = {
       look.itemSubtitle({ kind: "gear" }) === "Adventuring Gear"
     );
 
+    // ---- the classes list shows classes ----------------------------
+    const CLASSES = [
+      { _id: "1", name: "Fighter", isSubclass: false },
+      { _id: "2", name: "Champion", isSubclass: true, parentClass: "Fighter" },
+      { _id: "3", name: "Battle Master", isSubclass: true, parentClass: "Fighter" },
+      { _id: "4", name: "Wizard", isSubclass: false },
+      { _id: "5", name: "Abjurer", isSubclass: true, parentClass: "Wizard" },
+      // A subclass whose parent is not in this library — a module that
+      // ships subclasses alone produces exactly this.
+      { _id: "6", name: "Bladesinger", isSubclass: true, parentClass: "Sorcerer" },
+    ];
+    const cr = look.classRows(CLASSES);
+
+    check(
+      "the list is classes, not classes and subclasses",
+      cr.rows.filter((r) => r.isSubclass === true && r.parentClass === "Fighter")
+        .length === 0
+    );
+    check(
+      "a class carries its own subclasses",
+      (cr.subclassesOf.get("fighter") ?? []).map((r) => r.name).join() ===
+        "Battle Master,Champion"
+    );
+    check(
+      "and they are in name order regardless of input order",
+      (cr.subclassesOf.get("fighter") ?? [])[0].name === "Battle Master"
+    );
+    // The row that would otherwise vanish. This is the whole reason
+    // orphans are kept rather than filtered.
+    check(
+      "a subclass with no parent in the list is NOT lost",
+      cr.rows.some((r) => r.name === "Bladesinger")
+    );
+    check(
+      "nothing is lost overall",
+      cr.rows.length +
+        [...cr.subclassesOf.values()].reduce((n, l) => n + l.length, 0) ===
+        CLASSES.length
+    );
+    check(
+      "and nothing is counted twice",
+      new Set([
+        ...cr.rows.map((r) => r._id),
+        ...[...cr.subclassesOf.values()].flat().map((r) => r._id),
+      ]).size === CLASSES.length
+    );
+    check(
+      "a parent named with different casing still matches",
+      (look
+        .classRows([
+          { _id: "a", name: "Fighter", isSubclass: false },
+          { _id: "b", name: "Champion", isSubclass: true, parentClass: "  fighter " },
+        ])
+        .subclassesOf.get("fighter") ?? []).length === 1
+    );
+    check(
+      "a library of only classes has no subclass map entries",
+      look.classRows([{ _id: "x", name: "Bard", isSubclass: false }])
+        .subclassesOf.size === 0
+    );
+
+    // ---- a source hiding in the name -------------------------------
+    // Foundry disambiguates compendium entries by suffix, which reads
+    // fine in a compendium browser and badly beside a Source column
+    // where the same four letters then appear twice on every row.
+    check(
+      "a parenthetical that IS the source comes off the name",
+      look.splitSource("Arcane Archer (XGtE)", "XGtE").name === "Arcane Archer"
+    );
+    check(
+      "and the source survives it",
+      look.splitSource("Arcane Archer (XGtE)", "XGtE").source === "XGtE"
+    );
+    check(
+      "a parenthetical with no source becomes one",
+      (() => {
+        const r = look.splitSource("Agent of the Ninth Quill (DMLS)", "");
+        return r.name === "Agent of the Ninth Quill" && r.source === "DMLS";
+      })()
+    );
+    // The half that stops this truncating names. A parenthetical that
+    // is not a book is part of what the thing is called.
+    check(
+      "a parenthetical that is not a book is left alone",
+      look.splitSource("Bag of Holding (Greater)", "").name ===
+        "Bag of Holding (Greater)"
+    );
+    check(
+      "a parenthetical that DISAGREES with the source is left alone",
+      look.splitSource("Foo (XGtE)", "PHB").name === "Foo (XGtE)"
+    );
+    check(
+      "a name with no parenthetical is untouched",
+      look.splitSource("Acolyte - Baldur's Gate", "BGDiA").name ===
+        "Acolyte - Baldur's Gate"
+    );
+    check(
+      "a name that is ONLY a parenthetical is not emptied",
+      look.splitSource("(XGtE)", "").name === "(XGtE)"
+    );
+    check(
+      "a missing name does not throw",
+      look.splitSource(undefined, undefined).name === "" &&
+        look.splitSource(undefined, undefined).source === null
+    );
+    // The Name column sorts on the CLEAN name, or the suffix decides
+    // where a row files.
+    check(
+      "the name column shows and sorts the clean name",
+      (() => {
+        const col = look.LOOKUP_COLUMNS.classes.find((c) => c.key === "name");
+        const row = { name: "Arcane Archer (XGtE)", source: "XGtE" };
+        return col.get(row) === "Arcane Archer" &&
+          col.sort(row) === "arcane archer";
+      })()
+    );
+    check(
+      "every kind has a Source column",
+      Object.keys(look.LOOKUP_TITLES).every((k) =>
+        look.LOOKUP_COLUMNS[k].some((c) => c.key === "source")
+      )
+    );
+    check(
+      "the Source column reads the extracted source, not the raw field",
+      look.LOOKUP_COLUMNS.classes
+        .find((c) => c.key === "source")
+        .get({ name: "Agent of the Ninth Quill (DMLS)", source: "" }) === "DMLS"
+    );
+
     // ---- feats, backgrounds, classes and species -------------------
     // The four build kinds share one renderer, so the thing worth
     // checking is that they do NOT all say the same thing: the whole
@@ -3840,6 +3969,52 @@ export const unit = {
         .size === new Set(library.map((r) => r.name)).size &&
         new Set(filt.applyEdition(library, "2024", "items").map((r) => r.name))
           .size === new Set(library.map((r) => r.name)).size
+    );
+
+    // ---- the same entry, imported twice ----------------------------
+    // A Foundry world with one compendium loaded from two modules
+    // produces this by the dozen. The edition rule cannot help: both
+    // copies match the wanted edition, so both survive it.
+    const twice = [
+      { name: "Artisan", source: "PHB 2024" },
+      { name: "Artisan", source: "PHB 2024" },
+      { name: "Archaeologist", source: "ToA" },
+      { name: "Archaeologist", source: "EFotA" },
+    ];
+    check(
+      "the same name from the same book collapses to one",
+      filt.dedupeExact(twice).filter((r) => r.name === "Artisan").length === 1
+    );
+    check(
+      "the same name from DIFFERENT books does not",
+      filt.dedupeExact(twice).filter((r) => r.name === "Archaeologist")
+        .length === 2
+    );
+    check(
+      "the first copy is the one kept",
+      filt.dedupeExact([
+        { name: "Artisan", source: "PHB 2024", keep: true },
+        { name: "Artisan", source: "PHB 2024", keep: false },
+      ])[0].keep === true
+    );
+    check(
+      "casing and spacing do not make two entries out of one",
+      filt.dedupeExact([
+        { name: "Artisan", source: "PHB 2024" },
+        { name: "  artisan ", source: "phb  2024" },
+      ]).length === 1
+    );
+    // And it runs inside applyEdition, so no screen can forget it.
+    check(
+      "applyEdition collapses exact duplicates without being asked",
+      filt.applyEdition(
+        [
+          { name: "Artisan", source: "PHB 2024" },
+          { name: "Artisan", source: "PHB 2024" },
+        ],
+        "2024",
+        "backgrounds"
+      ).length === 1
     );
 
     // ---- and the build kinds, where 2024 is EXCLUSIVE --------------

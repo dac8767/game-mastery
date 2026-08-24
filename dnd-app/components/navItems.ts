@@ -88,17 +88,18 @@ export const TOOL_ITEMS: NavItem[] = [
  * the way npcs and locations do.
  */
 export const LOOKUP_ITEMS: NavItem[] = [
-  { id: "spells", label: "Spells", icon: "✧", slug: "spells" },
-  { id: "items", label: "Items", icon: "⚱", slug: "items" },
-  { id: "monsters", label: "Monsters", icon: "☠", slug: "monsters" },
-  // The character-build half of the library. Grouped after the three
-  // above rather than in a section of their own: it is all one
-  // rulebook, and a "Character Options" heading with four entries under
-  // it would be a second Lookup you had to learn about.
-  { id: "feats", label: "Feats", icon: "❖", slug: "feats" },
-  { id: "backgrounds", label: "Backgrounds", icon: "❦", slug: "backgrounds" },
-  { id: "classes", label: "Classes", icon: "⚑", slug: "classes" },
-  { id: "species", label: "Species", icon: "❧", slug: "species" },
+  // ONE entry, not seven.
+  //
+  // Spells, Items, Monsters, Species, Backgrounds, Feats and Classes
+  // were seven sidebar entries, which put the whole rulebook down the
+  // left-hand side of every screen and made "look something up" a
+  // decision about which list before it was a search. They are tabs on
+  // one page now; the order is LOOKUP_TABS in lookupFields.ts.
+  { id: "lookup", label: "Lookup", icon: "✧", slug: "lookup" },
+  // Rules Lawyer is deliberately NOT a tab. It searches rules PROSE
+  // out of a different table with a different shape — no columns, no
+  // filters, no rows — so a tab strip that included it would promise a
+  // table it cannot draw.
   { id: "rules", label: "Rules Lawyer", icon: "§", slug: "rules" },
 ];
 
