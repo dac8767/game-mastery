@@ -456,6 +456,128 @@ Foundry, though, is a documented JSON shape, and that is what this reads.
 - **A whole v10-or-earlier world:** the `.db` files under
   `Data/worlds/<world>/data/` are JSON-per-line and can be read as-is.
 
+#### The whole world, from the console
+
+Faster than right-clicking four sidebars. Open Foundry with the world
+loaded, press F12, and paste:
+
+```js
+const docs = [
+  ...game.actors.contents,
+  ...game.items.contents,
+  ...game.journal.contents,
+  ...game.scenes.contents,
+].map((d) => d.toObject());
+
+ui.notifications.info(
+  `actors ${game.actors.size} · items ${game.items.size} · ` +
+  `journals ${game.journal.size} · scenes ${game.scenes.size}`
+);
+
+const a = document.createElement("a");
+a.href = URL.createObjectURL(
+  new Blob([JSON.stringify(docs)], { type: "application/json" })
+);
+a.download = "foundry-everything.json";
+a.click();
+```
+
+#### One Journal folder, and nothing else
+
+For when the whole world is more than you want — a `Rules` folder, say,
+without every scene and stat block alongside it. Change `FOLDER_NAME`
+for any other folder.
+
+It differs from the snippet above in three ways that matter: it walks
+**subfolders**, so `Rules / Combat / Grappling` comes too; it counts
+**pages** as well as entries, because a v10+ JournalEntry keeps its text
+in pages and three entries can be three hundred pages or three empty
+shells; and it **refuses to download an empty file**, saying which
+folders it did find instead. An export that silently produces `[]` is
+one you discover two steps later.
+
+```js
+(() => {
+  const FOLDER_NAME = "Rules";
+
+  // A folder or an id, depending on the Foundry version. Normalised
+  // once here so nothing below has to care which it got.
+  const asFolder = (x) =>
+    !x ? null : typeof x === "string" ? (game.folders.get(x) ?? null) : x;
+
+  // Journal folders only — an Actor folder called "Rules" is not this.
+  // `type` is the document type in v10+; older worlds kept it on `data`.
+  const journalFolders = game.folders.filter(
+    (f) => (f.type ?? f.data?.type) === "JournalEntry"
+  );
+
+  const wanted = FOLDER_NAME.trim().toLowerCase();
+  const roots = journalFolders.filter(
+    (f) => (f.name ?? "").trim().toLowerCase() === wanted
+  );
+
+  if (roots.length === 0) {
+    ui.notifications.error(
+      `No Journal folder called "${FOLDER_NAME}". Journal folders here: ` +
+        (journalFolders.map((f) => f.name).join(", ") || "none")
+    );
+    return;
+  }
+
+  const rootIds = new Set(roots.map((f) => f.id));
+
+  // Subfolders count: "Rules / Combat / Grappling" is still Rules.
+  // A depth cap rather than a visited set — the only way a parent
+  // chain loops is corruption, and fifty levels of journal folders is
+  // already not a thing anyone has.
+  const underRules = (folder) => {
+    let f = asFolder(folder);
+    for (let depth = 0; f && depth < 50; depth++) {
+      if (rootIds.has(f.id)) return true;
+      f = asFolder(f.folder);
+    }
+    return false;
+  };
+
+  const docs = game.journal
+    .filter((e) => underRules(e.folder))
+    .map((e) => e.toObject());
+
+  const pages = docs.reduce((n, d) => n + (d.pages?.length ?? 0), 0);
+
+  if (docs.length === 0) {
+    ui.notifications.warn(
+      `"${FOLDER_NAME}" exists but holds no journal entries — nothing ` +
+        "was downloaded."
+    );
+    return;
+  }
+
+  ui.notifications.info(
+    `${docs.length} journal(s) · ${pages} page(s) from "${FOLDER_NAME}"` +
+      (roots.length > 1 ? ` — ${roots.length} folders of that name` : "")
+  );
+
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(
+    new Blob([JSON.stringify(docs)], { type: "application/json" })
+  );
+  a.download = "foundry-rules.json";
+  a.click();
+})();
+```
+
+Both are wrapped so they can be pasted twice into one console session —
+a bare `const` at the top level fails the second time with "already
+been declared", which reads as the snippet being broken.
+
+**Note on what reads it.** `import-foundry.mjs` uses journals only as
+descriptions for the scene notes that reference them; it has no path
+that turns a journal into a **Rules Lawyer** entry. That table is fed by
+`import-srd.mjs`, which wants **markdown**. So `foundry-rules.json` is
+an export with no importer behind it yet — worth knowing before you go
+looking for where it landed.
+
 Point the script at a file or a directory of them:
 
 ```bash
