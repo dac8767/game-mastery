@@ -865,6 +865,52 @@ export const integrity = {
       }
     }
 
+    // ---- a filter must read its value the shape it is stored in ----
+    // FilterValue is a union, and every `match` casts to whichever
+    // member it believes it has. A cast is an assertion, not a check,
+    // so believing wrong compiles perfectly and then throws at the
+    // first click — "wanted.some is not a function", which unmounts
+    // the whole Lookup screen behind a red overlay.
+    //
+    // The control decides the shape. `chips` is exclusive and stores
+    // ONE string; `multi` stores an array. So a chips filter casting
+    // to string[] is the bug, stated as a rule.
+    {
+      const src = read("components", "lookupFilters.ts");
+      // Each FilterDef is `{ ... control: {...}, ... match: ... }`.
+      // Split on `key:` at a filter's indent and read each one whole.
+      const defs = src.split(/\n  \{\n/).slice(1);
+      for (const def of defs) {
+        const body = def.slice(0, def.indexOf("\n  },"));
+        if (!/control:\s*\{\s*type:\s*"(\w+)"/.test(body)) continue;
+        const type = /control:\s*\{\s*type:\s*"(\w+)"/.exec(body)[1];
+        const key = /key:\s*"([^"]+)"/.exec(body)?.[1] ?? "(unnamed)";
+        const match = body.slice(body.indexOf("match:"));
+        if (!match) continue;
+
+        if (type === "chips" && /as string\[\]/.test(match)) {
+          problems.push(
+            `the "${key}" filter is a chips control — its value is ONE ` +
+              "string — but its match casts to string[]. That compiles and " +
+              "throws on the first click, taking the screen down"
+          );
+        }
+        if (type === "multi" && /as string(?!\[)/.test(match)) {
+          problems.push(
+            `the "${key}" filter is a multi control — its value is an ` +
+              "ARRAY — but its match casts to a single string, so it would " +
+              "silently match nothing"
+          );
+        }
+        if (type === "range" && !/min:\s*string/.test(match)) {
+          problems.push(
+            `the "${key}" filter is a range control but its match does not ` +
+              "read a {min,max} — it would compare against an object"
+          );
+        }
+      }
+    }
+
     // ---- a cell that links must land somewhere that listens --------
     // `linksTo` on a column is a string, matched against a string in
     // NpcTable's openLink, pointing at a screen that has to READ the

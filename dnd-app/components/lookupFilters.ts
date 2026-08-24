@@ -269,10 +269,21 @@ export function inRange(
   return true;
 }
 
-/** Any-of, on a scalar field. */
-export function anyOf(value: unknown, wanted: string[]): boolean {
+/**
+ * Any-of, on a scalar field.
+ *
+ * Tolerates a single string as well as a list. Not politeness: a
+ * filter's declared control decides whether its value is one string or
+ * many, the `match` casts to whichever it believes, and a cast that
+ * believes wrong used to throw "wanted.some is not a function" —
+ * which unmounts the entire Lookup screen behind a red overlay. A
+ * filter that matches the wrong rows is a bug; a filter that takes the
+ * page down is an outage, and the difference is one line.
+ */
+export function anyOf(value: unknown, wanted: string[] | string): boolean {
   const v = text(value);
-  return wanted.some((w) => v === w);
+  const list = Array.isArray(wanted) ? wanted : [wanted];
+  return list.some((w) => v === w);
 }
 
 const opts = (...values: string[]) =>
@@ -633,7 +644,11 @@ const FEAT_FILTERS: FilterDef[] = [
     key: "category",
     label: "Category",
     control: { type: "chips", options: FEAT_CATEGORIES },
-    match: (row, value) => anyOf(row.category, value as string[]),
+    // A chips value is ONE string — the chips are exclusive. This read
+    // it as an array and crashed the whole screen on the first click
+    // with "wanted.some is not a function"; the `as string[]` cast is
+    // what let it through the compiler.
+    match: (row, value) => text(row.category) === (value as string),
   },
   {
     key: "prerequisite",
@@ -708,7 +723,7 @@ const CLASS_FILTERS: FilterDef[] = [
     // which would make an empty selection mean "false" and quietly
     // hide every subclass.
     match: (row, value) =>
-      anyOf(row.isSubclass === true ? "Subclass" : "Class", value as string[]),
+      (row.isSubclass === true ? "Subclass" : "Class") === (value as string),
   },
   {
     key: "spellcasting",

@@ -189,6 +189,9 @@ export function buildSubtitle(
   return "";
 }
 
+/** Marks a class the list infers from its subclasses. See classRows. */
+export const ABSENT_CLASS_ID = "absent:";
+
 /**
  * The classes list shows CLASSES. Subclasses belong to one.
  *
@@ -201,10 +204,24 @@ export function buildSubtitle(
  * subclasses underneath the general rules that apply whichever one you
  * take.
  *
- * A subclass whose parent is not in the list is NOT dropped. An export
- * with Bladesinger and no Wizard is a real thing — a module that ships
- * subclasses alone — and hiding them would lose rows with nothing
- * anywhere saying so. They stay in the list as their own entries.
+ * ---------------------------------------------------------------------
+ * Grouping is by the parent's NAME, not by finding the parent's ROW.
+ *
+ * That distinction is the whole of this function, and it is not
+ * hypothetical. A Foundry export can easily hold the 2024 printing of
+ * every base class and the 2014 printing of every subclass — which is
+ * exactly what Derek's does. Run the 5e edition rule over that and
+ * every base class is dropped while the subclasses survive, so
+ * matching subclasses to a surviving Fighter ROW finds nothing and the
+ * screen falls back to a flat pile of subclasses. Which is what
+ * "classes are not grouping by the main class" looked like.
+ *
+ * A subclass knows the name of its class whether or not that class's
+ * entry is in the library, so that name is what groups them. Where
+ * nothing supplies the class itself, the group still appears, headed
+ * by a row marked `absent` — Fighter exists in 5e even when this
+ * library only has the 2024 write-up of it, and showing its subclasses
+ * under a heading is better than showing them loose or not at all.
  */
 export function classRows(rows: Record<string, unknown>[]): {
   rows: Record<string, unknown>[];
@@ -213,23 +230,42 @@ export function classRows(rows: Record<string, unknown>[]): {
   const key = (v: unknown) =>
     String(v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 
-  const classNames = new Set(
-    rows.filter((r) => r.isSubclass !== true).map((r) => key(r.name))
-  );
+  const classes = rows.filter((r) => r.isSubclass !== true);
+  const haveClass = new Set(classes.map((r) => key(r.name)));
 
   const subclassesOf = new Map<string, Record<string, unknown>[]>();
-  const orphans: Record<string, unknown>[] = [];
+  /** Its own row: a subclass that does not say whose it is. */
+  const unattached: Record<string, unknown>[] = [];
+  /** parentClass as WRITTEN, for headings we have to supply ourselves. */
+  const writtenName = new Map<string, string>();
 
   for (const row of rows) {
     if (row.isSubclass !== true) continue;
     const parent = key(row.parentClass);
-    if (!parent || !classNames.has(parent)) {
-      orphans.push(row);
+    if (!parent) {
+      unattached.push(row);
       continue;
+    }
+    if (!writtenName.has(parent)) {
+      writtenName.set(parent, String(row.parentClass ?? "").trim());
     }
     const list = subclassesOf.get(parent);
     if (list) list.push(row);
     else subclassesOf.set(parent, [row]);
+  }
+
+  // A heading for every class named by a subclass but not supplied by
+  // the library. Synthetic, and says so: it carries no hit die or
+  // saving throws because nothing here knows them.
+  const inferred: Record<string, unknown>[] = [];
+  for (const parent of subclassesOf.keys()) {
+    if (haveClass.has(parent)) continue;
+    inferred.push({
+      _id: `${ABSENT_CLASS_ID}${parent}`,
+      name: writtenName.get(parent) ?? parent,
+      isSubclass: false,
+      absent: true,
+    });
   }
 
   // Each class's subclasses in name order, so the entry reads the same
@@ -241,7 +277,7 @@ export function classRows(rows: Record<string, unknown>[]): {
   }
 
   return {
-    rows: [...rows.filter((r) => r.isSubclass !== true), ...orphans],
+    rows: [...classes, ...inferred, ...unattached],
     subclassesOf,
   };
 }

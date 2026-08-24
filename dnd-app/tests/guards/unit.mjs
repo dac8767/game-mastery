@@ -3310,25 +3310,57 @@ export const unit = {
       "and they are in name order regardless of input order",
       (cr.subclassesOf.get("fighter") ?? [])[0].name === "Battle Master"
     );
-    // The row that would otherwise vanish. This is the whole reason
-    // orphans are kept rather than filtered.
+    // The case that was reported as "classes are not grouping". A
+    // library can hold the 2024 printing of every base class and the
+    // 2014 printing of every subclass; run the 5e rule over it and the
+    // classes are gone while the subclasses remain. Matching on the
+    // parent ROW then finds nothing and the list is a flat pile.
     check(
-      "a subclass with no parent in the list is NOT lost",
-      cr.rows.some((r) => r.name === "Bladesinger")
+      "a subclass whose class is absent is still grouped under it",
+      (cr.subclassesOf.get("sorcerer") ?? []).some(
+        (r) => r.name === "Bladesinger"
+      )
     );
     check(
-      "nothing is lost overall",
-      cr.rows.length +
+      "and the group gets a heading row, marked as inferred",
+      cr.rows.some((r) => r.name === "Sorcerer" && r.absent === true)
+    );
+    check(
+      "an inferred heading is not mistaken for a subclass",
+      cr.rows
+        .filter((r) => r.absent === true)
+        .every((r) => r.isSubclass !== true)
+    );
+    check(
+      "its id is marked, so nothing tries to fetch a row that is not there",
+      cr.rows
+        .filter((r) => r.absent === true)
+        .every((r) => String(r._id).startsWith(look.ABSENT_CLASS_ID))
+    );
+    check(
+      "nothing real is lost overall",
+      cr.rows.filter((r) => r.absent !== true).length +
         [...cr.subclassesOf.values()].reduce((n, l) => n + l.length, 0) ===
         CLASSES.length
     );
     check(
-      "and nothing is counted twice",
+      "and nothing real is counted twice",
       new Set([
-        ...cr.rows.map((r) => r._id),
+        ...cr.rows.filter((r) => r.absent !== true).map((r) => r._id),
         ...[...cr.subclassesOf.values()].flat().map((r) => r._id),
       ]).size === CLASSES.length
     );
+    // A subclass that names no class at all cannot be grouped, so it
+    // keeps its own row rather than vanishing into a blank heading.
+    check(
+      "a subclass naming no class keeps its own row",
+      look
+        .classRows([
+          { _id: "z", name: "Mystery", isSubclass: true },
+        ])
+        .rows.some((r) => r.name === "Mystery")
+    );
+
     check(
       "a parent named with different casing still matches",
       (look
@@ -3969,6 +4001,29 @@ export const unit = {
         .size === new Set(library.map((r) => r.name)).size &&
         new Set(filt.applyEdition(library, "2024", "items").map((r) => r.name))
           .size === new Set(library.map((r) => r.name)).size
+    );
+
+    // The whole point, end to end: the 5e edition rule and the
+    // grouping together must still produce a list of CLASSES.
+    check(
+      "a 5e library of 2024 classes and 2014 subclasses still groups",
+      (() => {
+        const lib = filt.applyEdition(
+          [
+            { _id: "1", name: "Fighter", isSubclass: false, source: "PHB 2024" },
+            { _id: "2", name: "Arcane Archer", isSubclass: true, parentClass: "Fighter", source: "XGtE" },
+            { _id: "3", name: "Banneret", isSubclass: true, parentClass: "Fighter", source: "FRHoF" },
+          ],
+          "2014",
+          "classes"
+        );
+        const g = look.classRows(lib);
+        return (
+          g.rows.length === 1 &&
+          g.rows[0].name === "Fighter" &&
+          (g.subclassesOf.get("fighter") ?? []).length === 2
+        );
+      })()
     );
 
     // ---- the same entry, imported twice ----------------------------

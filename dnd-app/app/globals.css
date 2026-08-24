@@ -6528,6 +6528,19 @@ button.cal-day:hover {
   border-top: 1px solid var(--border);
 }
 
+/* Said plainly when the class itself is not in the library: the group
+   exists because its subclasses name it. */
+.lk-inferred {
+  margin: 0 0 0.5rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  max-width: 60ch;
+}
+
 /* A class's subclasses, listed inside its own entry. Deliberately a
    plain list rather than a second table: it says which ones exist, and
    the entry you are already reading says what the class is. */

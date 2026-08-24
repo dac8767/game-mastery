@@ -14,6 +14,7 @@ import {
   abilityCells,
   artSrc,
   buildFacts,
+  ABSENT_CLASS_ID,
   buildSubtitle,
   classRows,
   columnTemplate,
@@ -168,7 +169,9 @@ export function LookupTool({
         sort.key,
         sort.desc
       ),
-    [kind, library, filters, sort]
+    // `listed`, not `library` — it is what the memo actually reads, and
+    // on the classes tab the two are different arrays.
+    [kind, listed, filters, sort]
   );
   const shown = matched.slice(0, MAX_ROWS);
 
@@ -463,9 +466,14 @@ function ExpandedRow({
     api.lookup.getBackground,
     kind === "backgrounds" ? { id: id as Id<"backgrounds"> } : "skip"
   );
+  /* An inferred class has no row to fetch — it exists because its
+     subclasses name it, not because the library holds it. Asking
+     Convex for it would send a synthetic id to a validator expecting a
+     real one, which is an error, not an empty result. */
+  const absent = id.startsWith(ABSENT_CLASS_ID);
   const klass = useQuery(
     api.lookup.getClass,
-    kind === "classes" ? { id: id as Id<"classes"> } : "skip"
+    kind === "classes" && !absent ? { id: id as Id<"classes"> } : "skip"
   );
   const speciesRow = useQuery(
     api.lookup.getSpecies,
@@ -483,6 +491,24 @@ function ExpandedRow({
     classes: klass,
     species: speciesRow,
   }[kind] as Record<string, unknown> | null | undefined;
+
+  if (absent) {
+    return (
+      <div className="lk-panel">
+        <article className="lk lk-classes">
+          <p className="lk-inferred">
+            This library has no entry for the class itself — only the
+            subclasses below, which name it. In a 5e campaign that is
+            usually because the only write-up of the class is the 2024
+            one, which a 5e game does not use.
+          </p>
+          {subclasses && subclasses.length > 0 && (
+            <SubclassList subclasses={subclasses} />
+          )}
+        </article>
+      </div>
+    );
+  }
 
   return (
     <div className="lk-panel">
@@ -555,25 +581,7 @@ function LookupDetail({
           one you take. Below the description rather than beside it:
           the general rules come first because you read them first. */}
       {kind === "classes" && subclasses && subclasses.length > 0 && (
-        <section className="lk-subclasses">
-          <h3 className="lk-h">
-            Subclasses{" "}
-            <span className="lk-subclass-count">{subclasses.length}</span>
-          </h3>
-          <ul className="lk-subclass-list">
-            {subclasses.map((sub) => {
-              const clean = splitSource(sub.name, sub.source);
-              return (
-                <li key={String(sub._id)}>
-                  <span className="lk-subclass-name">{clean.name}</span>
-                  {clean.source && (
-                    <span className="lk-subclass-src">{clean.source}</span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </section>
+        <SubclassList subclasses={subclasses} />
       )}
 
       {kind === "spells" && typeof row.materials === "string" && row.materials && (
@@ -582,6 +590,39 @@ function LookupDetail({
 
       {source && <p className="lk-source">{source}</p>}
     </article>
+  );
+}
+
+/**
+ * A class's subclasses, under everything that applies whichever one
+ * you take. Below the description rather than beside it: the general
+ * rules come first because you read them first.
+ */
+function SubclassList({
+  subclasses,
+}: {
+  subclasses: Record<string, unknown>[];
+}) {
+  return (
+    <section className="lk-subclasses">
+      <h3 className="lk-h">
+        Subclasses{" "}
+        <span className="lk-subclass-count">{subclasses.length}</span>
+      </h3>
+      <ul className="lk-subclass-list">
+        {subclasses.map((sub) => {
+          const clean = splitSource(sub.name, sub.source);
+          return (
+            <li key={String(sub._id)}>
+              <span className="lk-subclass-name">{clean.name}</span>
+              {clean.source && (
+                <span className="lk-subclass-src">{clean.source}</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
