@@ -1675,11 +1675,25 @@ export const integrity = {
       };
       const title = sizeOf(".nav-group-title");
       const item = sizeOf(".nav-item");
-      if (!(title > item)) {
+      // Not-smaller, rather than larger. The reported defect was a
+      // heading set BELOW its own contents, which reads as a caption on
+      // the row above; equal size with bold and capitals is where Derek
+      // settled, and a guard demanding larger would have refused it.
+      if (title < item) {
         problems.push(
           `a sidebar section title is ${title}rem and the items under it ` +
-            `are ${item}rem — a heading set no larger than its own contents ` +
+            `are ${item}rem — a heading set smaller than its own contents ` +
             "reads as a caption on the row above it"
+        );
+      }
+      // The caret is the section title's one control, so it does not
+      // shrink with the words.
+      const caret = sizeOf(".nav-fold");
+      if (caret < title) {
+        problems.push(
+          `the sidebar's fold caret is ${caret}rem against a ${title}rem ` +
+            "title — at or below text size it reads as punctuation rather " +
+            "than as the thing you click"
         );
       }
       const titleBlock = css.slice(

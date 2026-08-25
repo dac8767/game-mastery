@@ -512,11 +512,13 @@ button {
   gap: 0.35rem;
   width: 100%;
   padding: 0 0.6rem 0.4rem;
-  /* LARGER than the items under it, and bold. A heading set smaller
-     and lighter than its own contents reads as a caption on the item
-     above rather than as the top of a group — which is what a section
-     title in a list has to do before it does anything else. */
-  font-size: 0.95rem;
+  /* The SIZE of the items under it, and bold. It was set smaller and
+     lighter than its own contents, which reads as a caption on the row
+     above rather than as the top of a group; bigger than them was the
+     first correction and overshot — a heading does not have to shout
+     to outrank a list, it just must not be quieter than one. Weight,
+     capitals and the caret carry it at the same size. */
+  font-size: 0.88rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -543,8 +545,11 @@ button {
    like a stray bullet. */
 .nav-fold {
   display: inline-block;
-  width: 0.9rem;
-  font-size: 0.85rem;
+  width: 1.05rem;
+  /* Larger than the heading it belongs to, now that the heading is no
+     larger than the rows: it is the only part of a section title that
+     is a CONTROL, and at text size it read as punctuation. */
+  font-size: 1.05rem;
   line-height: 1;
   color: var(--text-dim);
 }
