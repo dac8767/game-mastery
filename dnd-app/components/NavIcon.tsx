@@ -140,14 +140,15 @@ function D20Icon() {
 function TrifoldIcon() {
   return (
     <Glyph>
-      <path d="M6.5 8.8h11v10.4h-11Z" />
+      <path d="M7.2 8.8h9.6v10H7.2Z" />
       {/* Parallelograms: each wing's inner edge IS the centre panel's
-          side, at its full height, with the outer edge lifted by four
-          units — the same 1.45:1 overall footprint the reference has.
-          Drawn any taller than it is wide and it stops being a screen
-          on a table and becomes a box. */}
-      <path d="M6.5 8.8 1.6 4.8v10.4l4.9 4" />
-      <path d="M17.5 8.8l4.9-4v10.4l-4.9 4" />
+          side, at its full height, with the outer edge lifted.
+          Measured off the reference rather than judged by eye, because
+          three numbers carry the whole picture: the centre is 46% of
+          the width, each wing 27%, and the lift is 38% of the panel's
+          height, in a footprint half again as wide as it is tall. */}
+      <path d="M7.2 8.8 1.6 5v10l5.6 3.8" />
+      <path d="M16.8 8.8 22.4 5v10l-5.6 3.8" />
     </Glyph>
   );
 }

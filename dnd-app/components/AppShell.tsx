@@ -196,15 +196,53 @@ export function AppShell({
             to show a heading of its own. It is a block now, and every
             section below is an ordinary section. */}
         <div className="nav-campaign-block">
-          {/* The campaign name doubles as the link to the live table. */}
+          {/* The campaign name doubles as the link to the live table.
+              No DM badge beside it any more: the switch below says
+              which of the two you are looking as, which is the same
+              fact and the more useful half of it. Admin stays —
+              borrowed authority is labelled, never disguised. */}
           <Link href={base} className="nav-campaign">
             <span className="nav-campaign-icon">☾</span>
             <span className="nav-campaign-name">
               {campaign?.name ?? "Campaign"}
             </span>
-            {campaign?.isDm && <span className="badge">DM</span>}
             {campaign?.viaAdmin && <span className="badge admin">Admin</span>}
           </Link>
+
+          {/* Which of the two you are seeing, and one click to the
+              other. It was a single button in the footer that changed
+              its own label — so what it SAID and what you were looking
+              at were the same word doing two jobs, and you read it to
+              find out which.
+
+              Two options with one marked cannot be a one-way door
+              either, which the single button had to be careful about:
+              both are drawn whenever you run this campaign, so the way
+              back is on screen while you are in the preview. That is
+              the structural check (runsThis), never the
+              previewing-adjusted one. */}
+          {runsThis && (
+            <div className="view-as" role="group" aria-label="View as">
+              <span className="view-as-label">View as:</span>
+              <button
+                type="button"
+                className={`view-as-opt${previewing ? "" : " on"}`}
+                aria-pressed={!previewing}
+                onClick={() => void saveSettings({ viewAsPlayer: false })}
+              >
+                DM
+              </button>
+              <button
+                type="button"
+                className={`view-as-opt${previewing ? " on" : ""}`}
+                title="See the app as a player in this campaign sees it"
+                aria-pressed={previewing}
+                onClick={() => void saveSettings({ viewAsPlayer: true })}
+              >
+                Player
+              </button>
+            </div>
+          )}
         </div>
 
         {/* The sidebar, as this person arranged it. */}
@@ -260,17 +298,9 @@ export function AppShell({
             <span className="nav-icon">⚙</span>
             Settings
           </Link>
-          {runsThis && (
-            <button
-              type="button"
-              className={`nav-item as-button${previewing ? " active" : ""}`}
-              title="See the app as a player in this campaign sees it"
-              onClick={() => void saveSettings({ viewAsPlayer: !previewing })}
-            >
-              <span className="nav-icon">{previewing ? "◉" : "◎"}</span>
-              {previewing ? "Viewing as player" : "View as Player"}
-            </button>
-          )}
+          {/* View as Player used to be here. It is a switch about who
+              you are, which belongs with the campaign it is about,
+              rather than a place to go filed with the places. */}
           <Link href="/" className="nav-item subtle">
             <span className="nav-icon">⇤</span>
             All campaigns

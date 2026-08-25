@@ -512,8 +512,13 @@ button {
   gap: 0.35rem;
   width: 100%;
   padding: 0 0.6rem 0.4rem;
-  font-size: 0.68rem;
-  letter-spacing: 0.1em;
+  /* LARGER than the items under it, and bold. A heading set smaller
+     and lighter than its own contents reads as a caption on the item
+     above rather than as the top of a group — which is what a section
+     title in a list has to do before it does anything else. */
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-dim);
   background: none;
@@ -532,11 +537,15 @@ button {
 }
 
 /* The caret is the one part that has to stay put: a heading whose
-   arrow shifts as the word changes length reads as two controls. */
+   arrow shifts as the word changes length reads as two controls.
+   Sized against the heading rather than against the items, because it
+   is the heading's control — a 0.6rem arrow under a 0.95rem word looks
+   like a stray bullet. */
 .nav-fold {
   display: inline-block;
-  width: 0.7rem;
-  font-size: 0.6rem;
+  width: 0.9rem;
+  font-size: 0.85rem;
+  line-height: 1;
   color: var(--text-dim);
 }
 
@@ -572,6 +581,47 @@ button {
 .nav-campaign .badge {
   margin-left: 0;
   font-size: 0.6rem;
+}
+
+/* Which of the two you are looking as, under the campaign it is about.
+   A segmented pair rather than one button that renames itself: the old
+   one made the label and the state the same word, so you read it to
+   find out which of the two it was telling you. */
+.view-as {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0 0.6rem 0.6rem;
+}
+
+.view-as-label {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  margin-right: 0.1rem;
+}
+
+.view-as-opt {
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.view-as-opt:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+/* The one you are ON, said with the accent the app uses for "this is
+   current" everywhere else. */
+.view-as-opt.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .nav-list {

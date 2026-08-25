@@ -1567,6 +1567,75 @@ export const integrity = {
             "screens on screen"
         );
       }
+
+      // The same door, checked at the level below. The switch is a
+      // segmented pair now, and BOTH halves have to be on screen
+      // whenever you run the campaign — the previewing state may decide
+      // which is marked, never which exists. Gate the DM option on
+      // being in a preview and the way out is a button you have to
+      // already be somewhere else to see.
+      const at = shellSrc.indexOf('className="view-as"');
+      if (at === -1) {
+        problems.push(
+          "no view-as switch in AppShell — a DM who previews as a player " +
+            "would have no way back short of Settings, which the preview " +
+            "also filters"
+        );
+      } else {
+        const block = shellSrc.slice(at, shellSrc.indexOf("</div>", at));
+        const opts = [...block.matchAll(/className=\{`view-as-opt/g)].length;
+        if (opts !== 2) {
+          problems.push(
+            `the view-as switch draws ${opts} options — it is DM and ` +
+              "Player, both always present, with the current one marked"
+          );
+        }
+        if (/\bpreviewing &&\s*\(?\s*</.test(block) || /!previewing &&\s*\(?\s*</.test(block)) {
+          problems.push(
+            "one of the view-as options is only rendered in one of the " +
+              "two states — that is the one-way door again, wearing a " +
+              "segmented control's clothes"
+          );
+        }
+      }
+    }
+
+    // ---- a section heading outranks the items under it --------------
+    // Reported: the titles read as captions on the item above rather
+    // than as the top of a group, because they were set SMALLER and
+    // lighter than their own contents. The relationship is the fix, so
+    // the relationship is what is checked — two numbers in one
+    // stylesheet with nothing but this connecting them.
+    {
+      const css = read("app", "globals.css");
+      const sizeOf = (selector) => {
+        const at = css.indexOf(`${selector} {`);
+        if (at === -1) throw new Error(`no ${selector} rule in globals.css`);
+        const m = /font-size:\s*([\d.]+)rem/.exec(
+          css.slice(at, css.indexOf("}", at))
+        );
+        if (!m) throw new Error(`no font-size on ${selector}`);
+        return Number(m[1]);
+      };
+      const title = sizeOf(".nav-group-title");
+      const item = sizeOf(".nav-item");
+      if (!(title > item)) {
+        problems.push(
+          `a sidebar section title is ${title}rem and the items under it ` +
+            `are ${item}rem — a heading set no larger than its own contents ` +
+            "reads as a caption on the row above it"
+        );
+      }
+      const titleBlock = css.slice(
+        css.indexOf(".nav-group-title {"),
+        css.indexOf("}", css.indexOf(".nav-group-title {"))
+      );
+      if (!/font-weight:\s*(6|7|8|9)\d\d/.test(titleBlock)) {
+        problems.push(
+          "a sidebar section title is not bold — size alone does not " +
+            "separate a heading from a row when both are the same colour"
+        );
+      }
     }
 
     // And the sidebar has to be built from the person's layout rather
