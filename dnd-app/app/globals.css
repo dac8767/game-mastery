@@ -2401,19 +2401,123 @@ body.col-resizing {
 
 /* ---------- Feedback form ---------- */
 
+/* A window, not a modal: it moves, it resizes, and it dims nothing.
+   Position and size are set inline from the drag, so this rule states
+   NO top, left, transform, width or height — a `transform:
+   translate(-50%, -50%)` left here would offset every drag by half the
+   window and look like the pointer had slipped.
+
+   And with nothing dimmed behind it, the shadow is the only thing
+   saying this floats above the page rather than sitting in it. */
 .feedback-modal {
   position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: min(34rem, calc(100vw - 2rem));
-  max-height: min(90dvh, 48rem);
-  overflow-y: auto;
   z-index: 11;
-  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: 14px;
+  box-shadow: 0 1.4rem 3rem rgba(0, 0, 0, 0.55);
+}
+
+/* The title bar doubles as the handle. `touch-action: none` so a drag
+   on a trackpad or a touchscreen moves the window instead of scrolling
+   whatever is underneath it. */
+.feedback-grip {
+  flex: none;
+  margin-bottom: 0;
+  padding: 0.9rem 1.25rem 0.6rem;
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+
+.feedback-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 1.25rem 1.25rem;
+}
+
+/* The corner grip: three diagonal strokes, drawn rather than shipped as
+   an image. */
+.feedback-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 1.15rem;
+  height: 1.15rem;
+  cursor: nwse-resize;
+  touch-action: none;
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 3px,
+    var(--border) 3px 4px
+  );
+}
+
+/* ---------- Screen capture ---------- */
+
+.feedback-grabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* The captured picture, full screen, waiting for a rectangle. Above
+   everything else in the app: it is showing a photograph of that app,
+   and anything drawn over the photo reads as part of it. */
+.shot-picker {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.75rem 1rem 1rem;
+  background: rgba(0, 0, 0, 0.82);
+}
+
+.shot-picker-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.shot-picker-frame {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.shot-picker-frame img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+  border: 1px solid var(--border);
+}
+
+/* Fixed, because the drag is tracked in viewport coordinates — the
+   rectangle then needs to know nothing about where the picture sits. */
+.shot-picker-rect {
+  position: fixed;
+  z-index: 81;
+  pointer-events: none;
+  border: 2px solid var(--accent);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .feedback-form {

@@ -32,6 +32,12 @@ function compile(relPath) {
         outDir: out,
         module: "es2022",
         target: "es2022",
+        // The DOM's types, so a browser-side module can be compiled for
+        // its pure half. `screenGrab.ts` names `navigator` and `Blob`
+        // in functions that never run here; without this the file will
+        // not compile at all and its rectangle arithmetic — the part
+        // most worth testing — goes untested.
+        lib: ["es2022", "dom"],
         moduleResolution: "bundler",
         skipLibCheck: true,
         baseUrl: APP_ROOT,
@@ -5835,6 +5841,198 @@ export const unit = {
           groups.groupKey("   ") === ""
         );
       }
+    }
+
+    // ---- a rectangle drawn on a picture of the screen --------------
+    // The capture itself needs a browser and a person clicking a share
+    // picker. The arithmetic between "where the hand went" and "which
+    // pixels to keep" needs neither, and is where this goes wrong: a
+    // backwards drag, a drag that leaves the image, a display size that
+    // is not the image's size.
+    {
+      const sg = await import(
+        pathToFileURL(join(compile("components/screenGrab.ts"), "screenGrab.js"))
+          .href
+      );
+
+      const back = sg.normalizeRect(300, 260, 100, 60);
+      check(
+        "a drag up and to the left is still a rectangle",
+        back.x === 100 && back.y === 60 && back.w === 200 && back.h === 200
+      );
+      check(
+        "a drag down and to the right agrees with it",
+        JSON.stringify(sg.normalizeRect(100, 60, 300, 260)) ===
+          JSON.stringify(back)
+      );
+
+      // The overlay shows the capture shrunk to fit; the crop happens
+      // in the capture's own pixels.
+      const scaled = sg.toNatural(
+        { x: 50, y: 25, w: 100, h: 50 },
+        { w: 500, h: 250 },
+        { w: 1000, h: 500 }
+      );
+      check(
+        "a crop scales from the displayed size to the real one",
+        scaled.x === 100 &&
+          scaled.y === 50 &&
+          scaled.w === 200 &&
+          scaled.h === 100
+      );
+
+      // A drag that leaves the image reports coordinates outside it,
+      // and a crop starting at -40 comes back with a transparent band.
+      const off = sg.toNatural(
+        { x: -40, y: -40, w: 100, h: 100 },
+        { w: 500, h: 500 },
+        { w: 500, h: 500 }
+      );
+      check(
+        "a crop that starts off the image starts at its corner",
+        off.x === 0 && off.y === 0
+      );
+
+      const over = sg.toNatural(
+        { x: 400, y: 400, w: 400, h: 400 },
+        { w: 500, h: 500 },
+        { w: 500, h: 500 }
+      );
+      check(
+        "a crop cannot run off the far edge either",
+        over.x === 400 && over.w === 100 && over.h === 100
+      );
+
+      check(
+        "a crop of nothing, from an image with no size, is nothing",
+        JSON.stringify(
+          sg.toNatural({ x: 10, y: 10, w: 10, h: 10 }, { w: 0, h: 0 }, { w: 9, h: 9 })
+        ) === JSON.stringify({ x: 0, y: 0, w: 0, h: 0 })
+      );
+
+      check(
+        "a click is not a crop",
+        sg.isTinyRect({ x: 4, y: 4, w: 2, h: 2 }) === true
+      );
+      check(
+        "a rectangle one side of which is a hair wide is not a crop",
+        sg.isTinyRect({ x: 0, y: 0, w: 400, h: 3 }) === true
+      );
+      check(
+        "a deliberate rectangle is",
+        sg.isTinyRect({ x: 0, y: 0, w: 40, h: 40 }) === false
+      );
+
+      // Two shots of a still screen are two attachments, not one: the
+      // form drops a file whose name and size match one already there.
+      check(
+        "a capture is named for the moment it was taken",
+        /^page-\d{4}-\d{2}-\d{2}T/.test(
+          sg.shotFile(new Blob(["x"], { type: "image/png" }), "page").name
+        )
+      );
+    }
+
+    // ---- a window you can move and resize --------------------------
+    // Every bug here is an unreachable window: a title bar dragged
+    // above the top of the screen, a corner pulled until the frame is
+    // smaller than its own close button, a browser resized under a
+    // window parked at the right edge.
+    {
+      const fw = await import(
+        pathToFileURL(
+          join(compile("components/floatWindow.ts"), "floatWindow.js")
+        ).href
+      );
+      const view = { w: 1200, h: 800 };
+
+      const opened = fw.initialBox(view, { w: 544, h: 620 });
+      check(
+        "a window opens centred at the size it asked for",
+        opened.w === 544 &&
+          opened.h === 620 &&
+          opened.x === Math.round((1200 - 544) / 2) &&
+          opened.y === Math.round((800 - 620) / 2)
+      );
+
+      const cramped = fw.initialBox({ w: 700, h: 400 }, { w: 900, h: 900 });
+      check(
+        "a window too big for the screen opens fitting it",
+        cramped.w <= 700 && cramped.h <= 400 && cramped.x >= 0 && cramped.y >= 0
+      );
+
+      const box = { x: 400, y: 300, w: 544, h: 620 };
+
+      check(
+        "dragging up past the top leaves the title bar on screen",
+        fw.moveBox(box, 0, -5000, view).y === 0
+      );
+      check(
+        "dragging off the right leaves the window on screen",
+        fw.moveBox(box, 5000, 0, view).x === view.w - box.w
+      );
+
+      // The reason move takes the box the drag STARTED from: clamping
+      // is not cumulative, so a drag into an edge and back out lands
+      // where the hand is rather than short of it by whatever the edge
+      // refused.
+      check(
+        "a drag past an edge and back lands under the hand",
+        fw.moveBox(box, 10, 10, view).x === 410 &&
+          fw.moveBox(box, -5000, 0, view).x === 0
+      );
+
+      const small = fw.resizeBox(box, -5000, -5000, view);
+      check(
+        "a window cannot be shrunk into nothing",
+        small.w === fw.MIN_W && small.h === fw.MIN_H
+      );
+      check(
+        "and shrinking it does not move it",
+        small.x === box.x && small.y === box.y
+      );
+
+      const grown = fw.resizeBox(box, 5000, 5000, view);
+      check(
+        "growing a window stops at the edge of the screen",
+        grown.x === box.x &&
+          grown.y === box.y &&
+          grown.x + grown.w === view.w &&
+          grown.y + grown.h === view.h
+      );
+
+      check(
+        "a browser shrunk under a window pulls the window back into it",
+        (() => {
+          const pulled = fw.clampBox({ x: 900, y: 700, w: 544, h: 620 }, {
+            w: 1000,
+            h: 900,
+          });
+          return (
+            pulled.x + pulled.w <= 1000 &&
+            pulled.y + pulled.h <= 900 &&
+            pulled.x >= 0 &&
+            pulled.y >= 0
+          );
+        })()
+      );
+
+      // A viewport narrower than the smallest allowed window: the range
+      // to clamp into is inverted, and the naive reading pins the box
+      // to a corner it cannot be dragged out of.
+      const tiny = fw.clampBox({ x: 50, y: 50, w: 544, h: 620 }, {
+        w: 200,
+        h: 150,
+      });
+      check(
+        "a window bigger than the whole viewport sits at its corner",
+        tiny.x === 0 && tiny.y === 0 && tiny.w === fw.MIN_W
+      );
+      check(
+        "and can still be pushed the other way to see its far side",
+        fw.clampBox({ x: -5000, y: 0, w: 544, h: 620 }, { w: 200, h: 150 }).x ===
+          200 - fw.MIN_W
+      );
     }
 
     return problems;

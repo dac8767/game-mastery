@@ -3621,6 +3621,145 @@ export const integrity = {
       );
     }
 
+    // ---- the feedback window floats, and photographs what is under it
+    // Reported: it dimmed and blocked the screen it was asking you to
+    // describe. It is now a window — movable, resizable, no scrim —
+    // with two capture buttons, and every one of the checks below is a
+    // failure that looks fine in a screenshot of the happy path.
+    {
+      const form = read("components", "FeedbackForm.tsx");
+      const code = stripComments(form);
+      const grab = read("components", "screenGrab.ts");
+      const css = read("app", "globals.css");
+
+      if (/drawer-scrim/.test(code)) {
+        problems.push(
+          "the feedback window renders a scrim — it must not dim or block " +
+            "the screen the report is about, which is the whole reason it " +
+            "moves"
+        );
+      }
+
+      const modal = (() => {
+        const at = css.indexOf(".feedback-modal {");
+        if (at === -1) throw new Error("no .feedback-modal rule in globals.css");
+        return css.slice(at, css.indexOf("}", at));
+      })();
+      if (!/position:\s*fixed/.test(modal)) {
+        problems.push(".feedback-modal is not position: fixed");
+      }
+      // Position and size come from the drag, inline. A stylesheet that
+      // also has an opinion wins on specificity for `transform` and
+      // loses silently for the rest: the window then sits half a window
+      // away from the pointer, or refuses to resize at all.
+      for (const prop of ["top", "left", "transform", "width", "height"]) {
+        if (new RegExp(`(^|[;{\\s])${prop}\\s*:`).test(modal)) {
+          problems.push(
+            `.feedback-modal sets ${prop} in CSS — the window's position ` +
+              "and size are set inline from the drag, and a stylesheet " +
+              "value here fights them"
+          );
+        }
+      }
+
+      // The element that gets hidden for a capture has to be the window
+      // itself. Hiding the wrong node produces a screenshot of the bug
+      // report sitting on top of the bug.
+      const tag = code.slice(
+        code.indexOf('className="feedback-modal"') - 200,
+        code.indexOf('className="feedback-modal"') + 400
+      );
+      const refName = /ref=\{(\w+)\}/.exec(tag)?.[1];
+      if (!refName) {
+        problems.push(
+          "the .feedback-modal element carries no ref — nothing can hide " +
+            "it for a capture"
+        );
+      } else if (
+        !new RegExp(`grabScreen\\(\\s*${refName}\\.current\\s*\\)`).test(code)
+      ) {
+        problems.push(
+          `the feedback window is held in \`${refName}\` but that is not ` +
+            "what is passed to grabScreen — a capture would leave the " +
+            "report itself in the picture"
+        );
+      }
+
+      // One adder, so the six-attachment cap and the duplicate check
+      // apply to captures as well as to picked files. Two writes are
+      // expected: the adder, and Remove.
+      const writes = (code.match(/setShots\(/g) ?? []).length;
+      if (writes !== 2) {
+        problems.push(
+          `FeedbackForm writes shots from ${writes} places — every ` +
+            "screenshot must go through the one adder, or a capture is the " +
+            "path that goes past " +
+            "the cap"
+        );
+      }
+      const adder = code.slice(
+        code.indexOf("const addShots"),
+        code.indexOf("async function capture")
+      );
+      if (!/SHOT_MAX/.test(adder) || !/f\.name === file\.name/.test(adder)) {
+        problems.push(
+          "the shot adder no longer applies both the cap and the " +
+            "name-and-size duplicate check"
+        );
+      }
+      for (const kind of ['capture("page")', 'capture("area")']) {
+        if (!code.includes(kind)) {
+          problems.push(`the feedback window has no ${kind} button`);
+        }
+      }
+      // Past the imports, so that merely importing the check does not
+      // satisfy the guard — the gate has to be computed and used.
+      const afterImports = code.slice(code.indexOf("const SHOT_MAX"));
+      if (!/canGrabScreen/.test(afterImports)) {
+        problems.push(
+          "nothing gates the capture buttons on the browser being able to " +
+            "capture — in a browser that cannot, they would be two buttons " +
+            "that do nothing"
+        );
+      }
+
+      // The marquee is drawn in the viewport's pixels and the picture is
+      // in the screen's. Cropping with the raw rectangle cuts out a
+      // region near the right one and nowhere near obviously wrong.
+      const cut = /const (\w+)\s*=\s*toNatural\(/.exec(code)?.[1];
+      if (!cut) {
+        problems.push(
+          "the area crop does not go through toNatural — a rectangle drawn " +
+            "on screen is not a rectangle in the captured image"
+        );
+      } else if (!new RegExp(`cropBlob\\([^)]*\\b${cut}\\b`).test(code)) {
+        problems.push(
+          `toNatural's result (\`${cut}\`) is not what cropBlob is given`
+        );
+      }
+
+      // Two frames, not one: the first can arrive before the browser has
+      // finished compositing the hidden window away.
+      if ((grab.match(/await nextFrame\(\)/g) ?? []).length < 2) {
+        problems.push(
+          "grabScreen waits one frame after hiding the window — the first " +
+            "frame can still contain it"
+        );
+      }
+      const cleanup = grab.slice(grab.indexOf("} finally {"), grab.length);
+      if (
+        !/visibility = previous/.test(cleanup) ||
+        !/getTracks\(\)/.test(cleanup)
+      ) {
+        problems.push(
+          "grabScreen does not both restore the window and stop the stream " +
+            "in its finally — a thrown capture would leave the window " +
+            "invisible, or the browser sharing the screen with nobody " +
+            "watching"
+        );
+      }
+    }
+
     return problems;
   },
 };
