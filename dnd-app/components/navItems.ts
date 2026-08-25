@@ -99,7 +99,7 @@ export const LOOKUP_ITEMS: NavItem[] = [
   // left-hand side of every screen and made "look something up" a
   // decision about which list before it was a search. They are tabs on
   // one page now; the order is LOOKUP_TABS in lookupFields.ts.
-  { id: "lookup", label: "Lookup", icon: "✧", slug: "lookup" },
+  { id: "lookup", label: "Lookup", icon: "✧", art: "search", slug: "lookup" },
   // Rules Lawyer is deliberately NOT a tab. It searches rules PROSE
   // out of a different table with a different shape — no columns, no
   // filters, no rows — so a tab strip that included it would promise a

@@ -5425,6 +5425,67 @@ export const unit = {
         sc.SESSION_DEFAULT_SORT.asc === false
       );
 
+      // ---- who the attendance field offers ------------------------
+      // Two sources, because neither alone is the table: members are
+      // the accounts, and a character carries the name of a player who
+      // never made one.
+      check(
+        "both sources are offered, once each",
+        sc
+          .campaignPlayers(
+            [{ displayName: "Ana" }, { displayName: "Bo" }],
+            [{ playerName: "Bo" }, { playerName: "Cy" }]
+          )
+          .join() === "Ana,Bo,Cy"
+      );
+      check(
+        "matching a name ignores case and spacing",
+        sc
+          .campaignPlayers([{ displayName: "  ana  " }], [{ playerName: "ANA" }])
+          .length === 1
+      );
+      check(
+        "a blank name is not a player",
+        sc.campaignPlayers([{ displayName: "" }, { displayName: null }], [{}])
+          .length === 0
+      );
+      // Both queries are undefined until they resolve, and the field
+      // renders before they do.
+      check(
+        "nothing loaded yet is no options, not a crash",
+        sc.campaignPlayers(undefined, undefined).length === 0
+      );
+
+      // Toggling one name off a line of five is where the stored array
+      // and the typed line have to agree exactly.
+      check(
+        "a name not on the line goes on the end",
+        sc.toggleChip("Ana, Bo", "Cy") === "Ana, Bo, Cy"
+      );
+      check(
+        "a name already on it comes off",
+        sc.toggleChip("Ana, Bo, Cy", "Bo") === "Ana, Cy"
+      );
+      check(
+        "and comes off whatever case it was typed in",
+        sc.toggleChip("ana, Bo", "ANA") === "Bo"
+      );
+      check(
+        "toggling onto an empty line is just the name",
+        sc.toggleChip("", "Ana") === "Ana"
+      );
+      check(
+        "and the last one off leaves nothing",
+        sc.toggleChip("Ana", "Ana") === ""
+      );
+      // Which sessionPatch then has to read back as an empty list
+      // rather than as a list holding one empty string.
+      check(
+        "an emptied line stores an empty attendance",
+        sc.sessionPatch("players", sc.toggleChip("Ana", "Ana")).players
+          .length === 0
+      );
+
       // The primary column is a NUMBER, and a column of bare digits
       // under a heading reads as row numbers rather than as sessions.
       // Reported once already, so it is asserted rather than trusted.

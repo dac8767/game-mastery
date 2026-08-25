@@ -1,12 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { BoxCanvas, NewBox } from "@/components/BoxCanvas";
 import { ColumnDef } from "@/components/npcColumns";
-import { SESSION_COLUMNS, sessionPatch } from "@/components/sessionColumns";
+import {
+  SESSION_COLUMNS,
+  campaignPlayers,
+  sessionPatch,
+  toggleChip,
+} from "@/components/sessionColumns";
 import { NotebookFormatBar } from "@/components/NotebookFormatBar";
 import {
   registerScrapbookSaver,
@@ -53,14 +58,27 @@ export type SessionRow = {
 
 export function SessionDetail({
   session,
+  campaignId,
   isDm,
   onClose,
 }: {
   session: SessionRow;
+  campaignId: Id<"campaigns">;
   isDm: boolean;
   onClose: () => void;
 }) {
   const notes = useQuery(api.sessions.getNotes, { sessionId: session._id });
+
+  /* Who the attendance field offers. Two queries because neither alone
+     is the table: members are the accounts, characters carry the name
+     of a player who never made one. Both are small and only mounted
+     while a session is open. */
+  const members = useQuery(api.campaigns.listMembers, { campaignId });
+  const characters = useQuery(api.campaigns.listCharacters, { campaignId });
+  const players = useMemo(
+    () => campaignPlayers(members, characters),
+    [members, characters]
+  );
 
   const updateSession = useMutation(api.sessions.updateSession);
   const deleteSession = useMutation(api.sessions.deleteSession);
@@ -217,6 +235,7 @@ export function SessionDetail({
               col={col}
               value={toInput(session, col.key)}
               editable={isDm}
+              options={col.key === "players" ? players : undefined}
               onCommit={(text) => {
                 const patch = sessionPatch(col.key, text);
                 // Nothing to write is a normal outcome — a blank
@@ -315,11 +334,14 @@ function SessionField({
   col,
   value,
   editable,
+  options,
   onCommit,
 }: {
   col: ColumnDef;
   value: string;
   editable: boolean;
+  /** Values to offer as one-click chips, above the free-text line. */
+  options?: string[];
   onCommit: (text: string) => void;
 }) {
   const [draft, setDraft] = useState(value);
@@ -338,7 +360,7 @@ function SessionField({
   };
 
   return (
-    <label className="detail-field session-field">
+    <label className={`detail-field session-field sf-${col.key}`}>
       <div className="detail-label">{col.label}</div>
       {!editable ? (
         <div className="detail-value">{value || "—"}</div>
@@ -352,6 +374,36 @@ function SessionField({
           onBlur={commit}
         />
       ) : (
+        <>
+          {/* One click each, above the line rather than instead of it.
+              The line stays because attendance is not a closed set —
+              a guest who played one night was there, and a field that
+              only offered the campaign's members would have no way to
+              say so. */}
+          {options && options.length > 0 && (
+            <div className="field-options">
+              {options.map((name) => {
+                const on = draft
+                  .split(",")
+                  .some((v) => v.trim().toLowerCase() === name.toLowerCase());
+                return (
+                  <button
+                    type="button"
+                    key={name}
+                    className={`chip chip-pick${on ? " on" : ""}`}
+                    aria-pressed={on}
+                    onClick={() => {
+                      const next = toggleChip(draft, name);
+                      setDraft(next);
+                      onCommit(next);
+                    }}
+                  >
+                    {name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         <input
           className="detail-input"
           type={col.kind === "number" ? "number" : "text"}
@@ -368,6 +420,7 @@ function SessionField({
             }
           }}
         />
+        </>
       )}
     </label>
   );

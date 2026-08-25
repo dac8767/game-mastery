@@ -31,7 +31,7 @@
  * rendered at 15px means every coordinate below is in sixteenths of a
  * pixel, which is the resolution these are actually designed at.
  */
-function Glyph({ children }: { children: React.ReactNode }) {
+export function Glyph({ children }: { children: React.ReactNode }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -153,6 +153,33 @@ function TrifoldIcon() {
   );
 }
 
+/** A magnifying glass: the thing you look something up with. */
+function SearchIcon() {
+  return (
+    <Glyph>
+      <circle cx="10.5" cy="10.5" r="6.6" />
+      <path d="M15.4 15.4 20.8 20.8" />
+    </Glyph>
+  );
+}
+
+/**
+ * Two chevrons pointing back, for the way out of a campaign.
+ *
+ * Exported rather than in the ART map: it is not a nav item's icon, so
+ * nothing would ever ask for it by name and the guard would rightly
+ * call it a drawing nobody uses. It goes through Glyph like the rest,
+ * which is the part that matters — it sits inches from five icons that
+ * would look wrong beside it at a different weight.
+ */
+export function BackIcon() {
+  return (
+    <Glyph>
+      <path d="M11 5 4 12l7 7M19 5l-7 7 7 7" />
+    </Glyph>
+  );
+}
+
 /** A ring-bound notepad, ruled. */
 function NotepadIcon() {
   return (
@@ -184,6 +211,7 @@ const ART: Record<string, () => React.JSX.Element> = {
   d20: D20Icon,
   trifold: TrifoldIcon,
   notepad: NotepadIcon,
+  search: SearchIcon,
 };
 
 /** The names a nav item may ask for, for the guard to check against. */

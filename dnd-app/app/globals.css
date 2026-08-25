@@ -559,12 +559,39 @@ button {
   display: grid;
 }
 
+/* The way out, then the campaign. Two links side by side rather than
+   one inside the other, which is not a thing HTML allows. */
+.nav-campaign-row {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.25rem 0.35rem 0.5rem;
+}
+
+.nav-back {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 7px;
+  color: var(--text-dim);
+}
+
+.nav-back:hover {
+  background: var(--bg-raised);
+  color: var(--accent);
+}
+
 .nav-campaign {
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  padding: 0.25rem 0.6rem 0.5rem;
-  font-size: 0.95rem;
+  min-width: 0;
+  padding: 0.1rem 0.25rem;
+  /* Larger, now that it is the top of the sidebar rather than the
+     second thing under a wordmark. */
+  font-size: 1.15rem;
   font-weight: 600;
   border-radius: 8px;
 }
@@ -596,7 +623,10 @@ button {
   display: flex;
   align-items: center;
   gap: 0.3rem;
-  padding: 0 0.6rem 0.6rem;
+  /* Lined up with the campaign name above it rather than with the
+     back button, which is a control rather than the start of the
+     column. */
+  padding: 0 0.6rem 0.6rem 2.1rem;
 }
 
 .view-as-label {
@@ -7603,10 +7633,44 @@ button.cal-day:hover {
   min-width: 8rem;
 }
 
-/* The description is the one that wants room. */
+/* Values offered as one-click chips, above the free-text line the
+   field keeps. */
+.field-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 0.15rem;
+}
+
+.chip-pick {
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.chip-pick:hover {
+  border-color: var(--text-dim);
+  color: var(--text);
+}
+
+/* Already on the line, said the way "this is current" is said
+   everywhere else in the app. */
+.chip-pick.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* The two that want room: the description, and attendance once it is
+   holding a line of names and a row of chips above it. */
 .session-field:last-child {
   flex: 1;
   min-width: 20rem;
+}
+
+.sf-players {
+  min-width: 18rem;
 }
 
 /* The two pages of notes, side by side, DM on the left. Stacked below

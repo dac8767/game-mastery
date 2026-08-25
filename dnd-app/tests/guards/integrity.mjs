@@ -1656,6 +1656,24 @@ export const integrity = {
       }
     }
 
+    // ---- there is always a way out of a campaign -------------------
+    // The sidebar is the only navigation in the app, and every link in
+    // it goes further IN. "All campaigns" used to sit in the footer and
+    // was moved to a back button beside the campaign name — leaving is
+    // not a place. If that button ever goes, a campaign becomes a room
+    // with no door: the browser's own back button still works, which is
+    // exactly why nothing on screen would look broken.
+    {
+      const outward = [...shellSrc.matchAll(/href="\/"/g)].length;
+      if (outward === 0) {
+        problems.push(
+          "the sidebar has no link out to the campaign list — every other " +
+            "link in it goes further into this campaign, so there would be " +
+            "no way back that is on the screen"
+        );
+      }
+    }
+
     // ---- a section heading outranks the items under it --------------
     // Reported: the titles read as captions on the item above rather
     // than as the top of a group, because they were set SMALLER and

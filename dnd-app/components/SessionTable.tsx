@@ -599,6 +599,7 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
       {selectedSession ? (
         <SessionDetail
           session={selectedSession}
+          campaignId={campaignId}
           isDm={isDm}
           onClose={() => setSelected(null)}
         />

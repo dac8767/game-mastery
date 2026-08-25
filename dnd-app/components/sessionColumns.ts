@@ -139,3 +139,65 @@ export function sessionPatch(
 
   return { [key]: value === "" ? null : value };
 }
+
+/**
+ * Everyone the app knows plays in this campaign, for the attendance
+ * field to offer.
+ *
+ * Two sources, because neither alone is the answer. `members` are the
+ * accounts in the campaign, which misses the friend who has a character
+ * and never signed up; `characters` carry a `playerName` typed by the
+ * DM, which misses the member who has not made one yet. The union is
+ * the table.
+ *
+ * Free text stays free: this is a list of OPTIONS, not a set of allowed
+ * values. A guest who played one night is still attendance, and a field
+ * that refused them would be worse than the one that made you type
+ * everybody.
+ */
+export function campaignPlayers(
+  members: { displayName?: string | null }[] | null | undefined,
+  characters: { playerName?: string | null }[] | null | undefined
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const add = (raw: unknown) => {
+    const name = String(raw ?? "").replace(/\s+/g, " ").trim();
+    if (!name) return;
+    const key = name.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(name);
+  };
+
+  for (const m of members ?? []) add(m.displayName);
+  for (const c of characters ?? []) add(c.playerName);
+
+  return out.sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * A chips field's value as a list, and back again.
+ *
+ * The stored shape is an array; the input's shape is a comma-separated
+ * line. Toggling one name off a line of five is where the two have to
+ * agree exactly, so both directions live here rather than being written
+ * out at the call site.
+ */
+export function chipsFromInput(text: string): string[] {
+  return text
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+/** Add a name to a chips line, or take it off if it is already there. */
+export function toggleChip(text: string, name: string): string {
+  const list = chipsFromInput(text);
+  const key = name.trim().toLowerCase();
+  const without = list.filter((v) => v.toLowerCase() !== key);
+  // Removing is the whole change when it was there; otherwise append,
+  // so the order somebody typed is not reshuffled by a click.
+  return (without.length === list.length ? [...list, name.trim()] : without)
+    .join(", ");
+}

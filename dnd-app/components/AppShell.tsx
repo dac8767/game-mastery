@@ -6,7 +6,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { api } from "@/convex/_generated/api";
-import { NavIcon } from "@/components/NavIcon";
+import { BackIcon, NavIcon } from "@/components/NavIcon";
 import { ThemeSync } from "@/components/ThemeSync";
 import { FeedbackForm } from "@/components/FeedbackForm";
 import { UiProvider } from "@/components/UiEditor";
@@ -185,29 +185,43 @@ export function AppShell({
     <div className="shell">
       <ThemeSync />
       <nav className="sidebar">
-        <Link href="/" className="brand">
-          <span className="brand-mark">GM</span>
-          <span className="brand-name">Game Mastery</span>
-        </Link>
-
         {/* The campaign, on its own. It used to double as the heading of
             the first section, which made the name of the game also the
             label of a group of screens and left that one section unable
             to show a heading of its own. It is a block now, and every
             section below is an ordinary section. */}
+        {/* The top of the sidebar is the campaign, and nothing above
+            it. The wordmark used to sit here and said the same thing on
+            every screen of every campaign — which is a logo's job on a
+            marketing page and dead space in a tool you have open all
+            evening. */}
         <div className="nav-campaign-block">
-          {/* The campaign name doubles as the link to the live table.
-              No DM badge beside it any more: the switch below says
-              which of the two you are looking as, which is the same
-              fact and the more useful half of it. Admin stays —
-              borrowed authority is labelled, never disguised. */}
-          <Link href={base} className="nav-campaign">
-            <span className="nav-campaign-icon">☾</span>
-            <span className="nav-campaign-name">
-              {campaign?.name ?? "Campaign"}
-            </span>
-            {campaign?.viaAdmin && <span className="badge admin">Admin</span>}
-          </Link>
+          <div className="nav-campaign-row">
+            {/* Out, rather than up. It replaces the "All campaigns" row
+                that used to sit in the footer among the places you go —
+                leaving is not a place, and it belongs next to the thing
+                you are leaving. */}
+            <Link
+              href="/"
+              className="nav-back"
+              title="All campaigns"
+              aria-label="Back to all campaigns"
+            >
+              <BackIcon />
+            </Link>
+
+            {/* The campaign name doubles as the link to the live table.
+                No DM badge beside it any more: the switch below says
+                which of the two you are looking as, which is the same
+                fact and the more useful half of it. Admin stays —
+                borrowed authority is labelled, never disguised. */}
+            <Link href={base} className="nav-campaign">
+              <span className="nav-campaign-name">
+                {campaign?.name ?? "Campaign"}
+              </span>
+              {campaign?.viaAdmin && <span className="badge admin">Admin</span>}
+            </Link>
+          </div>
 
           {/* Which of the two you are seeing, and one click to the
               other. It was a single button in the footer that changed
@@ -298,13 +312,10 @@ export function AppShell({
             <span className="nav-icon">⚙</span>
             Settings
           </Link>
-          {/* View as Player used to be here. It is a switch about who
-              you are, which belongs with the campaign it is about,
-              rather than a place to go filed with the places. */}
-          <Link href="/" className="nav-item subtle">
-            <span className="nav-icon">⇤</span>
-            All campaigns
-          </Link>
+          {/* View as Player used to be here, and so was All campaigns.
+              One is a switch about who you are and the other is the way
+              out of the campaign; both belong with the campaign block
+              at the top rather than filed among the places you go. */}
           <button
             type="button"
             className="nav-item subtle as-button"
