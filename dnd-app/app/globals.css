@@ -7503,3 +7503,73 @@ button.cal-day:hover {
   display: flex;
   align-items: center;
 }
+
+/* ---------------------------------------------------------------
+   Sessions
+   --------------------------------------------------------------- */
+
+.session-record {
+  max-width: none;
+}
+
+/* The wrapper BoxCanvas draws: its toolbar, then the canvas. It exists
+   so a canvas can be one of several on a page — in the Notebook it is
+   the whole right-hand side, and here there are two of them stacked. */
+.nb-canvas-wrap {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* A section of notes is a page, so it gets a page's height rather than
+   the flex-fill the Notebook's single canvas takes. Tall enough to
+   arrange things on, and it scrolls inside itself so the two sections
+   do not push each other off the screen. */
+.session-notes {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.session-notes .nb-canvas {
+  flex: none;
+  height: 26rem;
+}
+
+/* Sticky, because there are two canvases stacked and the bar belongs to
+   both. Scrolling down to the DM notes would otherwise leave the
+   formatting controls off the top of the screen, which is the one place
+   they are no use at all. */
+.session-record .nb-fmtbar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+/* The DM's half, marked the way every other DM-only thing in the app
+   is: a red tag and a red edge. A page that looks identical to the one
+   the table can read is a page you will paste the wrong thing into. */
+.dm-notes .nb-canvas {
+  border-color: var(--bloodied);
+}
+
+.dm-notes .group-h {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--bloodied);
+}
+
+/* The number, at the size a portrait would be on an NPC tile — a wall
+   of these is scanned by number, because that is all a night has. */
+.tile-number {
+  display: grid;
+  place-items: center;
+  height: 4.5rem;
+  border-radius: 8px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1;
+}

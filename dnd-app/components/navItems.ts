@@ -53,7 +53,7 @@ export const TABLE_ITEM: NavItem = {
 
 /** Content scoped to the campaign. Titled with the campaign's name. */
 export const CAMPAIGN_ITEMS: NavItem[] = [
-  { id: "sessions", label: "Sessions", icon: "✦" },
+  { id: "sessions", label: "Sessions", icon: "✦", slug: "sessions" },
   // A drawn group of people rather than the moon it used to share with
   // the campaign block above it — two different things in one sidebar
   // wearing the same symbol.

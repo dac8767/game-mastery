@@ -121,6 +121,13 @@ export const TEXT_PIECES: TextPiece[] = [
     note: "The search box's placeholder and its label when collapsed",
   },
   { id: "group.bar.new", value: "+ New Group", screen: "Groups list" },
+  {
+    id: "session.bar.search",
+    value: "Search sessions",
+    screen: "Sessions list",
+    note: "The search box's placeholder and its label when collapsed",
+  },
+  { id: "session.bar.new", value: "+ New Session", screen: "Sessions list" },
 
   // ---- the NPC record ---------------------------------------------
   { id: "record.bar.back", value: "Back to NPC List", screen: "NPC record" },

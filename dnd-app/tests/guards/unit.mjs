@@ -20,23 +20,35 @@ import { APP_ROOT, appPath, read } from "./lib.mjs";
 
 function compile(relPath) {
   const out = mkdtempSync(join(tmpdir(), "gm-unit-"));
-  const r = spawnSync(
-    "npx",
-    [
-      "tsc",
-      relPath,
-      "--outDir",
-      out,
-      "--module",
-      "es2022",
-      "--target",
-      "es2022",
-      "--moduleResolution",
-      "bundler",
-      "--skipLibCheck",
-    ],
-    { cwd: APP_ROOT, encoding: "utf8" }
+  // A config rather than flags, because the modules under test import
+  // each other by the app's "@/" alias and tsc takes `paths` only from
+  // a tsconfig. Written into the temp dir with the app as its root, so
+  // nothing here can pick up the app's own compilerOptions by accident.
+  const config = join(out, "tsconfig.unit.json");
+  writeFileSync(
+    config,
+    JSON.stringify({
+      compilerOptions: {
+        outDir: out,
+        module: "es2022",
+        target: "es2022",
+        moduleResolution: "bundler",
+        skipLibCheck: true,
+        baseUrl: APP_ROOT,
+        paths: { "@/*": ["./*"] },
+        // Named explicitly because the config lives in a temp dir, and
+        // tsc looks for @types beside the CONFIG rather than beside the
+        // files. Without this, convex/auth.ts loses `process` and the
+        // whole compile fails on a module that is not under test.
+        typeRoots: [join(APP_ROOT, "node_modules", "@types")],
+      },
+      files: [join(APP_ROOT, relPath)],
+    })
   );
+  const r = spawnSync("npx", ["tsc", "-p", config], {
+    cwd: APP_ROOT,
+    encoding: "utf8",
+  });
   if (r.status !== 0) {
     throw new Error(
       `could not compile ${relPath}:\n${(r.stdout ?? "") + (r.stderr ?? "")}`
@@ -276,9 +288,13 @@ export const unit = {
       "the font-size ladder is sorted and free of duplicates",
       fmt.FONT_SIZES.every((s, i, a) => i === 0 || s > a[i - 1])
     );
+    // The tracker keys on this attribute and the canvas writes it, and
+    // nothing between them is typed. The canvas is shared by the
+    // notebook and by a session's two note sections now, so a rename
+    // here would silence the format toolbar on three screens at once.
     check(
-      "BOX_ATTR is the attribute NotebookTool actually sets",
-      read("components", "NotebookTool.tsx").includes(`${fmt.BOX_ATTR}=`)
+      "BOX_ATTR is the attribute the canvas actually sets",
+      read("components", "BoxCanvas.tsx").includes(`${fmt.BOX_ATTR}=`)
     );
 
     // ---- the ribbon's grammar --------------------------------------
@@ -5197,6 +5213,82 @@ export const unit = {
       check(
         "and reads numbers, which are values people search for",
         grid.searchText({ n: 12 }, ["n"]) === "12"
+      );
+    }
+
+    // ---- what a typed session cell becomes -------------------------
+    // `Number("")` is 0 and `Number("seven")` is NaN, and either stored
+    // is worse than the edit not landing: a cell reading "NaN" sorts
+    // unpredictably and there is no way to type your way out of it.
+    {
+      const sc = await import(
+        pathToFileURL(
+          join(compile("components/sessionColumns.ts"), "sessionColumns.js")
+        ).href
+      );
+
+      check(
+        "a number is a number",
+        sc.sessionPatch("xp", " 450 ").xp === 450
+      );
+      check(
+        "a blank clears an optional number",
+        sc.sessionPatch("xp", "  ").xp === null
+      );
+      // The session number is not optional, so clearing it would remove
+      // the field the row is identified by.
+      check(
+        "a blank session number patches nothing at all",
+        Object.keys(sc.sessionPatch("number", "")).length === 0
+      );
+      check(
+        "a word where a number goes patches nothing",
+        Object.keys(sc.sessionPatch("xp", "seven")).length === 0 &&
+          Object.keys(sc.sessionPatch("number", "seven")).length === 0
+      );
+      check(
+        "and Infinity is not a session number either",
+        Object.keys(sc.sessionPatch("number", "1e400")).length === 0
+      );
+
+      check(
+        "attendance splits on commas and drops the gaps",
+        sc.sessionPatch("players", " Ana , ,Bo, ").players.join("|") ===
+          "Ana|Bo"
+      );
+      check(
+        "clearing attendance is an empty list, not a missing field",
+        Array.isArray(sc.sessionPatch("players", "").players) &&
+          sc.sessionPatch("players", "").players.length === 0
+      );
+
+      check(
+        "a blank text field is cleared rather than stored empty",
+        sc.sessionPatch("description", "   ").description === null
+      );
+      check(
+        "and text is trimmed on the way in",
+        sc.sessionPatch("date", " 2026-08-24 ").date === "2026-08-24"
+      );
+
+      // The two lists that decide what the screen can do have to name
+      // real columns; a facet or a sort key that is not one shows up as
+      // an unlabelled option that groups everything under "—".
+      const keys = sc.SESSION_COLUMNS.map((c) => c.key);
+      check(
+        "every facet key is a column",
+        sc.SESSION_FACET_KEYS.every((k) => keys.includes(k))
+      );
+      check(
+        "the primary column and the default sort are columns",
+        keys.includes(sc.SESSION_PRIMARY_COLUMN) &&
+          keys.includes(sc.SESSION_DEFAULT_SORT.key)
+      );
+      // Newest first. A session log is a diary: the one you are about to
+      // write up is the last one you played.
+      check(
+        "the log opens on the most recent night",
+        sc.SESSION_DEFAULT_SORT.asc === false
       );
     }
 

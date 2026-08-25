@@ -194,6 +194,95 @@ export const integrity = {
       }
     }
 
+    // ---- and the Sessions grid ------------------------------------
+    // Same check, one table further over. The wrinkle here is the
+    // PRIMARY column: it is a number rather than a name, so the shared
+    // default sort ("name") would sort this list on a field no row has
+    // — every row blank, every row equal, and the order whatever the
+    // database happened to return. The view has to bring its own.
+    {
+      const sessionsSrc = read("convex", "sessions.ts");
+      const returnedSession = topLevelKeys(
+        blockAfter(
+          sessionsSrc,
+          /sessions: page\.map\(\(s\) => \(/,
+          "the row shaper in sessions.ts"
+        ),
+        "sessions.listForCampaign row"
+      );
+
+      const sessionColsSrc = read("components", "sessionColumns.ts");
+      const sessionBlock = sessionColsSrc.slice(
+        sessionColsSrc.indexOf("export const SESSION_COLUMNS"),
+        sessionColsSrc.indexOf("export const SESSION_COLUMN_BY_KEY")
+      );
+      const sessionKeys = stringProps(
+        sessionBlock,
+        "key",
+        "sessionColumns SESSION_COLUMNS"
+      );
+      if (sessionKeys.length === 0) {
+        throw new Error("read no column keys out of sessionColumns.ts");
+      }
+
+      for (const key of sessionKeys) {
+        if (!returnedSession.includes(key)) {
+          problems.push(
+            `sessionColumns defines a \`${key}\` column, which ` +
+              "sessions.listForCampaign never returns — it would be a " +
+              "column of blanks"
+          );
+        }
+      }
+
+      const primary = /SESSION_PRIMARY_COLUMN = "(\w+)"/.exec(sessionColsSrc);
+      const defaultSort = /SESSION_DEFAULT_SORT = \{ key: "(\w+)"/.exec(
+        sessionColsSrc
+      );
+      if (!primary || !defaultSort) {
+        throw new Error(
+          "could not read the Sessions primary column and default sort"
+        );
+      }
+      for (const [what, key] of [
+        ["primary column", primary[1]],
+        ["default sort", defaultSort[1]],
+      ]) {
+        if (!sessionKeys.includes(key)) {
+          problems.push(
+            `the Sessions ${what} is \`${key}\`, which is not one of its ` +
+              "columns — the list would sort on a field no row has, and " +
+              "every row would compare equal"
+          );
+        }
+      }
+      // And the screen has to actually hand it over. useViewPrefs
+      // defaults to the roster's "name", which no session has.
+      const tableSrc = stripComments(read("components", "SessionTable.tsx"));
+      if (!/useViewPrefs\([\s\S]{0,200}SESSION_DEFAULT_SORT/.test(tableSrc)) {
+        problems.push(
+          "SessionTable does not pass SESSION_DEFAULT_SORT to useViewPrefs " +
+            "— the list would default to sorting on `name`, which a session " +
+            "does not have"
+        );
+      }
+
+      const facets = (
+        sessionColsSrc.match(/SESSION_FACET_KEYS = \[([^\]]*)\]/s)?.[1] ?? ""
+      )
+        .split(",")
+        .map((s) => s.trim().replace(/^"|"$/g, ""))
+        .filter(Boolean);
+      for (const key of facets) {
+        if (!sessionKeys.includes(key)) {
+          problems.push(
+            `SESSION_FACET_KEYS names \`${key}\`, which is not a Sessions ` +
+              "column — Group by would offer an unlabelled option"
+          );
+        }
+      }
+    }
+
     // Every column needs a default width and visibility, or the layout
     // reconciler produces a column that cannot be sized or shown.
     for (const entry of columnsBlock.split(/\},\s*\n/)) {
@@ -1862,6 +1951,7 @@ export const integrity = {
     for (const [table, via] of [
       ["combatants", "encounters"],
       ["notebookBoxes", "notebookNodes"],
+      ["sessionBoxes", "sessions"],
     ]) {
       if (!new RegExp(`query\\("${table}"\\)`).test(purge)) {
         problems.push(

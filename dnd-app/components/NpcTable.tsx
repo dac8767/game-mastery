@@ -6,11 +6,7 @@ import { useMutation, useQuery } from "convex/react";
 import { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
-import {
-  DEFAULT_SORT_ASC,
-  DEFAULT_SORT_KEY,
-  useViewPrefs,
-} from "@/components/useViewPrefs";
+import { useViewPrefs } from "@/components/useViewPrefs";
 import { NpcDetail, fromInput } from "@/components/NpcDetail";
 import { FilterPanel } from "@/components/FilterPanel";
 import { matchesAll } from "@/components/npcFilters";
@@ -279,7 +275,8 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
    * default changes.
    */
   const sortCount =
-    prefs.sortKey !== DEFAULT_SORT_KEY || prefs.sortAsc !== DEFAULT_SORT_ASC
+    prefs.sortKey !== prefs.defaultSortKey ||
+    prefs.sortAsc !== prefs.defaultSortAsc
       ? 1
       : 0;
 
@@ -598,8 +595,8 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
                 type="button"
                 className="text-button"
                 onClick={() => {
-                  prefs.setSortKey(DEFAULT_SORT_KEY);
-                  prefs.setSortAsc(DEFAULT_SORT_ASC);
+                  prefs.setSortKey(prefs.defaultSortKey);
+                  prefs.setSortAsc(prefs.defaultSortAsc);
                 }}
               >
                 Back to the default

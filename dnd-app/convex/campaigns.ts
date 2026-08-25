@@ -407,6 +407,28 @@ export const purgeCampaign = internalMutation({
       return await more();
     }
 
+    // A session's notes hang off the session, so they go first — the
+    // same order the encounters' combatants and the notebook's boxes
+    // are swept in.
+    const sessions = await ctx.db
+      .query("sessions")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
+      .take(MAX_PARTY);
+    for (const session of sessions) {
+      const boxes = await ctx.db
+        .query("sessionBoxes")
+        .withIndex("by_session", (q) => q.eq("sessionId", session._id))
+        .take(left);
+      if (
+        await sweep(boxes, async (b) => {
+          if (b.storageId) await ctx.storage.delete(b.storageId);
+        })
+      ) {
+        return await more();
+      }
+    }
+    if (await sweep(sessions)) return await more();
+
     const groups = await ctx.db
       .query("groups")
       .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))

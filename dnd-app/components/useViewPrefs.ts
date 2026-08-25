@@ -28,12 +28,15 @@ import { Conjunction, FilterCondition } from "@/components/npcFilters";
 const SAVE_DEBOUNCE_MS = 800;
 
 /**
- * The layout a view starts from.
+ * The layout a view starts from, when it does not say otherwise.
  *
- * Exported because the toolbar has to answer "is a sort applied?" to
- * decide whether to show a count on the Sort button, and that question
- * is only meaningful against the default. A literal "name" in the
- * toolbar would go on reporting "sorted" forever the day this changes.
+ * "name" is the NPC roster's and the Groups screen's. Sessions have no
+ * name — the primary column is a NUMBER — so a view may pass its own,
+ * and the hook hands whatever it settled on back out. The toolbar has
+ * to answer "is a sort applied?" to decide whether to badge the Sort
+ * button, and that question is only meaningful against the default this
+ * view actually started from; a literal in the toolbar would report
+ * "sorted" forever on any view whose default is not "name".
  */
 export const DEFAULT_SORT_KEY = "name";
 export const DEFAULT_SORT_ASC = true;
@@ -47,7 +50,12 @@ export function useViewPrefs(
    * which is the view this hook was written for; the Groups screen is
    * the same table over its own columns and passes them here.
    */
-  columns: ColumnDef[] = COLUMNS
+  columns: ColumnDef[] = COLUMNS,
+  /** The sort this view starts from, for a view whose primary is not a name. */
+  defaultSort: { key: string; asc: boolean } = {
+    key: DEFAULT_SORT_KEY,
+    asc: DEFAULT_SORT_ASC,
+  }
 ) {
   const saved = useQuery(api.views.getViewPrefs, { campaignId, view });
   const save = useMutation(api.views.saveViewPrefs);
@@ -55,8 +63,8 @@ export function useViewPrefs(
   const [columnState, setColumnsRaw] = useState<ColumnState[]>(() =>
     reconcileColumns(null, isDm, columns)
   );
-  const [sortKey, setSortKeyRaw] = useState(DEFAULT_SORT_KEY);
-  const [sortAsc, setSortAscRaw] = useState(DEFAULT_SORT_ASC);
+  const [sortKey, setSortKeyRaw] = useState(defaultSort.key);
+  const [sortAsc, setSortAscRaw] = useState(defaultSort.asc);
   const [groupBy, setGroupByRaw] = useState("");
   const [filters, setFiltersRaw] = useState<FilterCondition[]>([]);
   const [filterConjunction, setFilterConjunctionRaw] =
@@ -74,8 +82,8 @@ export function useViewPrefs(
 
     setColumnsRaw(reconcileColumns(saved?.columns ?? null, isDm, columns));
     if (saved) {
-      setSortKeyRaw(saved.sortKey ?? DEFAULT_SORT_KEY);
-      setSortAscRaw(saved.sortAsc ?? DEFAULT_SORT_ASC);
+      setSortKeyRaw(saved.sortKey ?? defaultSort.key);
+      setSortAscRaw(saved.sortAsc ?? defaultSort.asc);
       setGroupByRaw(saved.groupBy ?? "");
       setFiltersRaw(
         saved.filters.map((f) => ({
@@ -89,7 +97,7 @@ export function useViewPrefs(
       setTilesPerRowRaw(saved.tilesPerRow ?? 4);
     }
     hydrated.current = true;
-  }, [saved, isDm, columns]);
+  }, [saved, isDm, columns, defaultSort.key, defaultSort.asc]);
 
   // A DM flipping into the player preview loses the DM-only columns;
   // flipping back restores them. Not a change the person "made", so it
@@ -191,6 +199,9 @@ export function useViewPrefs(
 
   return {
     ready: saved !== undefined,
+    /** What this view started from, so the Sort badge can be honest. */
+    defaultSortKey: defaultSort.key,
+    defaultSortAsc: defaultSort.asc,
     columns: columnState,
     setColumns,
     sortKey,

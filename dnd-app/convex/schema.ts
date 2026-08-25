@@ -287,6 +287,82 @@ export default defineSchema({
   }).index("by_campaign", ["campaignId"]),
 
   /**
+   * One night at the table: what happened, who was there, and the notes.
+   *
+   * The row here is the table's row — number, date, attendance, XP, a
+   * one-line description. The NOTES are boxes, in sessionBoxes, because
+   * they are a notebook page rather than a text field: formatted text,
+   * images and tables, arranged where you put them.
+   *
+   * `players` is free text, deliberately. Attendance is who was in the
+   * room, which is not the same as the campaign's membership rows — a
+   * friend who dropped in for one night was never a member, and a member
+   * who missed three sessions is still one.
+   *
+   * `number` is not unique at the database level and is not meant to be
+   * a key: two sessions numbered 7 is a mistake worth being able to make
+   * and then fix, not one worth refusing a save over.
+   */
+  sessions: defineTable({
+    campaignId: v.id("campaigns"),
+    number: v.number(),
+    /** ISO "YYYY-MM-DD", so it sorts as a string as well as reads as one. */
+    date: v.optional(v.string()),
+    players: v.array(v.string()),
+    xp: v.optional(v.number()),
+    description: v.optional(v.string()),
+  }).index("by_campaign", ["campaignId"]),
+
+  /**
+   * A session's notes, as notebook boxes on one of two sides.
+   *
+   * The same shape as notebookBoxes and drawn by the same canvas, with
+   * one field the notebook has no use for: `side`. The player side is
+   * the shared account of the night; the DM side is what the DM knew
+   * and the table did not, and it must never leave the server for a
+   * player — see sessions.getNotes.
+   *
+   * A separate table rather than a `side` bolted onto notebookBoxes,
+   * because the two have different OWNERS. A notebook box belongs to one
+   * person and being the DM grants nothing over it; a session box
+   * belongs to the campaign. Sharing a table would mean every notebook
+   * query carrying a filter to keep the two apart, and a filter that is
+   * forgotten once is a privacy bug rather than a rendering one.
+   */
+  sessionBoxes: defineTable({
+    sessionId: v.id("sessions"),
+    side: v.union(v.literal("player"), v.literal("dm")),
+    type: v.union(v.literal("text"), v.literal("image"), v.literal("table")),
+
+    x: v.number(),
+    y: v.number(),
+    w: v.number(),
+    h: v.number(),
+    order: v.number(),
+
+    html: v.optional(v.string()),
+    storageId: v.optional(v.id("_storage")),
+    rotate: v.optional(v.number()),
+    borderW: v.optional(v.number()),
+    borderColor: v.optional(v.string()),
+
+    rows: v.optional(v.array(v.array(v.string()))),
+    colWidths: v.optional(v.array(v.number())),
+    rowHeights: v.optional(v.array(v.number())),
+    align: v.optional(
+      v.union(v.literal("left"), v.literal("center"), v.literal("right"))
+    ),
+    borderless: v.optional(v.boolean()),
+    shading: v.optional(v.string()),
+  })
+    .index("by_session", ["sessionId"])
+    // So a player's request can ask for the player side ALONE. Fetching
+    // both and dropping one would mean the DM's notes were read out of
+    // the database on a player's behalf, one forgotten filter away from
+    // the wire.
+    .index("by_session_side", ["sessionId", "side"]),
+
+  /**
    * What a group IS, as opposed to who is in it.
    *
    * Membership is NOT here. An NPC carries `groups: string[]`, typed by

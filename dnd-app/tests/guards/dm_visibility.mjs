@@ -249,6 +249,126 @@ export const dmVisibility = {
       }
     }
 
+    // ---- convex/sessions.ts ----------------------------------------
+    // The DM notes on a session are a whole PAGE of things the table
+    // does not know, and the withholding is stronger here than
+    // anywhere else in the app on purpose: a non-DM request never
+    // queries that side at all. Fetching both and returning one would
+    // mean the DM's notes had been read out of the database on a
+    // player's behalf and were sitting in a variable, one careless edit
+    // from the wire.
+    const sessions = read("convex", "sessions.ts");
+
+    /**
+     * One function's body, not the whole file.
+     *
+     * Every check below would otherwise be satisfied by
+     * listForCampaign, which computes `isDm` the same way a few lines
+     * up — so gutting the rule inside getNotes would leave the guard
+     * green. A file-wide search for a line that appears twice proves
+     * nothing about either copy.
+     */
+    const bodyOf = (name) => {
+      const at = sessions.indexOf(`export const ${name} = `);
+      if (at === -1) throw new Error(`no ${name} in convex/sessions.ts`);
+      const next = sessions.indexOf("\nexport const ", at + 1);
+      return sessions.slice(at, next === -1 ? undefined : next);
+    };
+    const getNotes = bodyOf("getNotes");
+
+    requirePattern(
+      problems,
+      getNotes,
+      /requireMember\(\s*\n?\s*ctx,\s*\n?\s*session\.campaignId\s*\n?\s*\)/,
+      "sessions.getNotes must gate on requireMember(campaignId) — " +
+        "requireUser alone would hand another campaign's notes to anyone"
+    );
+    requirePattern(
+      problems,
+      getNotes,
+      /dm: isDm \? await side\("dm"\) : null/,
+      "sessions.getNotes must not evaluate the dm side for a non-DM " +
+        "caller — and must send null rather than [], because an empty " +
+        "page says the DM wrote nothing, which is a different claim"
+    );
+    requirePattern(
+      problems,
+      getNotes,
+      /const isDm = isCampaignDm && !viewAsPlayer/,
+      "sessions.getNotes must honour viewAsPlayer — otherwise the DM's " +
+        "player preview shows the DM notes and reports nothing withheld"
+    );
+    requirePattern(
+      problems,
+      bodyOf("listForCampaign"),
+      /const isDm = isCampaignDm && !viewAsPlayer/,
+      "sessions.listForCampaign must honour viewAsPlayer too — the list " +
+        "is where the preview flag is shown, and it would be lying"
+    );
+
+    // A shaper that spread the raw document would carry `side` out with
+    // it, which is how a client ends up deciding what to render from a
+    // field the server was supposed to have acted on.
+    if (/\.map\((?:async )?\(b\)\s*=>\s*\(\{\s*\n?\s*\.\.\.b\b/.test(sessions)) {
+      problems.push(
+        "sessions.getNotes spreads the raw box document (...b) — the " +
+          "storage id and the side would ride along"
+      );
+    }
+
+    // Writing. The player side is any member's, the same rule
+    // playerNotes runs on; the DM side is the DM's. What must never
+    // happen is a box mutation that decides from an ARGUMENT which side
+    // it is touching — the box's own `side` is the only trustworthy
+    // answer, because an id is all a caller needs to name someone
+    // else's box.
+    requirePattern(
+      problems,
+      sessions,
+      /if \(side === "dm"\) \{\s*\n\s*await requireDm\(ctx, campaignId\);/,
+      "sessions.requireWriter must gate the dm side on requireDm"
+    );
+    for (const fn of ["updateBox", "deleteBox"]) {
+      const at = sessions.indexOf(`export const ${fn} = mutation`);
+      if (at === -1) {
+        problems.push(`convex/sessions.ts no longer exports ${fn}`);
+        continue;
+      }
+      const next = sessions.indexOf("export const ", at + 10);
+      const body = sessions.slice(at, next === -1 ? undefined : next);
+      if (!/requireWriter\(ctx, session\.campaignId, box\.side\)/.test(body)) {
+        problems.push(
+          `sessions.${fn} does not check the side the BOX is on — a ` +
+            "player who knows a DM box's id could reach it"
+        );
+      }
+    }
+    for (const fn of ["createSession", "updateSession", "deleteSession"]) {
+      const at = sessions.indexOf(`export const ${fn} = mutation`);
+      if (at === -1) {
+        problems.push(`convex/sessions.ts no longer exports ${fn}`);
+        continue;
+      }
+      const next = sessions.indexOf("export const ", at + 10);
+      const body = sessions.slice(at, next === -1 ? undefined : next);
+      if (!/await requireDm\(/.test(body)) {
+        problems.push(`sessions.${fn} is not gated on requireDm`);
+      }
+    }
+
+    // And the screen must render the DM section from what the SERVER
+    // sent rather than from its own idea of who is looking. `isDm` in a
+    // component is a render decision; `dm === null` is the data not
+    // being there.
+    const detail = read("components", "SessionDetail.tsx");
+    if (/\{isDm && [\s\S]{0,80}dm-notes/.test(detail)) {
+      problems.push(
+        "SessionDetail gates its DM notes section on the client's isDm — " +
+          "it must render from `notes.dm` being present, which is the " +
+          "server's answer rather than the browser's"
+      );
+    }
+
     // ---- per-person view state is never shared ---------------------
     const views = read("convex", "views.ts");
     if (/args\.userId|userId:\s*v\.id\("users"\)/.test(views)) {

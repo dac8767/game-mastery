@@ -20,6 +20,7 @@ import type * as lookup from "../lookup.js";
 import type * as maps from "../maps.js";
 import type * as notebook from "../notebook.js";
 import type * as npcs from "../npcs.js";
+import type * as sessions from "../sessions.js";
 import type * as settings from "../settings.js";
 import type * as views from "../views.js";
 
@@ -42,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   maps: typeof maps;
   notebook: typeof notebook;
   npcs: typeof npcs;
+  sessions: typeof sessions;
   settings: typeof settings;
   views: typeof views;
 }>;
