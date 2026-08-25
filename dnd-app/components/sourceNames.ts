@@ -53,8 +53,10 @@ export const SOURCE_NAMES: Record<string, string> = {
   FToD: "Fizban's Treasury of Dragons",
   SCAG: "Sword Coast Adventurer's Guide",
   EEPC: "Elemental Evil Player's Companion",
+  EE: "Elemental Evil Player's Companion",
   BGG: "Bigby Presents: Glory of the Giants",
   BMT: "The Book of Many Things",
+  TBoMT: "The Book of Many Things",
   SatO: "Sigil and the Outlands",
 
   // Settings
@@ -62,9 +64,12 @@ export const SOURCE_NAMES: Record<string, string> = {
   GGR: "Guildmasters' Guide to Ravnica",
   ERLW: "Eberron: Rising from the Last War",
   ERftLW: "Eberron: Rising from the Last War",
+  EFotA: "Eberron: Forge of the Artificer",
   EGtW: "Explorer's Guide to Wildemount",
   EGW: "Explorer's Guide to Wildemount",
   MOT: "Mythic Odysseys of Theros",
+  SACoC: "Strixhaven: A Curriculum of Chaos",
+  FRHoF: "Forgotten Realms: Heroes of Faerûn",
   VRGtR: "Van Richten's Guide to Ravenloft",
   VRGR: "Van Richten's Guide to Ravenloft",
   SAiS: "Spelljammer: Adventures in Space",

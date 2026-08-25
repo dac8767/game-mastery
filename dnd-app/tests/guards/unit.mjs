@@ -5585,6 +5585,75 @@ export const unit = {
         src.expandSource("ZZZ 2024") === "ZZZ 2024"
       );
 
+      // The books Derek sent back after running the sources report.
+      // Written out one by one rather than counted: a map entry is a
+      // string somebody typed, and the way it goes wrong is a name that
+      // looks plausible beside a code that does not match it.
+      for (const [code, name] of [
+        ["FRHoF", "Forgotten Realms: Heroes of Faer\u00fbn"],
+        ["TBoMT", "The Book of Many Things"],
+        ["IDRotF", "Icewind Dale: Rime of the Frostmaiden"],
+        ["SACoC", "Strixhaven: A Curriculum of Chaos"],
+        ["EE", "Elemental Evil Player's Companion"],
+        ["EFotA", "Eberron: Forge of the Artificer"],
+      ]) {
+        check(`${code} is written out as ${name}`, src.expandSource(code) === name);
+      }
+
+      // Two Eberron books, and the older one is the one already in the
+      // map — so the copy-paste that gives the new code the old name is
+      // the mistake available here, and it reads perfectly.
+      check(
+        "the two Eberron books are two books",
+        src.expandSource("EFotA") !== src.expandSource("ERLW")
+      );
+
+      // A book in the map that the COLUMN still shows as a code is a
+      // book nobody added. The width-aware fallback is right — a
+      // clipped title says less than an abbreviation — but it meant
+      // four of these six read exactly as they had before, and the
+      // only way to notice was to go and look at the table.
+      check(
+        "the six fit in the Source column at its own default width",
+        (() => {
+          const px = src.trackPx(look.SOURCE_COLUMN.width);
+          if (!px) return false;
+          return ["FRHoF", "TBoMT", "IDRotF", "SACoC", "EE", "EFotA"].every(
+            (code) => src.sourceLabel(code, px) === src.expandSource(code)
+          );
+        })()
+      );
+      // And the fallback still fires where it has to, or the check
+      // above would be satisfied by a column with no fallback at all.
+      check(
+        "a title too long for the column still falls back to its code",
+        src.sourceLabel("PaBTSO", src.trackPx(look.SOURCE_COLUMN.width)) ===
+          "PaBTSO"
+      );
+
+      // Where one book has two codes, both have to say the same thing.
+      // A typo in the second is invisible: the column shows the right
+      // name for most rows and a slightly different one for the rest,
+      // which reads as two books rather than as a mistake.
+      for (const [a, b] of [
+        ["EEPC", "EE"],
+        ["BMT", "TBoMT"],
+        ["MPMM", "MotM"],
+        ["TCoE", "TCE"],
+        ["VGtM", "VGM"],
+        ["FTD", "FToD"],
+        ["GGtR", "GGR"],
+        ["ERLW", "ERftLW"],
+        ["EGtW", "EGW"],
+        ["VRGtR", "VRGR"],
+      ]) {
+        check(
+          `${a} and ${b} name the same book`,
+          src.expandSource(a) === src.expandSource(b) &&
+            src.expandSource(a) !== a
+        );
+      }
+
       // Too narrow for the name, so the abbreviation comes back: a
       // clipped book title says less than a code does.
       check(

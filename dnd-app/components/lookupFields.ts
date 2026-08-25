@@ -945,14 +945,26 @@ const NAME_COLUMN: LookupColumn = {
  * unsortable, unfilterable, and part of the widest column on the
  * screen. Every kind gets the same one, appended last.
  */
-const SOURCE_COLUMN: LookupColumn = {
+export const SOURCE_COLUMN: LookupColumn = {
   key: "source",
   label: "Source",
-  // Much wider than it was, because it holds a book's name rather than
-  // a four-letter code. 16rem takes every title in the list above
-  // except the longest adventure names, which fall back to their
-  // abbreviation until the column is dragged wider.
-  width: "16rem",
+  /**
+   * Much wider than it was, because it holds a book's name rather than
+   * a four-letter code.
+   *
+   * MEASURED, not chosen. At 16rem the width estimate said no to four
+   * of the six books Derek had just asked to be written out — Icewind
+   * Dale, Strixhaven, Elemental Evil and Heroes of Faerûn all fell back
+   * to their abbreviations, which is a book added to the map and no
+   * visible difference. The longest of them needs 17.99rem by that same
+   * estimate, so: 18rem.
+   *
+   * The two longest adventure titles in the map still do not fit —
+   * Phandelver and Below at 20.8rem and Shadow of the Dragon Queen at
+   * 18.9rem — and still fall back until the column is dragged wider,
+   * which is what the fallback is for.
+   */
+  width: "18rem",
   get: (r) => expandSource(splitSource(r.name, r.source).source),
   // ...unless it has been dragged narrower than the name, in which
   // case the abbreviation is the more useful of the two.
