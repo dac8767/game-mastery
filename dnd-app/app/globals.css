@@ -1799,29 +1799,6 @@ body.col-resizing {
   font-weight: 600;
 }
 
-/* Centred in the toolbar between the count and the controls, by
-   taking the space on both sides rather than by being positioned. The
-   auto margins collapse to nothing when the bar is too narrow to
-   spare any, so on a small window it just sits between them instead
-   of forcing a wrap. */
-.preview-flag {
-  margin: 0 auto;
-  color: var(--injured);
-  border: 1px solid var(--injured);
-  border-radius: 999px;
-  padding: 0.1rem 0.6rem;
-  font-size: 0.75rem;
-  white-space: nowrap;
-}
-
-/* .toolbar-right already claims the gap on its left. With the flag
-   between them, two things would be competing for it and the flag
-   would sit off-centre — so the flag takes both sides and the right
-   group just follows it. */
-.npc-toolbar > .preview-flag ~ .toolbar-right {
-  margin-left: 0;
-}
-
 .npc-substrip .reset-layout {
   margin-left: auto;
 }

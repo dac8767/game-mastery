@@ -484,13 +484,6 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
           </span>
         </div>
 
-        {/* Between the count and the controls, centred by the flex
-            gap on either side of it. It was down on the substrip, a
-            row below the bar and hard against the left edge — a state
-            you are IN, filed under the row for things you have DONE. */}
-        {result.previewingAsPlayer && (
-          <span className="preview-flag">Viewing as a player</span>
-        )}
 
         <div className="toolbar-right">
           {/* Filter, Group, Sort, View, Search, and then the menu — the

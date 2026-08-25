@@ -95,7 +95,6 @@ export const listForCampaign = query({
 
     return {
       isDm,
-      previewingAsPlayer: isCampaignDm && !isDm,
       truncated,
       sessions: page.map((s) => ({
         _id: s._id,

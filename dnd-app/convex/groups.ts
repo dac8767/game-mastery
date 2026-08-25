@@ -181,7 +181,6 @@ export const listForCampaign = query({
 
     return {
       isDm,
-      previewingAsPlayer: isCampaignDm && !isDm,
       truncated: npcRows.length >= MAX_NPCS || described.length >= MAX_GROUPS,
       groups: rows,
     };

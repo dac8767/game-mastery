@@ -373,9 +373,6 @@ export function GroupTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
             </span>
           </div>
 
-          {result.previewingAsPlayer && (
-            <span className="preview-flag">Viewing as a player</span>
-          )}
 
           <div className="toolbar-right">
             <BarButton

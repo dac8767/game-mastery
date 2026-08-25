@@ -123,9 +123,6 @@ export const listForCampaign = query({
 
     return {
       isDm,
-      // True only while a real DM is deliberately seeing less, so the
-      // UI can say so rather than looking broken.
-      previewingAsPlayer: isCampaignDm && !isDm,
       truncated,
       npcs,
     };
