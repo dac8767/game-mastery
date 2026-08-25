@@ -27,7 +27,9 @@ import {
   monsterTraitLines,
   sortByColumn,
   spellCells,
+  expandSource,
   splitSource,
+  trackPx,
   variantLabel,
 } from "@/components/lookupFields";
 import {
@@ -168,6 +170,20 @@ export function LookupTool({
    * on — a row called "Elf (PHB)" is filed under "elf", and looking it
    * up by its raw name finds nothing and shows no count.
    */
+  /**
+   * What a cell writes, at the width its column actually has.
+   *
+   * One column reads its own width — Source, which holds a book's name
+   * where the space allows and its abbreviation where it does not. A
+   * resized column is already a number; an untouched one is the
+   * declared track, which only some of them are a length.
+   */
+  const cellText = (c: (typeof columns)[number], row: Record<string, unknown>) => {
+    if (!c.fit) return c.get(row) ?? "—";
+    const px = layout.widths[c.key] ?? trackPx(c.width);
+    return c.fit(row, px) || "—";
+  };
+
   const memberCount = (row: Record<string, unknown>) =>
     grouped?.childrenOf.get(
       splitSource(row.name, row.source)
@@ -422,7 +438,7 @@ export function LookupTool({
                               )}
                             </span>
                           ) : (
-                            <span className="lk-cell">{c.get(row) ?? "—"}</span>
+                            <span className="lk-cell">{cellText(c, row)}</span>
                           )}
                         </span>
                       ))}
@@ -612,7 +628,7 @@ function LookupDetail({
   members?: Record<string, unknown>[] | null;
 }) {
   const body = readBlocks(row.blocks);
-  const source = typeof row.source === "string" ? row.source : "";
+  const source = expandSource(row.source);
 
   return (
     <article className={`lk lk-${kind}`}>
@@ -746,7 +762,9 @@ function FamilyRow({
         </span>
         <span className="lk-subclass-name">{label}</span>
         {clean.source && !named && (
-          <span className="lk-subclass-src">{clean.source}</span>
+          <span className="lk-subclass-src">
+            {expandSource(clean.source)}
+          </span>
         )}
       </button>
 

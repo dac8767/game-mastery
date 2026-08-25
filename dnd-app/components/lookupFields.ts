@@ -1,3 +1,11 @@
+import {
+  expandSource,
+  sourceLabel,
+  trackPx,
+} from "./sourceNames";
+
+export { expandSource, sourceLabel, trackPx };
+
 /**
  * How a Lookup entry reads.
  *
@@ -526,7 +534,11 @@ export function variantLabel(
 ): string {
   const clean = splitSource(row.name, row.source);
   if (famKey(clean.name) !== famKey(family)) return clean.name;
-  return clean.source ? `${clean.source} version` : "Base version";
+  // The BOOK, written out: this label is the only thing telling three
+  // printings of one species apart, so it is the one place an
+  // abbreviation is least use.
+  const book = expandSource(clean.source);
+  return book ? `${book} version` : "Base version";
 }
 
 /** The grouping for a kind, or null for the kinds that are flat. */
@@ -774,6 +786,16 @@ export interface LookupColumn {
   /** Display text. null prints as an em dash rather than a gap. */
   get: (row: Row) => string | null;
   /**
+   * What to show instead, when the column is only this wide.
+   *
+   * One column needs this and it is not a general feature waiting to
+   * happen: a sourcebook has a name and an abbreviation, and which one
+   * belongs in the cell is a question about the cell rather than about
+   * the book. Absent everywhere else, where `get` is the answer at any
+   * width.
+   */
+  fit?: (row: Row, widthPx: number | null) => string | null;
+  /**
    * What this column sorts on. Absent means "sort by what it shows",
    * which is right for text and wrong for anything whose display form
    * is not its order — a CR of "1/4" sorts between "1/8" and "1/2" only
@@ -876,10 +898,21 @@ const NAME_COLUMN: LookupColumn = {
 const SOURCE_COLUMN: LookupColumn = {
   key: "source",
   label: "Source",
-  width: "7rem",
-  get: (r) => splitSource(r.name, r.source).source,
-  // Blank last, like every other mostly-empty column here.
-  sort: (r) => splitSource(r.name, r.source).source?.toLowerCase() ?? "￿",
+  // Much wider than it was, because it holds a book's name rather than
+  // a four-letter code. 16rem takes every title in the list above
+  // except the longest adventure names, which fall back to their
+  // abbreviation until the column is dragged wider.
+  width: "16rem",
+  get: (r) => expandSource(splitSource(r.name, r.source).source),
+  // ...unless it has been dragged narrower than the name, in which
+  // case the abbreviation is the more useful of the two.
+  fit: (r, widthPx) =>
+    sourceLabel(splitSource(r.name, r.source).source, widthPx),
+  // Sorted on what it SHOWS, or a column of book names would come back
+  // in the order of codes nobody can see. Blank last, like every other
+  // mostly-empty column here.
+  sort: (r) =>
+    expandSource(splitSource(r.name, r.source).source).toLowerCase() || "￿",
 };
 
 /**

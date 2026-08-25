@@ -3635,7 +3635,7 @@ export const unit = {
       look.variantLabel("Dragonborn", {
         name: "Dragonborn",
         source: "PHB",
-      }) === "PHB version"
+      }) === "Player's Handbook version"
     );
     check(
       "with nothing to wear when there is no book",
@@ -3656,14 +3656,14 @@ export const unit = {
       look.variantLabel("Dragonborn", {
         name: "Dragonborn (PHB)",
         source: "PHB",
-      }) === "PHB version"
+      }) === "Player's Handbook version"
     );
     check(
       "and matching ignores case and spacing",
       look.variantLabel("  dragonborn ", {
         name: "Dragonborn",
         source: "PHB",
-      }) === "PHB version"
+      }) === "Player's Handbook version"
     );
     // The other naming form exports use.
     check(
@@ -5518,6 +5518,83 @@ export const unit = {
       check(
         "which is a label, not the stored value",
         primary.kind === "number"
+      );
+    }
+
+    // ---- a book, written out ---------------------------------------
+    // A Foundry export stores the abbreviation, which is what a
+    // compendium key looks like rather than what a book is called.
+    {
+      const src = await import(
+        pathToFileURL(
+          join(compile("components/sourceNames.ts"), "sourceNames.js")
+        ).href
+      );
+
+      check(
+        "a book this app knows is written out",
+        src.expandSource("PHB") === "Player's Handbook" &&
+          src.expandSource("MotM") === "Monsters of the Multiverse"
+      );
+      // The important half. A book nobody wrote down here keeps its
+      // abbreviation, which is what the column already showed — never
+      // worse than before, and never a guess.
+      check(
+        "a book it does not know keeps its abbreviation",
+        src.expandSource("ZZZ") === "ZZZ"
+      );
+      check(
+        "and nothing is nothing, not a stray word",
+        src.expandSource("") === "" && src.expandSource(null) === ""
+      );
+      // The printing year is the whole reason the Source column is
+      // worth reading in a library holding both editions.
+      check(
+        "the year stays on the end",
+        src.expandSource("PHB 2024") === "Player's Handbook 2024"
+      );
+      check(
+        "and an unknown book keeps its year too",
+        src.expandSource("ZZZ 2024") === "ZZZ 2024"
+      );
+
+      // Too narrow for the name, so the abbreviation comes back: a
+      // clipped book title says less than a code does.
+      check(
+        "a wide column gets the name",
+        src.sourceLabel("PHB", 300) === "Player's Handbook"
+      );
+      // The default width, against the titles that actually turn up.
+      // Measured in the browser at 0.84rem: Van Richten's is 220px on
+      // screen and Monsters of the Multiverse 179, so a 16rem column
+      // takes both.
+      check(
+        "the default column takes the long common titles",
+        src.sourceLabel("VRGtR", 256) === "Van Richten's Guide to Ravenloft" &&
+          src.sourceLabel("MotM", 256) === "Monsters of the Multiverse"
+      );
+      check(
+        "a narrow one gets the abbreviation",
+        src.sourceLabel("PHB", 60) === "PHB"
+      );
+      check(
+        "an unmeasurable column writes it out",
+        src.sourceLabel("PHB", null) === "Player's Handbook"
+      );
+      // A book with no expansion has nothing to shorten back TO, so the
+      // width cannot make it any shorter.
+      check(
+        "an unknown book is itself at any width",
+        src.sourceLabel("ZZZ", 20) === "ZZZ"
+      );
+
+      check(
+        "a rem track is measured",
+        src.trackPx("7rem") === 112 && src.trackPx("140px") === 140
+      );
+      check(
+        "and a track that is not a length is not guessed at",
+        src.trackPx("minmax(11rem, 2fr)") === null && src.trackPx("") === null
       );
     }
 

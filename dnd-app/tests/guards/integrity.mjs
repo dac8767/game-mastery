@@ -1515,6 +1515,38 @@ export const integrity = {
       }
     }
 
+    // ---- a column that reads its own width is asked for it ---------
+    // The Source column shows a book's NAME where the space allows and
+    // its abbreviation where it does not, which only works if the cell
+    // is told how wide it is. Two ways that stops: the column loses its
+    // `fit`, or the renderer stops calling it — and both look like a
+    // column that has quietly gone back to abbreviations, which is what
+    // it showed before anybody asked.
+    {
+      const fieldsSrc = read("components", "lookupFields.ts");
+      const toolSrc = stripComments(read("components", "LookupTool.tsx"));
+
+      if (!/fit:\s*\(r, widthPx\)/.test(fieldsSrc)) {
+        problems.push(
+          "no column reads its own width any more — the Source column " +
+            "is meant to fall back to an abbreviation where the name " +
+            "does not fit"
+        );
+      }
+      if (!/const cellText =/.test(toolSrc)) {
+        problems.push(
+          "LookupTool has no cellText, so a column's `fit` is never " +
+            "called and the width rule does nothing"
+        );
+      } else if (!/\{cellText\(c, row\)\}/.test(toolSrc)) {
+        problems.push(
+          "the table draws its cells without going through cellText — " +
+            "a column that reads its own width would be drawn as if it " +
+            "had none"
+        );
+      }
+    }
+
     // ---- a drawn nav icon must have a drawing ----------------------
     // `art: "people"` names a component in NavIcon.tsx, by string.
     // Getting it wrong does not throw and does not render nothing: the
