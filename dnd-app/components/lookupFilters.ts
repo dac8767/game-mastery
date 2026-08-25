@@ -196,6 +196,54 @@ export function applyEdition<T extends Row>(
   return usable.filter((r) => keep.has(r));
 }
 
+/** Which editions the table is showing. */
+export type EditionShow = Record<RulesVersion, boolean>;
+
+/** What each edition is called on the buttons. */
+export const EDITION_LABEL: Record<RulesVersion, string> = {
+  "2014": "5e",
+  "2024": "5.5e",
+};
+
+/**
+ * What the buttons start as: this campaign's edition, and not the
+ * other one.
+ *
+ * The same library the campaign had before there were buttons — so a
+ * table that nobody touches reads exactly as it did, and the buttons
+ * are a way to see MORE rather than a new thing to configure.
+ */
+export function defaultEditions(campaign: RulesVersion): EditionShow {
+  return { "2014": campaign === "2014", "2024": campaign === "2024" };
+}
+
+/**
+ * The library, given which editions are switched on.
+ *
+ * Three cases, and the middle one is the whole point of the buttons:
+ *
+ *   one on    exactly what the campaign used to get, and nothing has
+ *             changed for anybody who leaves the buttons alone.
+ *   both on   nothing is hidden. Not "merge the two" — both printings
+ *             of Aasimar appear, because you asked to see both, and
+ *             collapsing them would be the app still deciding.
+ *   none on   nothing. A legitimate thing to ask for and a strange
+ *             thing to be given silently, so the screen says so rather
+ *             than looking like a library that failed to load.
+ */
+export function applyEditions<T extends Row>(
+  rows: T[],
+  show: EditionShow,
+  kind: LookupKind
+): T[] {
+  const on = (["2014", "2024"] as const).filter((e) => show[e]);
+  if (on.length === 0) return [];
+  // Still deduped: the same entry imported twice from two modules is
+  // one entry however many editions are showing.
+  if (on.length === 2) return dedupeExact(rows);
+  return applyEdition(rows, on[0], kind);
+}
+
 /** What a control looks like. */
 export type FilterControl =
   | { type: "text" }

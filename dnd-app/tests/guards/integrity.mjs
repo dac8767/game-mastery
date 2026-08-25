@@ -3772,6 +3772,104 @@ export const integrity = {
       }
     }
 
+    // ---- the editions are buttons, and the books are switches -------
+    // Two features that both narrow the Lookup tables, and both fail
+    // the same silent way: the control renders, and the pipeline it is
+    // meant to drive still does what it always did.
+    {
+      const tool = stripComments(read("components", "LookupTool.tsx"));
+      const tabsSrc = read("components", "settingsTabs.ts");
+      const panel = stripComments(read("components", "SettingsPanel.tsx"));
+      const registry = read("components", "uiRegistry.ts");
+      const settings = read("convex", "settings.ts");
+      const schema = read("convex", "schema.ts");
+
+      // The old single-edition call has to be GONE from the screen, not
+      // merely joined by the new one: leaving it would filter to the
+      // campaign's edition first and hand applyEditions a library the
+      // buttons can no longer widen.
+      if (/\bapplyEdition\(/.test(tool)) {
+        problems.push(
+          "LookupTool still calls applyEdition — the buttons could not " +
+            "reveal the other edition, because it would already be gone"
+        );
+      }
+      for (const [call, why] of [
+        ["applyEditions(", "the edition buttons drive nothing"],
+        // The SEEDING, not merely the call: the initial useState value
+        // also calls defaultEditions, so a check for the name alone was
+        // satisfied while the line that reads the campaign's own
+        // edition had been replaced with a constant.
+        [
+          "setEditions(defaultEditions(edition))",
+          "the buttons would not start on this campaign's edition — rules " +
+            "2 and 3 of what was asked for",
+        ],
+        ["applySourceFilter(", "books switched off in Settings would still appear"],
+      ]) {
+        if (!tool.includes(call)) {
+          problems.push(`LookupTool never calls ${call} — ${why}`);
+        }
+      }
+      // Both buttons, and both labelled from the one place that names
+      // an edition — "5e" and "5.5e" typed here would drift from the
+      // campaign setting that uses the same words.
+      if (!/EDITION_LABEL\[/.test(tool)) {
+        problems.push(
+          "the edition buttons do not read EDITION_LABEL — their wording " +
+            "would drift from the campaign setting that names the same two " +
+            "editions"
+        );
+      }
+      if (!/aria-pressed=\{editions\[e\]\}/.test(tool)) {
+        problems.push(
+          "the edition buttons do not report their own state — a toggle " +
+            "that looks pressed and says nothing is a button to a screen " +
+            "reader"
+        );
+      }
+
+      // A tab has to exist in the registry AND have a panel, which is
+      // the whole reason settingsTabs.ts is a declaration.
+      if (!/id: "sources"/.test(tabsSrc)) {
+        problems.push("settingsTabs has no Sources tab");
+      }
+      if (!/tab === "sources"/.test(panel) || !/<SourcesPanel\b/.test(panel)) {
+        problems.push(
+          "the Sources tab has no panel — it would render an empty page"
+        );
+      }
+      if (!/settings\.tab\.sources/.test(registry)) {
+        problems.push(
+          "settings.tab.sources is not in the UI registry, so the tab " +
+            "strip would render a blank label"
+        );
+      }
+
+      // And the setting has to survive a reload.
+      if (!/excludedSources: v\.optional\(v\.array\(v\.string\(\)\)\)/.test(schema)) {
+        problems.push("userSettings has nowhere to keep excludedSources");
+      }
+      for (const [where, why] of [
+        ["excludedSources: v.optional(v.array(v.string()))", "saveMySettings will not accept it"],
+        ["excludedSources: doc.excludedSources", "mySettings never reports it back"],
+        ["excludedSources: args.excludedSources ?? existing.excludedSources", "an existing row is never updated"],
+      ]) {
+        if (!settings.includes(where)) {
+          problems.push(`convex/settings.ts is missing \`${where}\` — ${why}`);
+        }
+      }
+      // `??` and not `||`: switching the last book back on sends an
+      // EMPTY array, and `||` would read that as "did not mention it"
+      // and leave every book switched off with no way back.
+      if (/excludedSources: args\.excludedSources \|\|/.test(settings)) {
+        problems.push(
+          "saveMySettings falls back on `||` for excludedSources — an empty " +
+            "list is a real request, and this would refuse to store it"
+        );
+      }
+    }
+
     // ---- typing # in the notes --------------------------------------
     // The picker at the caret. Everything below is a way for it to look
     // exactly right and insert nothing, which is how the toolbar's own

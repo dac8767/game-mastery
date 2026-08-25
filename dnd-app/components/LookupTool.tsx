@@ -16,6 +16,7 @@ import {
   buildFacts,
   ABSENT_PARENT_ID,
   FAMILY_LABEL,
+  applySourceFilter,
   buildSubtitle,
   familyRows,
   columnTemplate,
@@ -35,7 +36,10 @@ import {
 import {
   FilterState,
   RulesVersion,
-  applyEdition,
+  EDITION_LABEL,
+  EditionShow,
+  applyEditions,
+  defaultEditions,
   applyFilters,
 } from "@/components/lookupFilters";
 import { LookupFilterBar } from "@/components/LookupFilterBar";
@@ -58,10 +62,12 @@ import { useLookupLayout } from "@/components/useLookupLayout";
  * which is why adding four kinds touched the declarations and barely
  * touched this.
  *
- * The 5e/5.5e rule is applied here, once, for all of them: a name that
- * exists in both printings collapses to the one this campaign plays.
- * It reads only `name` and `source`, so every kind gets it by carrying
- * those two fields rather than by opting in.
+ * The 5e/5.5e rule is applied here, once, for all of them, and it is
+ * now a pair of buttons rather than a verdict: the campaign's edition
+ * decides where they start, and turning both on shows both printings
+ * of everything. Books switched off in Settings are dropped in the
+ * same pass. Both read only `name` and `source`, so every kind gets
+ * them by carrying those two fields rather than by opting in.
  *
  * The whole lightweight index is fetched once and filtered in memory.
  * That is the cheap option here rather than the expensive one, because
@@ -147,14 +153,44 @@ export function LookupTool({
   const edition: RulesVersion =
     campaigns?.find((c) => c._id === campaignId)?.rulesVersion ?? "2014";
 
+  /**
+   * Which editions the table is showing.
+   *
+   * The campaign's edition decides where the buttons START, not what
+   * they are allowed to be — a 5e table that wants to look at a 5.5e
+   * subclass can, without anybody editing the campaign.
+   */
+  const [editions, setEditions] = useState<EditionShow>(() =>
+    defaultEditions("2014")
+  );
+
+  /* Re-seeded when the campaign's own edition arrives or changes, and
+     only then. `campaigns` is undefined on the first render, so seeding
+     from it directly would set 5e for everyone for a frame and then
+     stamp over whatever the person had just clicked. */
+  const seeded = useRef<RulesVersion | null>(null);
+  useEffect(() => {
+    if (campaigns === undefined || seeded.current === edition) return;
+    seeded.current = edition;
+    setEditions(defaultEditions(edition));
+  }, [campaigns, edition]);
+
+  // Books switched off in Settings. mySettings is already loaded by
+  // AppShell, so this is that subscription rather than a second one.
+  const settings = useQuery(api.settings.mySettings);
+  const excluded = useMemo(
+    () => settings?.excludedSources ?? [],
+    [settings]
+  );
+
   // Applied BEFORE the filters, so the counts in the bar describe the
-  // library this campaign actually plays with rather than both editions
-  // stacked on top of each other.
+  // library actually on screen rather than everything that was loaded.
   const library = useMemo(
-    () => applyEdition(all, edition, kind),
-    [all, edition, kind]
+    () => applySourceFilter(applyEditions(all, editions, kind), excluded),
+    [all, editions, kind, excluded]
   );
   const folded = all.length - library.length;
+  const noEdition = !editions["2014"] && !editions["2024"];
 
   /* Classes and species: the table lists the PARENTS, and each one
      carries its children inside its own entry. An alphabetised pile is
@@ -311,14 +347,35 @@ export function LookupTool({
             total={listed.length}
           />
 
-          {/* Never a silently shorter list: the edition is a campaign
-              setting made somewhere else, so the screen it changes has
-              to say which one is in force and what it cost. */}
-          {folded > 0 && (
-            <p className="muted lk-edition">
-              {edition === "2024" ? "5.5e (2024)" : "5e (2014)"} — {folded}{" "}
-              {folded === 1 ? "entry" : "entries"} from the other edition
-              folded away. Change it in Settings.
+          {/* Never a silently shorter list. It used to say which
+              edition was in force and send you to Settings to change
+              it; now the thing that changes it is right here, and the
+              count is what it costs. */}
+          <div className="lk-editions">
+            {(["2014", "2024"] as const).map((e) => (
+              <button
+                key={e}
+                type="button"
+                className={`lk-edition-btn${editions[e] ? " on" : ""}`}
+                aria-pressed={editions[e]}
+                onClick={() =>
+                  setEditions((cur) => ({ ...cur, [e]: !cur[e] }))
+                }
+              >
+                Show {EDITION_LABEL[e]}
+              </button>
+            ))}
+            {folded > 0 && (
+              <span className="muted lk-edition-note">
+                {folded} {folded === 1 ? "entry" : "entries"} hidden
+              </span>
+            )}
+          </div>
+
+          {noEdition && (
+            <p className="muted lk-edition-none">
+              Both editions are switched off, so there is nothing to
+              show. Turn one back on above.
             </p>
           )}
 

@@ -17,7 +17,14 @@
  *                separate tab that only ever had one occupant
  *   Campaign     this campaign as a thing: its name, its picture, its
  *                rules edition, and who is at the table
+ *   Sources      which books the library draws from, yours alone
  *   Interface    how the app looks and reads, yours alone
+ *
+ * Sources sits beside Interface rather than inside System for the same
+ * reason the division is by owner: it changes what YOU see in the
+ * Lookup tables and nothing about the campaign, which is the claim the
+ * theme makes too. It is a tab rather than a control on one because it
+ * is ninety switches.
  *
  * That is why the theme and the date format are together and away from
  * the rules edition, which looks like a display preference and is not:
@@ -42,6 +49,7 @@ export type SettingsTab =
   | "system"
   | "user"
   | "campaign"
+  | "sources"
   | "interface";
 
 export interface SettingsTabDef {
@@ -71,6 +79,12 @@ export const SETTINGS_TABS: SettingsTabDef[] = [
     blurb:
       "This campaign, as everyone else sees it — its name, its rules edition, and who is at the table. Campaign-wide.",
     dmOnly: true,
+  },
+  {
+    id: "sources",
+    label: "Sources",
+    blurb:
+      "Which books the Lookup tables draw from. Switch one off and its entries stop appearing in them. Yours alone.",
   },
   {
     id: "interface",

@@ -34,6 +34,10 @@ const DEFAULTS = {
   // Day-first, matching what the campaign card already showed. Changing
   // an existing display is not a default's job.
   dateFormat: "dmy" as const,
+  // Nothing switched off. An empty list and "never opened the Sources
+  // tab" are the same thing here, which is why this needs no flag of
+  // the kind the toolbar has.
+  excludedSources: [] as string[],
 };
 
 /** Shared reader so queries can honour viewAsPlayer without duplication. */
@@ -54,6 +58,7 @@ export async function getSettings(ctx: QueryCtx, userId: Id<"users">) {
         // stand in for "never arranged one".
         toolbarSet: doc.toolbarSet ?? false,
         dateFormat: doc.dateFormat ?? DEFAULTS.dateFormat,
+        excludedSources: doc.excludedSources ?? DEFAULTS.excludedSources,
         // Null rather than a default: absent means "never arranged
         // one", which the client needs to tell apart from an arranged
         // layout that happens to match the shipped grouping.
@@ -115,6 +120,7 @@ export const saveMySettings = mutation({
     adminOverride: v.optional(v.boolean()),
     toolbarTokens: v.optional(v.array(v.string())),
     dateFormat: v.optional(dateFormatValidator),
+    excludedSources: v.optional(v.array(v.string())),
     sidebar: v.optional(v.union(sidebarValidator, v.null())),
   },
   handler: async (ctx, args) => {
@@ -142,6 +148,9 @@ export const saveMySettings = mutation({
         toolbarSet:
           args.toolbarTokens !== undefined || (existing.toolbarSet ?? false),
         dateFormat: args.dateFormat ?? existing.dateFormat,
+        // `??`, so switching the last book back ON — an empty array —
+        // is stored rather than read as "did not mention it".
+        excludedSources: args.excludedSources ?? existing.excludedSources,
         // An explicit null is "put it back to the default", which is a
         // different request from not mentioning it at all.
         sidebar:
@@ -160,6 +169,7 @@ export const saveMySettings = mutation({
       toolbarTokens: args.toolbarTokens,
       toolbarSet: args.toolbarTokens !== undefined,
       dateFormat: args.dateFormat,
+      excludedSources: args.excludedSources,
       sidebar: args.sidebar ?? undefined,
     });
   },

@@ -195,6 +195,7 @@ export const TEXT_PIECES: TextPiece[] = [
   { id: "settings.tab.system", value: "System", screen: "Settings" },
   { id: "settings.tab.user", value: "User", screen: "Settings" },
   { id: "settings.tab.campaign", value: "Campaign", screen: "Settings" },
+  { id: "settings.tab.sources", value: "Sources", screen: "Settings" },
   { id: "settings.tab.interface", value: "Interface", screen: "Settings" },
 ];
 

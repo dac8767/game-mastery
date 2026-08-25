@@ -73,6 +73,7 @@ export const SOURCE_NAMES: Record<string, string> = {
   VRGtR: "Van Richten's Guide to Ravenloft",
   VRGR: "Van Richten's Guide to Ravenloft",
   SAiS: "Spelljammer: Adventures in Space",
+  PAitM: "Planescape: Adventures in the Multiverse",
   AI: "Acquisitions Incorporated",
 
   // Adventures
@@ -123,16 +124,71 @@ export const SOURCE_NAMES: Record<string, string> = {
  * order to find a KNOWN book, and a miss returns the string untouched
  * exactly as before.
  */
+const PRINTING = /^(.*\S)\s+(\d+(?:\.\d+)*)$/;
+
 export function expandSource(source: unknown): string {
   const raw = String(source ?? "").trim();
   if (!raw) return "";
 
-  const printing = /^(.*\S)\s+(\d+(?:\.\d+)*)$/.exec(raw);
+  const printing = PRINTING.exec(raw);
   const base = printing ? printing[1] : raw;
   const tail = printing ? ` ${printing[2]}` : "";
 
   const full = SOURCE_NAMES[base];
   return full ? `${full}${tail}` : raw;
+}
+
+/**
+ * One book, whichever code and printing a row happens to carry.
+ *
+ * What a Sources setting has to switch on. "PHB", "PHB 2014" and "PHB
+ * 2024" are three strings and one book, and somebody turning off
+ * Acquisitions Incorporated means the book, not one spelling of it.
+ *
+ * The printing only comes off when what is left is a book the app
+ * knows. Otherwise "Derek's notes, session 12" would key as "Derek's
+ * notes, session" — a source nobody wrote, silently merging two
+ * different things under a name that is neither.
+ */
+export function sourceKey(source: unknown): string {
+  const raw = String(source ?? "").trim();
+  if (!raw) return "";
+
+  const printing = PRINTING.exec(raw);
+  const base = printing && SOURCE_NAMES[printing[1]] ? printing[1] : raw;
+  return SOURCE_NAMES[base] ?? base;
+}
+
+export interface SourceBook {
+  /** What the Sources setting stores and shows: the book's full name. */
+  name: string;
+  /** Every abbreviation that means it, so the list can say so. */
+  codes: string[];
+}
+
+/**
+ * The books, one row each.
+ *
+ * BY NAME, not by code. Eight books in the map have two abbreviations
+ * apiece — EEPC and EE, MPMM and MotM — and a settings list built
+ * straight off the keys would offer Elemental Evil twice, where turning
+ * off one of them would hide half the rows and look like a bug in the
+ * filter rather than a second entry you had not noticed.
+ *
+ * It is also why the stored value is the NAME. Add a third code for a
+ * book somebody has already switched off and it is off, rather than
+ * quietly reappearing under a spelling the setting never heard of.
+ */
+export function sourceBooks(): SourceBook[] {
+  const byName = new Map<string, string[]>();
+  for (const [code, name] of Object.entries(SOURCE_NAMES)) {
+    const codes = byName.get(name);
+    if (codes) codes.push(code);
+    else byName.set(name, [code]);
+  }
+  return [...byName.entries()]
+    .map(([name, codes]) => ({ name, codes: [...codes].sort() }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**

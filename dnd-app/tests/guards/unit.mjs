@@ -4509,6 +4509,70 @@ export const unit = {
       "a 2014-only species still shows in a 5.5e campaign",
       spec("2024").includes("Warforged/ERLW")
     );
+
+      // ---- the buttons that let you see both ---------------------
+      // The rule above is now where the BUTTONS start rather than what
+      // the campaign is stuck with. Which means the single-edition
+      // behaviour has to be exactly what it was, or every campaign
+      // that never touches the buttons has quietly changed.
+      check(
+        "one edition on is the rule the campaign had before",
+        JSON.stringify(
+          filt.applyEditions(speciesLib, { "2014": true, "2024": false }, "species")
+        ) ===
+          JSON.stringify(filt.applyEdition(speciesLib, "2014", "species")) &&
+          JSON.stringify(
+            filt.applyEditions(speciesLib, { "2014": false, "2024": true }, "species")
+          ) === JSON.stringify(filt.applyEdition(speciesLib, "2024", "species"))
+      );
+      check(
+        "a 5e campaign starts on 5e and not the other one",
+        JSON.stringify(filt.defaultEditions("2014")) ===
+          JSON.stringify({ "2014": true, "2024": false })
+      );
+      check(
+        "and a 5.5e campaign the other way round",
+        JSON.stringify(filt.defaultEditions("2024")) ===
+          JSON.stringify({ "2014": false, "2024": true })
+      );
+
+      // Both on shows BOTH printings. Not a merge — collapsing Aasimar
+      // to one row would be the app still choosing, which is the thing
+      // the buttons exist to stop.
+      {
+        const both = filt
+          .applyEditions(speciesLib, { "2014": true, "2024": true }, "species")
+          .map((r) => `${r.name}/${r.source}`);
+        check(
+          "both on keeps both printings of a species",
+          both.includes("Aasimar/MotM") && both.includes("Aasimar/PHB 2024")
+        );
+        check(
+          "both on keeps a 2024-only build option a 5e table would drop",
+          both.includes("Goliath/PHB 2024")
+        );
+        check("both on keeps everything", both.length === speciesLib.length);
+      }
+
+      // Still deduped with both on: one entry imported from two
+      // modules is one entry however many editions are showing.
+      check(
+        "both on still collapses the same row imported twice",
+        filt.applyEditions(
+          [
+            { name: "Aasimar", source: "MotM" },
+            { name: "Aasimar", source: "MotM" },
+          ],
+          { "2014": true, "2024": true },
+          "species"
+        ).length === 1
+      );
+
+      check(
+        "neither on shows nothing, rather than everything",
+        filt.applyEditions(speciesLib, { "2014": false, "2024": false }, "species")
+          .length === 0
+      );
     check(
       "every build kind gets the same rule, not just species",
       ["feats", "backgrounds", "classes"].every(
@@ -5613,22 +5677,133 @@ export const unit = {
       // clipped title says less than an abbreviation — but it meant
       // four of these six read exactly as they had before, and the
       // only way to notice was to go and look at the table.
+      // EVERY book, not the ones most recently added. The column was
+      // widened twice to fit whatever had just gone in, and each time
+      // the next book to be added silently did not fit: it went in the
+      // map, changed nothing on screen, and had to be caught by eye.
+      // This recomputes over the whole map and names the offender.
+      {
+        const px = src.trackPx(look.SOURCE_COLUMN.width);
+        const tooWide = Object.keys(src.SOURCE_NAMES).filter(
+          (code) => src.sourceLabel(code, px) !== src.expandSource(code)
+        );
+        check(
+          tooWide.length === 0
+            ? "every book in the map fits the Source column"
+            : `these books do not fit the ${look.SOURCE_COLUMN.width} Source ` +
+                `column and would still read as codes: ${tooWide.join(", ")}`,
+          Boolean(px) && tooWide.length === 0
+        );
+      }
+      // And the fallback still fires when the column is dragged
+      // narrower, or the check above would be satisfied by a column
+      // that had simply stopped measuring anything.
       check(
-        "the six fit in the Source column at its own default width",
+        "a title too long for the space still falls back to its code",
+        src.sourceLabel("PaBTSO", 120) === "PaBTSO"
+      );
+
+      // ---- one book, however a row spells it ----------------------
+      // What the Sources setting switches on. Three strings, one book.
+      check(
+        "a printing does not make a second book",
+        src.sourceKey("PHB") === "Player's Handbook" &&
+          src.sourceKey("PHB 2014") === "Player's Handbook" &&
+          src.sourceKey("PHB 2024") === "Player's Handbook"
+      );
+      check(
+        "and neither does a second abbreviation",
+        src.sourceKey("EEPC") === src.sourceKey("EE")
+      );
+      check(
+        "a book with no name keys as its own code",
+        src.sourceKey("ZZZ") === "ZZZ"
+      );
+      // The same conditional strip the report uses: prose ending in a
+      // number is not a book with a printing.
+      check(
+        "free text keeps its trailing number",
+        src.sourceKey("Derek's notes, session 12") ===
+          "Derek's notes, session 12"
+      );
+      check("nothing keys as nothing", src.sourceKey(null) === "");
+
+      // One row per BOOK, not per code — a list built off the keys
+      // would offer Elemental Evil twice, and switching one of them
+      // off would hide half its rows and read as a broken filter.
+      {
+        const books = src.sourceBooks();
+        const names = books.map((b) => b.name);
+        check(
+          "the book list has no duplicates",
+          new Set(names).size === names.length
+        );
+        check(
+          "it is in name order, which is the order it is read in",
+          JSON.stringify(names) === JSON.stringify([...names].sort())
+        );
+        const ee = books.find((b) => b.name.startsWith("Elemental Evil"));
+        check(
+          "a book with two codes is one row carrying both",
+          Boolean(ee) &&
+            ee.codes.includes("EE") &&
+            ee.codes.includes("EEPC")
+        );
+        check(
+          "every code in the map reaches a row",
+          Object.keys(src.SOURCE_NAMES).every((code) =>
+            books.some((b) => b.codes.includes(code))
+          )
+        );
+      }
+
+      // ---- books switched off in Settings -------------------------
+      const shelf = [
+        { name: "Fireball", source: "PHB" },
+        { name: "Fireball", source: "PHB 2024" },
+        { name: "Hoard Bag", source: "AI" },
+        { name: "Aura of Life", source: "EEPC" },
+        { name: "Ice Knife", source: "EE" },
+        { name: "Odd Thing", source: "ZZZ" },
+      ];
+      const kept = (off) =>
+        look.applySourceFilter(shelf, off).map((r) => r.name);
+
+      check(
+        "nothing switched off changes nothing",
+        look.applySourceFilter(shelf, []) === shelf
+      );
+      check(
+        "switching a book off takes every printing of it",
+        !kept(["Player's Handbook"]).includes("Fireball") &&
+          kept(["Player's Handbook"]).length === 4
+      );
+      // The reason the setting stores names: EEPC and EE are one book,
+      // and switching it off has to take both spellings with it.
+      check(
+        "and every abbreviation of it",
         (() => {
-          const px = src.trackPx(look.SOURCE_COLUMN.width);
-          if (!px) return false;
-          return ["FRHoF", "TBoMT", "IDRotF", "SACoC", "EE", "EFotA"].every(
-            (code) => src.sourceLabel(code, px) === src.expandSource(code)
-          );
+          const left = kept(["Elemental Evil Player's Companion"]);
+          return !left.includes("Aura of Life") && !left.includes("Ice Knife");
         })()
       );
-      // And the fallback still fires where it has to, or the check
-      // above would be satisfied by a column with no fallback at all.
       check(
-        "a title too long for the column still falls back to its code",
-        src.sourceLabel("PaBTSO", src.trackPx(look.SOURCE_COLUMN.width)) ===
-          "PaBTSO"
+        "a book nobody switched off is untouched",
+        kept(["Acquisitions Incorporated"]).includes("Fireball")
+      );
+      check(
+        "a book with no name can still be switched off by its code",
+        !kept(["ZZZ"]).includes("Odd Thing")
+      );
+      // The source can be in the NAME rather than the field — every
+      // other reader here allows for that, and one that did not would
+      // quietly spare those rows from a switch somebody had thrown.
+      check(
+        "a book written into the name is switched off too",
+        look.applySourceFilter(
+          [{ name: "Fireball (PHB)", source: "" }],
+          ["Player's Handbook"]
+        ).length === 0
       );
 
       // Where one book has two codes, both have to say the same thing.

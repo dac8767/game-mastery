@@ -1,10 +1,39 @@
 import {
   expandSource,
+  sourceKey,
   sourceLabel,
   trackPx,
 } from "./sourceNames";
 
-export { expandSource, sourceLabel, trackPx };
+export { expandSource, sourceKey, sourceLabel, trackPx };
+
+/**
+ * Rows from books nobody switched off.
+ *
+ * Keyed by BOOK rather than by the string in the row: "PHB", "PHB
+ * 2014" and "PHB 2024" are one book with three spellings, and a filter
+ * matching the raw value would leave two thirds of the Player's
+ * Handbook on screen after you switched it off.
+ *
+ * Reads the source through splitSource for the same reason the Source
+ * column does — an importer that put the book in the NAME rather than
+ * in the field is common enough that every other reader here allows
+ * for it, and a filter that did not would silently spare those rows.
+ *
+ * An empty list returns the same array rather than a copy: this runs
+ * over every row of the table on every keystroke in the filter bar,
+ * for a setting most people never touch.
+ */
+export function applySourceFilter<T extends Record<string, unknown>>(
+  rows: T[],
+  excluded: readonly string[]
+): T[] {
+  if (excluded.length === 0) return rows;
+  const off = new Set(excluded);
+  return rows.filter(
+    (r) => !off.has(sourceKey(splitSource(r.name, r.source).source))
+  );
+}
 
 /**
  * How a Lookup entry reads.
@@ -952,19 +981,23 @@ export const SOURCE_COLUMN: LookupColumn = {
    * Much wider than it was, because it holds a book's name rather than
    * a four-letter code.
    *
-   * MEASURED, not chosen. At 16rem the width estimate said no to four
-   * of the six books Derek had just asked to be written out — Icewind
-   * Dale, Strixhaven, Elemental Evil and Heroes of Faerûn all fell back
-   * to their abbreviations, which is a book added to the map and no
-   * visible difference. The longest of them needs 17.99rem by that same
-   * estimate, so: 18rem.
+   * MEASURED, and wide enough for EVERY book in the map.
    *
-   * The two longest adventure titles in the map still do not fit —
-   * Phandelver and Below at 20.8rem and Shadow of the Dragon Queen at
-   * 18.9rem — and still fall back until the column is dragged wider,
-   * which is what the fallback is for.
+   * It was 16rem, then 18rem, each time chosen to fit the books that
+   * had just been added — and each time a later book was added that
+   * did not fit, so it went in the map, changed nothing on screen, and
+   * had to be noticed by looking at the table. Adding a book should be
+   * the whole job.
+   *
+   * So the number comes from the longest title there is: Phandelver
+   * and Below: The Shattered Obelisk, 20.76rem by the width estimate.
+   * A unit test recomputes that over SOURCE_NAMES and fails naming the
+   * book that no longer fits, which is the only way this stays true.
+   *
+   * The fallback has not gone anywhere — it fires when the column is
+   * dragged NARROWER, which is what it was for.
    */
-  width: "18rem",
+  width: "21rem",
   get: (r) => expandSource(splitSource(r.name, r.source).source),
   // ...unless it has been dragged narrower than the name, in which
   // case the abbreviation is the more useful of the two.

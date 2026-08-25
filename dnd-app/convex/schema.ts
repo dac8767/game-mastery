@@ -472,6 +472,19 @@ export default defineSchema({
       )
     ),
     /**
+     * Books switched off in Settings, by their full NAME.
+     *
+     * The name rather than the abbreviation, because eight books in
+     * components/sourceNames.ts answer to two codes apiece and a
+     * ninth may answer to a third tomorrow. Storing "Elemental Evil
+     * Player's Companion" keeps it switched off however a row spells
+     * it; storing "EEPC" would let the same book back in under "EE".
+     *
+     * Personal, like the theme: what you want to read from is not a
+     * fact about the campaign.
+     */
+    excludedSources: v.optional(v.array(v.string())),
+    /**
      * The sidebar as this person arranged it: their sections, their
      * order, and what they hid. Personal, like the toolbar — it is a
      * view of the app rather than a fact about the campaign.

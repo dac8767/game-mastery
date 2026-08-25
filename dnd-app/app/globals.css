@@ -4981,6 +4981,99 @@ button.cal-day:hover {
   font-size: 0.82rem;
 }
 
+/* Two toggles, not a verdict. The campaign's edition decides where
+   they start; either can be switched on, including both. */
+.lk-editions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.5rem;
+}
+
+.lk-edition-btn {
+  padding: 0.2rem 0.7rem;
+  font-size: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-dim);
+}
+
+.lk-edition-btn.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.lk-edition-note,
+.lk-edition-none {
+  font-size: 0.78rem;
+}
+
+.lk-edition-none {
+  margin: 0 0 0.5rem;
+}
+
+/* ---------- Settings: Sources ---------- */
+
+.sources-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.sources-bar .detail-input {
+  flex: 1;
+  min-width: 12rem;
+}
+
+/* Two columns where there is room. Ninety books in one column is a
+   scroll; in two it is a page you can scan. */
+.sources-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+  gap: 0.1rem 1.25rem;
+}
+
+.sources-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.25rem 0.35rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.sources-row:hover {
+  background: var(--bg-inset);
+}
+
+.sources-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+}
+
+/* Dim and last: the codes are what an export writes and what a narrow
+   Source column falls back to, so they are worth showing and are not
+   what you are reading down the list for. */
+.sources-codes {
+  flex: none;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+/* A switched-off book stays legible rather than greying out — you are
+   scanning for the ones you turned off as often as the ones you left. */
+.sources-row input:not(:checked) ~ .sources-name {
+  color: var(--text-dim);
+  text-decoration: line-through;
+}
+
 /* ---------- Lookup: tables and lists inside a description ---------- */
 
 /* A wide d100 table scrolls inside its own box rather than widening the

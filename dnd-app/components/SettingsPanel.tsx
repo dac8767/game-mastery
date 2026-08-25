@@ -15,6 +15,7 @@ import { CampaignDetails } from "@/components/CampaignDetails";
 import { CampaignRoster } from "@/components/CampaignRoster";
 import { InvitePanel } from "@/components/InvitePanel";
 import { resolveTab, visibleTabs } from "@/components/settingsTabs";
+import { SourcesPanel } from "@/components/SourcesPanel";
 
 /**
  * Settings, in four tabs.
@@ -278,6 +279,16 @@ export function SettingsPanel({
         </>
       )}
 
+
+      {tab === "sources" && (
+        <section className="settings-block">
+          <h2>Books</h2>
+          {/* One switch per book, applied to every Lookup table at
+              once. It is a personal setting: two people at the same
+              table can read from different shelves. */}
+          <SourcesPanel excluded={settings?.excludedSources ?? []} />
+        </section>
+      )}
 
       {tab === "interface" && (
         <>
