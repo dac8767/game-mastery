@@ -110,6 +110,90 @@ export function matchTargets(
     .map((m) => m.t);
 }
 
+/** The character that starts a link while you are typing. */
+export const LINK_TRIGGER = "#";
+
+/**
+ * How long a `#…` run may get before it is plainly not a name.
+ *
+ * There has to be a ceiling, because a `#` typed for any other reason
+ * is a `#` this would otherwise track to the end of the paragraph.
+ */
+const MAX_QUERY = 60;
+
+export interface HashSpot {
+  /** Where the `#` sits, as an offset into the text it was found in. */
+  at: number;
+  /** Everything typed after it, spaces and all. */
+  query: string;
+}
+
+/**
+ * What is being typed after a `#`, if anything.
+ *
+ * The query deliberately RUNS THROUGH SPACES. Most names here have one
+ * — Kelja Ironfist, the Mining Guild — and a picker that stopped at the
+ * first space would ask people to type names that are not the names.
+ * Which is why the link is made by CHOOSING (or by an exact match, see
+ * `exactTarget`) rather than by the query ending: nothing about the
+ * text itself says where a name stops.
+ *
+ * A `#` mid-word is not a trigger. "C#", "item#3" and a colour written
+ * `#c9a227` are all things somebody may type into notes, and none of
+ * them is a request for a picker.
+ */
+export function readHashQuery(text: string, caret: number): HashSpot | null {
+  const before = text.slice(0, Math.max(0, Math.min(caret, text.length)));
+  const at = before.lastIndexOf(LINK_TRIGGER);
+  if (at === -1) return null;
+
+  const prev = at > 0 ? before[at - 1] : "";
+  // \u00a0 as well as \s: a contentEditable is full of non-breaking
+  // spaces, and one of them before the `#` is still a space.
+  if (prev && !/[\s\u00a0]/.test(prev)) return null;
+
+  const query = before.slice(at + 1);
+  if (query.length > MAX_QUERY) return null;
+  // A name does not span paragraphs, and the `#` three lines up is not
+  // what is being typed now.
+  if (/[\n\r]/.test(query)) return null;
+
+  return { at, query };
+}
+
+const nameKey = (raw: string) =>
+  raw.replace(/[\s\u00a0]+/g, " ").trim().toLowerCase();
+
+/**
+ * The one target this query has finished naming, if it has.
+ *
+ * What makes "#Kelja Ironfist" become a link without pressing anything.
+ * Two conditions, and the second is the one that is easy to miss:
+ *
+ *   - exactly ONE target has this name. Two things called the same
+ *     thing is a choice, not an answer.
+ *   - nothing LONGER starts with it. Auto-linking "Kelja" the moment it
+ *     matched would make "Kelja Ironfist" unreachable by typing: the
+ *     link would land before the space was pressed. Where a longer name
+ *     exists you finish it, or press Enter to take the highlighted one.
+ */
+export function exactTarget(
+  targets: LinkTarget[],
+  query: string
+): LinkTarget | null {
+  const want = nameKey(query);
+  if (!want) return null;
+
+  const hits = targets.filter((t) => nameKey(t.name) === want);
+  if (hits.length !== 1) return null;
+
+  const longer = targets.some((t) => {
+    const key = nameKey(t.name);
+    return key !== want && key.startsWith(want);
+  });
+  return longer ? null : hits[0];
+}
+
 /**
  * The campaign's linkable things, from the lists the screen already
  * has.

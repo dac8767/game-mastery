@@ -7,6 +7,7 @@ import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { BoxCanvas, BoxTools, NewBox } from "@/components/BoxCanvas";
 import { NoteLinkPicker } from "@/components/NoteLinkPicker";
+import { NoteMentions } from "@/components/NoteMentions";
 import { linkTargets } from "@/components/noteLinks";
 import { NoteSide, pageBoxId, pageSide } from "@/components/notePage";
 import { ColumnDef } from "@/components/npcColumns";
@@ -352,6 +353,11 @@ export function SessionDetail({
               </>
             }
           />
+
+          {/* Renders nothing until somebody types `#`, and then a list
+              at the caret. Mounted here, beside the toolbar, because
+              both read the same tracked caret. */}
+          <NoteMentions campaignId={campaignId} targets={targets} />
 
           {notes === undefined ? (
             <p className="centered-note">Opening the notes…</p>

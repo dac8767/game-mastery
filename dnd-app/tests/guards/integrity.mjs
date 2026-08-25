@@ -3772,6 +3772,112 @@ export const integrity = {
       }
     }
 
+    // ---- typing # in the notes --------------------------------------
+    // The picker at the caret. Everything below is a way for it to look
+    // exactly right and insert nothing, which is how the toolbar's own
+    // Link button behaved before the same three rules were applied to
+    // it — so they are checked rather than remembered.
+    {
+      const mentions = stripComments(read("components", "NoteMentions.tsx"));
+      const detail = stripComments(read("components", "SessionDetail.tsx"));
+      const css = read("app", "globals.css");
+
+      if (!/<NoteMentions\b/.test(detail)) {
+        problems.push(
+          "the session notes do not mount NoteMentions — typing # would " +
+            "do nothing"
+        );
+      }
+
+      // A click moves focus out of the box and collapses the selection
+      // BEFORE the handler runs, so the option has to be taken on
+      // mousedown with the default prevented. Same rule as every button
+      // on the format bar, and the same silent failure without it.
+      if (/onClick=/.test(mentions)) {
+        problems.push(
+          "NoteMentions takes an option on click — the caret is gone by " +
+            "then, and the link would be inserted nowhere"
+        );
+      }
+      if (!/onMouseDown=\{\(e\) => \{\s*\n\s*e\.preventDefault\(\);/.test(mentions)) {
+        problems.push(
+          "NoteMentions does not prevent the default on mousedown, which " +
+            "is what keeps the selection alive long enough to replace it"
+        );
+      }
+
+      // The selection has to BE the `#…` being replaced, and the shared
+      // helper has to be told so. Without the track call the insert
+      // lands wherever the caret was last seen — usually a character to
+      // the left, occasionally in a different box.
+      for (const [call, why] of [
+        [
+          "trackScrapbookSelection()",
+          "the range it just built is not handed to the format helper, so " +
+            "the link replaces whatever was tracked before",
+        ],
+        [
+          "insertScrapbookHtml(",
+          "nothing inserts the link, and nothing writes the box back",
+        ],
+        [
+          "exactTarget(",
+          'a finished name does not link itself — "#Kelja Ironfist" would ' +
+            "need a keypress it was promised it would not",
+        ],
+        [
+          "readHashQuery(",
+          "nothing reads what has been typed after the #",
+        ],
+      ]) {
+        if (!mentions.includes(call)) {
+          problems.push(`NoteMentions never calls ${call} — ${why}`);
+        }
+      }
+
+      // The caret lands OUTSIDE the anchor, or the rest of the sentence
+      // becomes part of the link. A plain space is collapsed away by
+      // insertHTML and leaves the caret inside.
+      if (!/&nbsp;/.test(mentions)) {
+        problems.push(
+          "NoteMentions inserts no trailing non-breaking space — the caret " +
+            "stays inside the anchor and the next word typed joins the link"
+        );
+      }
+
+      // Blue and underlined, in a box and on the page. The app's global
+      // `a { color: inherit; text-decoration: none }` is what this is
+      // overriding, so losing the rule is losing the appearance.
+      const linkRule = css.slice(
+        css.indexOf(".nb-text a[data-gm]"),
+        css.indexOf("}", css.indexOf(".nb-text a[data-gm]"))
+      );
+      if (!/color:\s*var\(--link\)/.test(linkRule)) {
+        problems.push(
+          "a link in the notes is not painted with --link — it inherits " +
+            "the app's own `color: inherit` and stops looking like a link"
+        );
+      }
+      if (!/text-decoration:\s*underline/.test(linkRule)) {
+        problems.push("a link in the notes is not underlined");
+      }
+      if (!/\.nb-page a\[data-gm\]/.test(css)) {
+        problems.push(
+          "the rule covers text boxes but not the page — most notes are " +
+            "written on the page now"
+        );
+      }
+      // Every palette, or a theme somewhere paints links with nothing.
+      const palettes = (css.match(/--link:/g) ?? []).length;
+      const themes = (css.match(/^\[data-theme="/gm) ?? []).length + 1;
+      if (palettes !== themes) {
+        problems.push(
+          `--link is defined in ${palettes} of ${themes} palettes — the ` +
+            "ones without it paint links with an empty custom property"
+        );
+      }
+    }
+
     // ---- a species heading, which is not one of its own printings ---
     // It has no document, so it had no picture — leaving the rows that
     // HAVE variants as the only blank squares in a table of artwork,

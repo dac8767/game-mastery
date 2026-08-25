@@ -14,6 +14,10 @@
   --bloodied: #d95f3b;
   --down: #6f6862;
   --temp-hp: #4f9fd9;
+  /* Links in the notes. Blue rather than the theme's accent, because a
+     link is meant to read as a link — the one piece of a page whose
+     appearance is a convention rather than a choice. */
+  --link: #6fb2e8;
 }
 
 * {
@@ -1772,6 +1776,7 @@ body.col-resizing {
   --bloodied: #f87171;
   --down: #64748b;
   --temp-hp: #38bdf8;
+  --link: #8ecbff;
 }
 
 [data-theme="parchment"] {
@@ -1788,6 +1793,7 @@ body.col-resizing {
   --bloodied: #b2432a;
   --down: #8c8577;
   --temp-hp: #2b6f9c;
+  --link: #1a5fa8;
 }
 
 /* ---------- Table extras ---------- */
@@ -7981,12 +7987,39 @@ button.cal-day:hover {
   font-size: 0.8rem;
 }
 
-/* A link in a note. Underlined, because inside a page of prose the
-   only thing that says "this goes somewhere" is that it looks like it
-   does. */
-.nb-text a[data-gm] {
-  color: var(--accent);
+/* A link in a note: blue and underlined, like a link anywhere else.
+   The global `a { color: inherit; text-decoration: none }` is what
+   these are overriding — it is right for the app's own navigation,
+   where every link is already a button or a row, and wrong inside a
+   page of prose, where looking like a link is the only thing that says
+   this goes somewhere. */
+.nb-text a[data-gm],
+.nb-page a[data-gm] {
+  color: var(--link);
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
+}
+
+/* The list that opens at the caret when you type `#`. Fixed, and
+   positioned from the caret's own measured rect: the notes scroll
+   inside the canvas, and an absolutely-positioned panel would be
+   clipped by it. */
+.nb-mention {
+  position: fixed;
+  z-index: 60;
+  width: 15.5rem;
+  max-height: 14rem;
+  overflow-y: auto;
+  padding: 0.35rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+/* The arrow keys move this, so it has to be as visible as a hover. */
+.nb-mention .nb-link-opt.on {
+  background: var(--accent-soft);
+  color: var(--accent);
 }

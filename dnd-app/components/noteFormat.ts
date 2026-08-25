@@ -71,9 +71,32 @@ const NUKE = new Set([
 
 const VOID = new Set(["br"]);
 
+/**
+ * Text, made safe to put back into HTML.
+ *
+ * The `&` rule is the one worth reading. This runs on HTML, not on
+ * plain text: what arrives is a browser's `innerHTML`, and a browser
+ * writes ENTITIES. A trailing space comes back as `&nbsp;`, a typed
+ * ampersand as `&amp;`, a typed angle bracket as `&lt;`.
+ *
+ * Escaping every `&` therefore double-escaped all of them. A space
+ * before a link came back as the literal text "&nbsp;", and — worse,
+ * because it compounds — "Smith & Sons" grew another "amp;" on every
+ * single save: "Smith &amp;amp;amp; Sons" after three edits.
+ *
+ * So a `&` that already begins a well-formed entity is left as it is,
+ * and every other `&` is escaped. Leaving them is safe because an
+ * entity cannot open a tag: `&lt;` stays `&lt;` and renders as the
+ * character "<", not as markup. Attribute values are a separate
+ * question and already answered separately — `safeHref` refuses
+ * anything carrying a colon it does not recognise, entity-encoded or
+ * not, and quotes are escaped after this runs.
+ */
+const ENTITY = /&(?!#\d+;|#x[0-9a-fA-F]+;|[a-zA-Z][a-zA-Z0-9]{1,31};)/g;
+
 const escapeText = (s: string) =>
   s
-    .replace(/&/g, "&amp;")
+    .replace(ENTITY, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 

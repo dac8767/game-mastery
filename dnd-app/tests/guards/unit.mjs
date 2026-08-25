@@ -5821,6 +5821,65 @@ export const unit = {
           );
         })()
       );
+
+      // What typing `#` actually saves: the anchor plus the trailing
+      // non-breaking space that keeps the caret outside it. Checked as
+      // a whole, because the sanitiser is a rebuild — it is perfectly
+      // capable of keeping the link and dropping the space, which puts
+      // the next word inside the link on the next reload.
+      check(
+        "the space that ends an inserted link survives the sanitiser",
+        (() => {
+          const inserted = `${nl.linkHtml("c1", {
+            kind: "npc",
+            name: "Kelja Ironfist",
+          })}&nbsp;took the deal`;
+          const out = bh.sanitizeBoxHtml(inserted);
+          return (
+            out.includes("</a>") &&
+            /<\/a>(&nbsp;| )took the deal/.test(out)
+          );
+        })()
+      );
+
+      // The sanitiser reads HTML, and a browser's innerHTML is full of
+      // entities. It used to escape the `&` of every one of them, so a
+      // space before a link came back as the letters "&nbsp;" — and an
+      // ampersand somebody typed grew another "amp;" on EVERY save,
+      // which is the failure that compounds rather than merely looking
+      // wrong once.
+      const round = (html) => bh.sanitizeBoxHtml(html);
+      check(
+        "a non-breaking space stays a space",
+        round("a&nbsp;b") === "a&nbsp;b"
+      );
+      check(
+        "an escaped ampersand does not grow, however many times it is saved",
+        round("Smith &amp; Sons") === "Smith &amp; Sons" &&
+          round(round(round("Smith &amp; Sons"))) === "Smith &amp; Sons"
+      );
+      check(
+        "numeric entities survive too, in both spellings",
+        round("a&#160;b&#xA0;c") === "a&#160;b&#xA0;c"
+      );
+      check(
+        "a bare ampersand is still escaped",
+        round("Smith & Sons") === "Smith &amp; Sons"
+      );
+      check(
+        "and so is one that only looks like the start of an entity",
+        round("&notanentity and &amp") === "&amp;notanentity and &amp;amp"
+      );
+      // Why leaving entities alone is safe: an entity cannot open a
+      // tag. It renders as the character, never as markup.
+      check(
+        "an escaped angle bracket stays text rather than becoming a tag",
+        round("5 &lt;script&gt; 6") === "5 &lt;script&gt; 6"
+      );
+      check(
+        "and a real script tag is still taken out",
+        !/script/i.test(round("hi <script>alert(1)</script> there"))
+      );
     }
 
     // ---- a group is matched by name, not by spelling ---------------
@@ -5841,6 +5900,127 @@ export const unit = {
           groups.groupKey("   ") === ""
         );
       }
+    }
+
+    // ---- typing # in the notes -------------------------------------
+    // The whole question this has to get right is SPACES. Names here
+    // have them, so the query cannot end at one — which means the text
+    // never says where a name stops, and something else must.
+    {
+      const nl = await import(
+        pathToFileURL(join(compile("components/noteLinks.ts"), "noteLinks.js"))
+          .href
+      );
+
+      const read = (text, caret = text.length) => nl.readHashQuery(text, caret);
+
+      check(
+        "a name with a space is one query, not two",
+        read("#Kelja Ironfist")?.query === "Kelja Ironfist"
+      );
+      check(
+        "and it knows where the # was, so it can be replaced",
+        read("Bruno met #Kelja Iron")?.at === 10 &&
+          read("Bruno met #Kelja Iron")?.query === "Kelja Iron"
+      );
+      check(
+        "a # nobody has typed after is an empty query, not nothing",
+        read("Bruno met #")?.query === ""
+      );
+
+      // A # mid-word is somebody writing, not somebody searching.
+      check("C# is not a search", read("C#") === null);
+      check("nor is item#3", read("item#3") === null);
+      // A contentEditable is full of non-breaking spaces — the app
+      // puts one after every link it inserts — and one of those
+      // before a # is still a space. Written as an escape: an
+      // invisible character in source is a character nobody edits
+      // correctly.
+      check(
+        "a # after a non-breaking space still opens one",
+        read("Bruno met\u00a0#Kel")?.query === "Kel"
+      );
+
+      check(
+        "the caret before the # sees no query",
+        read("#Kelja", 0) === null
+      );
+      check(
+        "the LAST # is the one being typed",
+        read("#done #Kel")?.at === 6
+      );
+      check(
+        "a run too long to be a name gives up",
+        read(`#${"a".repeat(61)}`) === null
+      );
+      check(
+        "and one that crossed a line break gives up too",
+        read("#Kel\nja") === null
+      );
+
+      // "#3 on the list" reads as a query, matches nothing, and so
+      // shows no panel — which is the behaviour, not an oversight.
+      const TARGETS = [
+        { kind: "npc", name: "Kelja Ironfist" },
+        { kind: "npc", name: "Bruno" },
+        { kind: "group", name: "Mining Guild" },
+      ];
+      check(
+        "a # somebody meant literally matches nothing",
+        nl.matchTargets(TARGETS, read("#3 on the list").query).length === 0
+      );
+
+      // Finishing the name is enough — no Enter, no click. This is the
+      // half that makes "#Kelja Ironfist" a link on its own.
+      check(
+        "a query that names one thing exactly is that thing",
+        nl.exactTarget(TARGETS, "Kelja Ironfist")?.name === "Kelja Ironfist"
+      );
+      check(
+        "odd spacing and case do not stop it",
+        nl.exactTarget(TARGETS, "  kelja   IRONFIST ")?.name ===
+          "Kelja Ironfist"
+      );
+      check(
+        "a partial name is not a finished one",
+        nl.exactTarget(TARGETS, "Kelja") === null
+      );
+      check("and nothing at all is not", nl.exactTarget(TARGETS, "  ") === null);
+
+      // The guard on auto-linking: something LONGER starting the same
+      // way means the typing may not be finished. Linking "Kelja" the
+      // moment it matched would make "Kelja Ironfist" unreachable —
+      // the link would land before the space was pressed.
+      const BOTH = [
+        { kind: "npc", name: "Kelja" },
+        { kind: "npc", name: "Kelja Ironfist" },
+      ];
+      check(
+        "a name that another name extends waits to be chosen",
+        nl.exactTarget(BOTH, "Kelja") === null
+      );
+      check(
+        "and the longer one still links itself once it is complete",
+        nl.exactTarget(BOTH, "Kelja Ironfist")?.name === "Kelja Ironfist"
+      );
+      check(
+        "two things with one name is a choice, not an answer",
+        nl.exactTarget(
+          [
+            { kind: "npc", name: "Kelja Ironfist" },
+            { kind: "group", name: "Kelja Ironfist" },
+          ],
+          "Kelja Ironfist"
+        ) === null
+      );
+
+      // And the link a space-containing name becomes actually works.
+      check(
+        "the space survives into the href",
+        nl
+          .linkHtml("c1", { kind: "npc", name: "Kelja Ironfist" })
+          .includes("/campaign/c1/npcs?open=Kelja%20Ironfist")
+      );
     }
 
     // ---- the picture on a heading that has no entry ----------------

@@ -81,7 +81,7 @@ export function NoteLinkPicker({
       <button
         type="button"
         className={`nb-fmt-btn${open ? " on" : ""}`}
-        title="Link to an NPC, place or group"
+        title="Link to an NPC, place or group — or just type # in the notes"
         onMouseDown={(e) => {
           e.preventDefault();
           // Refuses rather than opening onto nothing: with no caret in
