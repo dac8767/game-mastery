@@ -426,20 +426,107 @@ export function speciesRows(
     return cs[0];
   };
 
-  // A row that anything else is NAMED AFTER is a parent, and is never
-  // also filed as somebody's child.
-  //
-  // Testing `names.has(r.name)` here as well looked like belt and
-  // braces and was neither: `names` holds every row's own name, so it
-  // is true for everything and the condition reduced to the sharing
-  // check with an extra term that could only ever mislead a reader.
-  // A row never names itself — `candidates` drops that — so the set
-  // being non-empty means somebody ELSE pointed here.
-  return groupByParent(rows, (r) =>
-    (sharing.get(famKey(cleanName(r)))?.size ?? 0) > 0
-      ? null
-      : baseOf(cleanName(r))
-  );
+  /**
+   * The family a row belongs to, and what that family is called.
+   *
+   * A row that anything else is NAMED AFTER heads its own family
+   * rather than being folded into a grandparent: where a library has
+   * Elf, Wood Elf and Grey Wood Elf, the Wood Elf is the Grey Wood
+   * Elf's family and not a variant of Elf. A row never names itself —
+   * `candidates` drops that — so a non-empty sharing set means
+   * somebody ELSE pointed here.
+   */
+  const family = (row: Record<string, unknown>) => {
+    const clean = cleanName(row).trim();
+    const own = famKey(clean);
+    if ((sharing.get(own)?.size ?? 0) > 0) return { key: own, name: clean };
+    const base = baseOf(clean);
+    return base ? { key: famKey(base), name: base } : { key: own, name: clean };
+  };
+
+  const members = new Map<string, Record<string, unknown>[]>();
+  /** The family name as WRITTEN, for the headings we supply. */
+  const written = new Map<string, string>();
+
+  for (const row of rows) {
+    const { key, name } = family(row);
+    const list = members.get(key);
+    if (list) list.push(row);
+    else members.set(key, [row]);
+    // A row whose own name IS the family gets to spell it. Otherwise
+    // the heading wears whatever `baseOf` read out of a variant's name,
+    // which is right when the base itself is not in the library at all.
+    if (famKey(cleanName(row)) === key || !written.has(key)) {
+      written.set(key, name);
+    }
+  }
+
+  const out: Record<string, unknown>[] = [];
+  const childrenOf = new Map<string, Record<string, unknown>[]>();
+
+  for (const [key, list] of members) {
+    // A family of one is not a family. It is a species, and a heading
+    // you have to open to reach the only thing under it is a click
+    // that buys nothing.
+    if (list.length === 1) {
+      out.push(list[0]);
+      continue;
+    }
+
+    const label = written.get(key) ?? key;
+    /**
+     * The base printings first, then the named variants.
+     *
+     * "Dragonborn" and "Chromatic Dragonborn" are not the same kind of
+     * thing: one is the species as printed and the others are versions
+     * of it. Reading the plain printings first is how the list answers
+     * "what IS a dragonborn" before it answers "which one".
+     */
+    list.sort((a, b) => {
+      const an = famKey(cleanName(a)) === key ? 0 : 1;
+      const bn = famKey(cleanName(b)) === key ? 0 : 1;
+      if (an !== bn) return an - bn;
+      return variantLabel(label, a).localeCompare(variantLabel(label, b));
+    });
+    childrenOf.set(key, list);
+
+    /**
+     * The heading carries none of the species' own facts, because it
+     * IS none of them — every printing is a variant underneath it,
+     * including the one that shares its name.
+     *
+     * That is the change Derek asked for and it is worth being plain
+     * about: the head used to be one chosen row, shown in full, with
+     * the others hung beneath it. Which meant three rows called
+     * Changeling became three separate families, and a Dragonborn
+     * showed the PHB write-up as if it were the species rather than
+     * one printing of it.
+     */
+    out.push({
+      _id: `${ABSENT_PARENT_ID}${key}`,
+      name: label,
+      absent: true,
+    });
+  }
+
+  return { rows: out, childrenOf };
+}
+
+/**
+ * What one member of a family is called, in the list under its family.
+ *
+ * A variant named after its family — the plain "Dragonborn" under
+ * Dragonborn — would otherwise repeat the heading it sits beneath, in a
+ * list whose entire job is telling the printings apart. Its BOOK is
+ * what distinguishes it, so the book is what it is called.
+ */
+export function variantLabel(
+  family: unknown,
+  row: Record<string, unknown>
+): string {
+  const clean = splitSource(row.name, row.source);
+  if (famKey(clean.name) !== famKey(family)) return clean.name;
+  return clean.source ? `${clean.source} version` : "Base version";
 }
 
 /** The grouping for a kind, or null for the kinds that are flat. */

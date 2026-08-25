@@ -3414,17 +3414,68 @@ export const unit = {
     check(
       "a variant named after its base is filed under it",
       (sr.childrenOf.get("elf") ?? []).map((r) => r.name).join() ===
-        "Drow Elf,High Elf,Wood Elf"
+        "Elf,Drow Elf,High Elf,Wood Elf"
     );
+    // THE BASE IS A VARIANT TOO, and the heading is nobody's entry.
+    //
+    // It used to be the base's own row, shown in full, with the others
+    // hung underneath — so a Dragonborn showed the PHB write-up as if
+    // it were the species rather than one printing of it. Every
+    // printing sits under the heading now, the plain one first.
     check(
-      "and the base is the row, not one of the variants",
-      sr.rows.some((r) => r.name === "Elf") &&
+      "the family head is a heading, not one of the printings",
+      sr.rows.some((r) => r.name === "Elf" && r.absent === true) &&
         !sr.rows.some((r) => r.name === "High Elf")
     );
     check(
+      "and the plain printing leads its own variants",
+      (sr.childrenOf.get("elf") ?? [])[0].name === "Elf"
+    );
+    // A family of one is not a family: a heading you must open to
+    // reach the only thing under it is a click that buys nothing.
+    check(
       "a species with no variants stays a plain row",
-      sr.rows.some((r) => r.name === "Dragonborn") &&
+      sr.rows.some((r) => r.name === "Dragonborn" && r.absent !== true) &&
         !sr.childrenOf.has("dragonborn")
+    );
+
+    // Reported: three rows called Changeling showed as three separate
+    // species. Nothing is named AFTER a Changeling, so the old rule
+    // made each of them a family of its own — and all three then
+    // looked up the same key for their count, which is how they came
+    // to read "Changeling 1" three times over.
+    check(
+      "rows with the same name are one species, not three",
+      (() => {
+        const r = look.speciesRows([
+          { _id: "1", name: "Changeling", source: "MPMM" },
+          { _id: "2", name: "Changeling", source: "ERLW" },
+          { _id: "3", name: "Changeling", source: "WBtW" },
+        ]);
+        return (
+          r.rows.length === 1 &&
+          r.rows[0].absent === true &&
+          (r.childrenOf.get("changeling") ?? []).length === 3
+        );
+      })()
+    );
+    // The shape Derek described: Dragonborn with FOUR variants, the
+    // plain printing among them rather than above them.
+    check(
+      "a base and its variants are one family of four",
+      (() => {
+        const r = look.speciesRows([
+          { _id: "d", name: "Dragonborn", source: "PHB" },
+          { _id: "c", name: "Chromatic Dragonborn", source: "FTD" },
+          { _id: "g", name: "Gem Dragonborn", source: "FTD" },
+          { _id: "m", name: "Metallic Dragonborn", source: "FTD" },
+        ]);
+        return (
+          r.rows.length === 1 &&
+          (r.childrenOf.get("dragonborn") ?? []).map((x) => x.name).join() ===
+            "Dragonborn,Chromatic Dragonborn,Gem Dragonborn,Metallic Dragonborn"
+        );
+      })()
     );
     // The crash. Foundry disambiguates compendium entries by book, so
     // "Dhampir (VRGtR)" and "Hexblood (VRGtR)" end in the same
@@ -3491,7 +3542,7 @@ export const unit = {
           { _id: "2", name: "Wood Elf (PHB)", source: "PHB" },
         ]);
         return (
-          r.rows.length === 1 && (r.childrenOf.get("elf") ?? []).length === 2
+          r.rows.length === 1 && (r.childrenOf.get("elf") ?? []).length === 3
         );
       })()
     );
@@ -3507,7 +3558,7 @@ export const unit = {
           { _id: "1", name: "High Elf (PHB)", source: "PHB" },
         ]);
         return (
-          r.rows.length === 1 && (r.childrenOf.get("elf") ?? []).length === 1
+          r.rows.length === 1 && (r.childrenOf.get("elf") ?? []).length === 2
         );
       })()
     );
@@ -3521,7 +3572,7 @@ export const unit = {
           { _id: "1", name: "Genasi (Air)", source: "MPMM" },
           { _id: "2", name: "Genasi (Fire)", source: "MPMM" },
         ])
-        .childrenOf.get("genasi") ?? []).length === 2
+        .childrenOf.get("genasi") ?? []).length === 3
     );
 
     // The two that make a suffix rule dangerous.
@@ -3541,6 +3592,62 @@ export const unit = {
         [...sr.childrenOf.values()].reduce((n, l) => n + l.length, 0) ===
         SPECIES.length
     );
+    // And nothing is DOUBLED either, which the old shape could do: a
+    // row that headed a family and was also filed under a grandparent
+    // appeared in two places, and both counts were then right about
+    // different things.
+    check(
+      "and nothing appears twice",
+      (() => {
+        const seen = new Set();
+        for (const r of sr.rows) if (r.absent !== true) seen.add(r._id);
+        for (const l of sr.childrenOf.values()) for (const r of l) {
+          if (seen.has(r._id)) return false;
+          seen.add(r._id);
+        }
+        return seen.size === SPECIES.length;
+      })()
+    );
+
+    // ---- what a variant is called under its family -----------------
+    // A printing named after its family would otherwise repeat the
+    // heading it sits beneath, in a list whose whole job is telling the
+    // printings apart. Its BOOK is what distinguishes it.
+    check(
+      "a variant named after its family wears its book",
+      look.variantLabel("Dragonborn", {
+        name: "Dragonborn",
+        source: "PHB",
+      }) === "PHB version"
+    );
+    check(
+      "with nothing to wear when there is no book",
+      look.variantLabel("Dragonborn", { name: "Dragonborn" }) ===
+        "Base version"
+    );
+    check(
+      "and a variant with its own name keeps it",
+      look.variantLabel("Dragonborn", {
+        name: "Chromatic Dragonborn",
+        source: "FTD",
+      }) === "Chromatic Dragonborn"
+    );
+    // The book suffix comes off first, or "Dragonborn (PHB)" would look
+    // like a differently-named variant and keep the repeated heading.
+    check(
+      "a book suffix on the name does not make it a different variant",
+      look.variantLabel("Dragonborn", {
+        name: "Dragonborn (PHB)",
+        source: "PHB",
+      }) === "PHB version"
+    );
+    check(
+      "and matching ignores case and spacing",
+      look.variantLabel("  dragonborn ", {
+        name: "Dragonborn",
+        source: "PHB",
+      }) === "PHB version"
+    );
     // The other naming form exports use.
     check(
       "the qualified form groups too",
@@ -3550,7 +3657,7 @@ export const unit = {
           { _id: "g1", name: "Genasi (Air)" },
           { _id: "g2", name: "Genasi (Fire)" },
         ])
-        .childrenOf.get("genasi") ?? []).length === 2
+        .childrenOf.get("genasi") ?? []).length === 3
     );
     // The MOST SPECIFIC base wins, and a real species stays a parent.
     // Both rows here end in "Yanki", so two rows share that word and it
@@ -3564,23 +3671,19 @@ export const unit = {
           { _id: "b", name: "Duthka Gith Yanki" },
         ]);
         return (
-          (r.childrenOf.get("gith yanki") ?? []).length === 1 &&
+          (r.childrenOf.get("gith yanki") ?? []).length === 2 &&
           !r.childrenOf.has("yanki")
         );
       })()
     );
     check(
-      "a species others are named after stays a parent, never a child",
+      "a species others are named after heads its own family",
       (() => {
         const r = look.speciesRows([
           { _id: "a", name: "Gith Yanki" },
           { _id: "b", name: "Duthka Gith Yanki" },
         ]);
-        return (
-          r.rows.length === 1 &&
-          r.rows[0].name === "Gith Yanki" &&
-          r.rows[0].absent !== true
-        );
+        return r.rows.length === 1 && r.rows[0].name === "Gith Yanki";
       })()
     );
     check(
@@ -3604,7 +3707,7 @@ export const unit = {
       (look.familyRows("species", [
         { _id: "e", name: "Elf" },
         { _id: "w", name: "Wood Elf" },
-      ])?.childrenOf.get("elf") ?? []).length === 1
+      ])?.childrenOf.get("elf") ?? []).length === 2
     );
     check(
       "familyRows routes classes to the class grouping",

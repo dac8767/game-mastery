@@ -1305,6 +1305,27 @@ export const integrity = {
         }
       }
 
+      // The "no entry for the class itself" note is a CLASSES note.
+      // On species every heading has no entry by design — the printings
+      // are all variants underneath it — so the note would be telling
+      // you something is missing when nothing is. It was, and was
+      // reported.
+      const noteAt = body.indexOf("lk-inferred");
+      if (noteAt === -1) {
+        problems.push(
+          "the inferred-parent note is gone from ExpandedRow — on the " +
+            "classes tab a heading with no entry is a gap worth explaining"
+        );
+      } else {
+        const before = body.slice(Math.max(0, noteAt - 200), noteAt);
+        if (!/kind === "classes" && \(/.test(before)) {
+          problems.push(
+            "the inferred-parent note is not gated to the classes tab — " +
+              "on species it announces missing data that is not missing"
+          );
+        }
+      }
+
       // And the guard itself has to still be the one thing it is.
       if (!/const real = !id\.startsWith\(ABSENT_PARENT_ID\)/.test(body)) {
         problems.push(

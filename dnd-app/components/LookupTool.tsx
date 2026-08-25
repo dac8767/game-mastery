@@ -28,6 +28,7 @@ import {
   sortByColumn,
   spellCells,
   splitSource,
+  variantLabel,
 } from "@/components/lookupFields";
 import {
   FilterState,
@@ -432,6 +433,7 @@ export function LookupTool({
                       <ExpandedRow
                         kind={kind}
                         id={id}
+                        familyName={splitSource(row.name, row.source).name}
                         members={
                           grouped?.childrenOf.get(
                             splitSource(row.name, row.source)
@@ -472,10 +474,20 @@ export function LookupTool({
 function ExpandedRow({
   kind,
   id,
+  familyName,
   members,
 }: {
   kind: LookupKind;
   id: string;
+  /**
+   * The heading's own name, for a row that has none of its own.
+   *
+   * A synthetic family head is not in the database, so there is no
+   * document to read its name off — and the variants under it need it,
+   * to know which of them is named after the family and should wear
+   * its book instead.
+   */
+  familyName?: unknown;
   /**
    * A parent's own children — subclasses, or species variants. Null
    * for the kinds that are flat.
@@ -543,15 +555,26 @@ function ExpandedRow({
   if (!real) {
     return (
       <div className="lk-panel">
-        <article className="lk lk-classes">
-          <p className="lk-inferred">
-            This library has no entry for the class itself — only the
-            subclasses below, which name it. In a 5e campaign that is
-            usually because the only write-up of the class is the 2024
-            one, which a 5e game does not use.
-          </p>
+        <article className={`lk lk-${kind}`}>
+          {/* Classes only. On the classes tab a heading with no entry
+              is a GAP worth explaining — the class itself is a thing
+              you want to read, and its absence usually means the only
+              write-up is the 2024 one a 5e game does not use.
+
+              On species every heading has no entry, by design: the
+              printings are all variants underneath it, including the
+              one that shares its name. There is nothing missing, so
+              saying something is missing was just wrong. */}
+          {kind === "classes" && (
+            <p className="lk-inferred">
+              This library has no entry for the class itself — only the
+              subclasses below, which name it. In a 5e campaign that is
+              usually because the only write-up of the class is the 2024
+              one, which a 5e game does not use.
+            </p>
+          )}
           {members && members.length > 0 && (
-            <FamilyList kind={kind} members={members} />
+            <FamilyList kind={kind} family={familyName} members={members} />
           )}
         </article>
       </div>
@@ -627,7 +650,7 @@ function LookupDetail({
           one you take. Below the description rather than beside it:
           the general rules come first because you read them first. */}
       {members && members.length > 0 && (
-        <FamilyList kind={kind} members={members} />
+        <FamilyList kind={kind} family={row.name} members={members} />
       )}
 
       {kind === "spells" && typeof row.materials === "string" && row.materials && (
@@ -646,9 +669,12 @@ function LookupDetail({
  */
 function FamilyList({
   kind,
+  family,
   members,
 }: {
   kind: LookupKind;
+  /** The heading these sit under, so a member can avoid repeating it. */
+  family: unknown;
   members: Record<string, unknown>[];
 }) {
   return (
@@ -662,6 +688,7 @@ function FamilyList({
           <FamilyRow
             key={String(member._id)}
             kind={kind}
+            family={family}
             member={member}
           />
         ))}
@@ -691,13 +718,19 @@ function FamilyList({
  */
 function FamilyRow({
   kind,
+  family,
   member,
 }: {
   kind: LookupKind;
+  family: unknown;
   member: Record<string, unknown>;
 }) {
   const [open, setOpen] = useState(false);
   const clean = splitSource(member.name, member.source);
+  const label = variantLabel(family, member);
+  /* When the label IS the book, the book is not also a chip beside it
+     — "PHB version   PHB" says it twice. */
+  const named = label !== clean.name;
   const id = String(member._id);
 
   return (
@@ -711,8 +744,8 @@ function FamilyRow({
         <span className="lk-subcaret" aria-hidden="true">
           {open ? "▾" : "▸"}
         </span>
-        <span className="lk-subclass-name">{clean.name}</span>
-        {clean.source && (
+        <span className="lk-subclass-name">{label}</span>
+        {clean.source && !named && (
           <span className="lk-subclass-src">{clean.source}</span>
         )}
       </button>
