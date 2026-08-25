@@ -30,6 +30,16 @@ export type ColumnDef = {
   kind: FieldKind;
   /** Render as a pill even though the value is a scalar. */
   chip?: boolean;
+  /**
+   * How the value READS, when that is not how it is stored.
+   *
+   * A session's number is a number — it sorts numerically, it filters
+   * as one, and the grid would show a bare "7" in a column headed
+   * "Session #". This turns it into "Session 7" for the cell and for
+   * the search box, and nothing else: sorting and filtering stay on
+   * the stored value, or the column would sort 10 before 9.
+   */
+  format?: (raw: unknown) => string;
   defaultWidth: number;
   defaultVisible: boolean;
   /** Never offered to players; the server sends null for these. */

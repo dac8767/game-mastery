@@ -93,9 +93,6 @@ const MIN_COL_WIDTH = 48;
  */
 const PRIMARY_COLUMN = "name";
 
-/** Every column's key: what the search box reads. */
-const SEARCHED_KEYS = COLUMNS.map((c) => c.key);
-
 /** Life stages sort in narrative order rather than alphabetically. */
 const RANKS = { maturity: MATURITY_ORDER };
 
@@ -168,7 +165,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
 
   const haystacks = useMemo(() => {
     const m = new Map<string, string>();
-    for (const n of all) m.set(n._id, searchText(n, SEARCHED_KEYS));
+    for (const n of all) m.set(n._id, searchText(n, COLUMNS));
     return m;
   }, [all]);
 
@@ -1095,7 +1092,7 @@ function Row({
           );
         }
 
-        const text = display(npc, def.key);
+        const text = display(npc, def.key, def.format);
         return (
           <td
             key={state.key}
@@ -1231,7 +1228,7 @@ function Tile({
         {fields.map(({ def }) => {
           const chips =
             def.kind === "chips" || def.chip ? chipValues(npc, def.key) : null;
-          const text = display(npc, def.key);
+          const text = display(npc, def.key, def.format);
           if (chips ? chips.length === 0 : text === "") return null;
           return (
             <div className="tile-field" key={def.key}>

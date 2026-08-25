@@ -34,7 +34,6 @@ import {
   SESSION_EXTRA_SORTS,
   SESSION_FACET_KEYS,
   SESSION_PRIMARY_COLUMN,
-  SESSION_SEARCHED_KEYS,
   sessionPatch,
 } from "@/components/sessionColumns";
 
@@ -99,7 +98,7 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
 
   const haystacks = useMemo(() => {
     const m = new Map<string, string>();
-    for (const s of all) m.set(s._id, searchText(s, SESSION_SEARCHED_KEYS));
+    for (const s of all) m.set(s._id, searchText(s, SESSION_COLUMNS));
     return m;
   }, [all]);
 
@@ -832,7 +831,7 @@ function SessionRowCells({
           );
         }
 
-        const text = display(row, def.key);
+        const text = display(row, def.key, def.format);
         return (
           <td
             key={state.key}
@@ -946,7 +945,7 @@ function SessionTile({
       <span className="tile-number">{row.number}</span>
       <span className="tile-name">Session {row.number}</span>
       {fields.map(({ state, def }) => {
-        const text = display(row, def.key);
+        const text = display(row, def.key, def.format);
         if (!text) return null;
         return (
           <span className="tile-field" key={state.key}>

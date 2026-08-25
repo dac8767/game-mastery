@@ -34,7 +34,6 @@ import {
   GROUP_EXTRA_SORTS,
   GROUP_FACET_KEYS,
   GROUP_PRIMARY_COLUMN,
-  GROUP_SEARCHED_KEYS,
 } from "@/components/groupColumns";
 
 /**
@@ -117,7 +116,7 @@ export function GroupTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
 
   const haystacks = useMemo(() => {
     const m = new Map<string, string>();
-    for (const g of all) m.set(g.rowId, searchText(g, GROUP_SEARCHED_KEYS));
+    for (const g of all) m.set(g.rowId, searchText(g, GROUP_COLUMNS));
     return m;
   }, [all]);
 
@@ -903,7 +902,7 @@ function GroupRowCells({
           );
         }
 
-        const text = display(row, def.key);
+        const text = display(row, def.key, def.format);
         return (
           <td
             key={state.key}
@@ -1025,7 +1024,7 @@ function GroupTile({
       )}
       <span className="tile-name">{row.name || "Unnamed group"}</span>
       {fields.map(({ state, def }) => {
-        const text = display(row, def.key);
+        const text = display(row, def.key, def.format);
         if (!text) return null;
         return (
           <span className="tile-field" key={state.key}>

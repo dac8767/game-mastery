@@ -7580,6 +7580,53 @@ button.cal-day:hover {
   gap: 0.6rem;
 }
 
+/* Every field the list shows, across the top of the record. A row that
+   wraps rather than a fixed grid: five fields at their natural widths
+   read as a line of facts, and a five-column grid would give the
+   session number the same width as the description. */
+.session-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem 1.2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.session-field {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 8rem;
+}
+
+/* The description is the one that wants room. */
+.session-field:last-child {
+  flex: 1;
+  min-width: 20rem;
+}
+
+/* The two pages of notes, side by side, DM on the left. Stacked below
+   the width where two canvases stop being usable — a 14rem-wide
+   notebook page is not a page. */
+.session-notes-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2rem;
+  align-items: start;
+}
+
+/* One page, full width: a player has no DM side, and half a screen of
+   canvas beside an empty half would be a gap where something they
+   cannot see would go. */
+.session-notes-split.single {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 1100px) {
+  .session-notes-split {
+    grid-template-columns: 1fr;
+  }
+}
+
 .session-notes .nb-canvas {
   flex: none;
   height: 26rem;

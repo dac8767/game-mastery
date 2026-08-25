@@ -20,7 +20,11 @@ export const SESSION_COLUMNS: ColumnDef[] = [
     key: "number",
     label: "Session #",
     kind: "number",
-    defaultWidth: 110,
+    // Stored as a number so it sorts as one — 10 after 9, not between
+    // 1 and 2 — and READ as "Session 7", because a column of bare
+    // digits under a heading is a column of row numbers.
+    format: (raw) => `Session ${String(raw)}`,
+    defaultWidth: 130,
     defaultVisible: true,
     editable: true,
   },
@@ -83,9 +87,6 @@ export const SESSION_FACET_KEYS = ["players"];
 export const SESSION_EXTRA_SORTS = [
   { key: "_creationTime", label: "Date added" },
 ];
-
-/** Every column's key: what the search box reads. */
-export const SESSION_SEARCHED_KEYS = SESSION_COLUMNS.map((c) => c.key);
 
 /** The one column that can't be hidden. */
 export const SESSION_PRIMARY_COLUMN = "number";

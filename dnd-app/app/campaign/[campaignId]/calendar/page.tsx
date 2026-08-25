@@ -20,7 +20,7 @@ export default function CalendarPage() {
         <SignInForm />
       </Unauthenticated>
       <Authenticated>
-        <AppShell campaignId={campaignId} breadcrumb="Calendar">
+        <AppShell campaignId={campaignId} breadcrumb="World Calendar">
           <CalendarTool campaignId={campaignId} />
         </AppShell>
       </Authenticated>

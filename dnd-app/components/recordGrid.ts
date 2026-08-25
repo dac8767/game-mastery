@@ -50,10 +50,18 @@ export function chipValues(row: Row, key: string): string[] {
   return facetValues(row, key).filter((v) => v !== EMPTY);
 }
 
-export function display(row: Row, key: string): string {
+export function display(
+  row: Row,
+  key: string,
+  format?: (raw: unknown) => string
+): string {
   const raw = cell(row, key);
   if (Array.isArray(raw)) return (raw as string[]).join(", ");
   if (raw === null || raw === undefined || raw === "") return "";
+  // AFTER the blank test, so a column that formats does not put a word
+  // in front of nothing — "Session " on a row with no number reads as
+  // data rather than as the gap it is.
+  if (format) return format(raw);
   if (typeof raw === "boolean") return raw ? "Yes" : "No";
   return String(raw);
 }
@@ -66,13 +74,23 @@ export function display(row: Row, key: string): string {
  * for a word and landing on a row that does not contain it anywhere you
  * can see is worse than not finding it.
  */
-export function searchText(row: Row, keys: string[]): string {
+export function searchText(
+  row: Row,
+  columns: { key: string; format?: (raw: unknown) => string }[]
+): string {
   const parts: string[] = [];
-  for (const key of keys) {
-    const raw = cell(row, key);
+  for (const col of columns) {
+    const raw = cell(row, col.key);
     if (Array.isArray(raw)) parts.push(...(raw as string[]));
     else if (typeof raw === "string") parts.push(raw);
     else if (typeof raw === "number") parts.push(String(raw));
+    // A formatted column is searchable BOTH ways: the stored value is
+    // already in, and the words the cell actually shows go in beside
+    // it. Searching for what is on screen and not finding it is the
+    // failure worth avoiding here.
+    if (col.format && raw !== null && raw !== undefined && raw !== "") {
+      parts.push(col.format(raw));
+    }
   }
   return parts.filter(Boolean).join(" ").toLowerCase();
 }

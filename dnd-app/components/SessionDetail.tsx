@@ -5,6 +5,8 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { BoxCanvas, NewBox } from "@/components/BoxCanvas";
+import { ColumnDef } from "@/components/npcColumns";
+import { SESSION_COLUMNS, sessionPatch } from "@/components/sessionColumns";
 import { NotebookFormatBar } from "@/components/NotebookFormatBar";
 import {
   registerScrapbookSaver,
@@ -199,63 +201,174 @@ export function SessionDetail({
             <div className="detail-field record-title">
               <div className="detail-value">{title}</div>
             </div>
-            <p className="record-summary">
-              {session.date && <span className="record-chip">{session.date}</span>}
-              <span className="record-chip">
-                {session.players.length} player
-                {session.players.length === 1 ? "" : "s"}
-              </span>
-              {session.xp !== null && (
-                <span className="record-chip">{session.xp} XP</span>
-              )}
-            </p>
-            {session.description && (
-              <p className="group-prose">{session.description}</p>
-            )}
-            {isDm && (
-              <p className="settings-note">
-                The night&apos;s facts are edited in the list — click a cell.
-              </p>
-            )}
           </div>
         </header>
+
+        {/* Every field the list shows, here as well and editable here
+            too. It used to be three chips and a line saying the facts
+            were edited in the list — which is a screen telling you to
+            go and use a different screen. The definitions come from
+            SESSION_COLUMNS, so the two places cannot end up offering
+            different fields. */}
+        <section className="session-facts">
+          {SESSION_COLUMNS.map((col) => (
+            <SessionField
+              key={col.key}
+              col={col}
+              value={toInput(session, col.key)}
+              editable={isDm}
+              onCommit={(text) => {
+                const patch = sessionPatch(col.key, text);
+                // Nothing to write is a normal outcome — a blank
+                // session number, or a word where a number goes.
+                if (Object.keys(patch).length === 0) return;
+                void run(() =>
+                  updateSession({ sessionId: session._id, ...patch })
+                );
+              }}
+            />
+          ))}
+        </section>
 
         {/* One bar for the whole record. See the note at the top. */}
         <NotebookFormatBar />
 
-        <section className="session-notes">
-          <h3 className="group-h">Player notes</h3>
-          {notes === undefined ? (
-            <p className="centered-note">Opening the notes…</p>
-          ) : (
-            <BoxCanvas
-              boxes={notes?.player ?? []}
-              canEdit
-              emptyNote="Nothing written down yet. Add a text box to start."
-              {...canvasProps("player")}
-            />
-          )}
-        </section>
+        {/* Two columns, DM on the LEFT. Which side each is on is a
+            preference; that they are side by side is not — the notes
+            from one night are one thing read together, and stacked
+            they were a page of scrolling between the half you were
+            writing and the half you were writing it against.
 
-        {/* Rendered only when the SERVER sent a dm side. A player's
-            request never queries it, so `dm` is null rather than empty
-            — and an empty section would say "the DM has not written
-            anything", which is a different claim from "this is not
-            yours to see". */}
-        {notes?.dm !== null && notes?.dm !== undefined && (
-          <section className="session-notes dm-notes">
-            <h3 className="group-h">
-              DM notes <span className="dm-tag">DM</span>
-            </h3>
-            <BoxCanvas
-              boxes={notes.dm}
-              canEdit
-              emptyNote="Yours alone. The table never sees this page."
-              {...canvasProps("dm")}
-            />
+            One column when there is only one page to draw, so a
+            player does not get an empty half-width canvas beside a
+            gap where something they cannot see would be. */}
+        <div
+          className={`session-notes-split${
+            notes?.dm ? "" : " single"
+          }`}
+        >
+          {/* Rendered only when the SERVER sent a dm side. A player's
+              request never queries it, so `dm` is null rather than
+              empty — and an empty section would say "the DM has not
+              written anything", which is a different claim from "this
+              is not yours to see". */}
+          {notes?.dm !== null && notes?.dm !== undefined && (
+            <section className="session-notes dm-notes">
+              <h3 className="group-h">
+                DM notes <span className="dm-tag">DM</span>
+              </h3>
+              <BoxCanvas
+                boxes={notes.dm}
+                canEdit
+                emptyNote="Yours alone. The table never sees this page."
+                {...canvasProps("dm")}
+              />
+            </section>
+          )}
+
+          <section className="session-notes">
+            <h3 className="group-h">Player notes</h3>
+            {notes === undefined ? (
+              <p className="centered-note">Opening the notes…</p>
+            ) : notes === null ? (
+              /* Deleted out from under you — by you in another tab, or
+                 by nobody, but either way there is nothing to draw and
+                 an empty canvas would invite you to write into it. */
+              <p className="centered-note">This session is gone.</p>
+            ) : (
+              <BoxCanvas
+                boxes={notes.player}
+                canEdit
+                emptyNote="Nothing written down yet. Add a text box to start."
+                {...canvasProps("player")}
+              />
+            )}
           </section>
-        )}
+        </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * A session's field as text, for the input to start from.
+ *
+ * The inverse of sessionPatch, and the two have to agree: attendance
+ * goes in comma-separated because that is how it comes back out.
+ */
+function toInput(session: SessionRow, key: string): string {
+  const raw = (session as unknown as Record<string, unknown>)[key];
+  if (Array.isArray(raw)) return (raw as string[]).join(", ");
+  if (raw === null || raw === undefined) return "";
+  return String(raw);
+}
+
+/**
+ * One of the night's facts, labelled, and edited in place.
+ *
+ * Committed on blur rather than per keystroke: every one of these is a
+ * mutation on a shared document, and a write per character would be a
+ * write per character. Escape puts back what was there, which is the
+ * only way out of a half-typed edit that does not save it.
+ */
+function SessionField({
+  col,
+  value,
+  editable,
+  onCommit,
+}: {
+  col: ColumnDef;
+  value: string;
+  editable: boolean;
+  onCommit: (text: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+
+  // Follow the live query when the row redelivers — someone else may be
+  // editing the same session — but not while this box has the caret.
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    if (!focused) setDraft(value);
+  }, [value, focused]);
+
+  const commit = () => {
+    setFocused(false);
+    if (draft === value) return;
+    onCommit(draft);
+  };
+
+  return (
+    <label className="detail-field session-field">
+      <div className="detail-label">{col.label}</div>
+      {!editable ? (
+        <div className="detail-value">{value || "—"}</div>
+      ) : col.kind === "longtext" ? (
+        <textarea
+          className="detail-input"
+          rows={2}
+          value={draft}
+          onFocus={() => setFocused(true)}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+        />
+      ) : (
+        <input
+          className="detail-input"
+          type={col.kind === "number" ? "number" : "text"}
+          value={draft}
+          placeholder={col.kind === "chips" ? "Comma separated" : undefined}
+          onFocus={() => setFocused(true)}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+            if (e.key === "Escape") {
+              setDraft(value);
+              e.currentTarget.blur();
+            }
+          }}
+        />
+      )}
+    </label>
   );
 }

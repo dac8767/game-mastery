@@ -153,14 +153,18 @@ function TrifoldIcon() {
   );
 }
 
-/** An open book. */
-function BookIcon() {
+/** A ring-bound notepad, ruled. */
+function NotepadIcon() {
   return (
     <Glyph>
-      <path d="M12 6.4C9.6 4.6 6.6 4 3.6 4.9v12.4c3-.9 6-.3 8.4 1.5 2.4-1.8 5.4-2.4 8.4-1.5V4.9c-3-.9-6-.3-8.4 1.5Z" />
-      {/* The spine. Without it the two halves close up into one blob at
-          sidebar size and the book stops being open. */}
-      <path d="M12 6.4v12.4" />
+      <rect x="6" y="2.5" width="15.5" height="19" rx="2.2" />
+      {/* Three bindings and three rules, not the five of each the
+          reference has. At 15px ten horizontal strokes inside a 19-unit
+          box is a grey hatch; three is a ruled pad. They share their
+          rows on purpose — a binding and its line read as one band
+          crossing the spine, which is what a ring binder looks like. */}
+      <path d="M3.8 7h4.4M3.8 12h4.4M3.8 17h4.4" />
+      <path d="M10.6 7h7.6M10.6 12h7.6M10.6 17h7.6" />
     </Glyph>
   );
 }
@@ -179,7 +183,7 @@ const ART: Record<string, () => React.JSX.Element> = {
   speech: SpeechIcon,
   d20: D20Icon,
   trifold: TrifoldIcon,
-  book: BookIcon,
+  notepad: NotepadIcon,
 };
 
 /** The names a nav item may ask for, for the guard to check against. */

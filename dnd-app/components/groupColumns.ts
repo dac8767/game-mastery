@@ -82,8 +82,5 @@ export const GROUP_FACET_KEYS = ["members"];
  */
 export const GROUP_EXTRA_SORTS: { key: string; label: string }[] = [];
 
-/** Every column's key: what the search box reads. */
-export const GROUP_SEARCHED_KEYS = GROUP_COLUMNS.map((c) => c.key);
-
 /** The one column that can't be hidden. */
 export const GROUP_PRIMARY_COLUMN = "name";

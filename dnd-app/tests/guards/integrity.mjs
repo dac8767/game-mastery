@@ -267,6 +267,41 @@ export const integrity = {
         );
       }
 
+      // The record shows the night's facts BY READING THE COLUMNS, not
+      // by listing them again. Two hand-written lists is how a field
+      // added to one screen goes missing from the other — which is the
+      // state the record was reported in, showing three chips of five
+      // fields and a line telling you to go and edit them elsewhere.
+      const detailSrc = stripComments(read("components", "SessionDetail.tsx"));
+      if (!/SESSION_COLUMNS\.map\(/.test(detailSrc)) {
+        problems.push(
+          "SessionDetail does not build its fields from SESSION_COLUMNS — " +
+            "the record and the list would drift into offering different " +
+            "fields for the same session"
+        );
+      }
+
+      // DM notes on the LEFT, which is the way round it was asked for
+      // and is not otherwise recoverable: both sections are the same
+      // component with different props, so swapping them is a silent
+      // change that still renders perfectly.
+      const split = detailSrc.indexOf('className={`session-notes-split');
+      if (split === -1) {
+        problems.push(
+          "the session's two note pages are no longer in a split — they " +
+            "are meant to sit side by side, not stacked"
+        );
+      } else {
+        const dmAt = detailSrc.indexOf("session-notes dm-notes", split);
+        const playerAt = detailSrc.indexOf(">Player notes<", split);
+        if (dmAt === -1 || playerAt === -1 || dmAt > playerAt) {
+          problems.push(
+            "the DM notes are not the first column of the split — they " +
+              "belong on the left"
+          );
+        }
+      }
+
       const facets = (
         sessionColsSrc.match(/SESSION_FACET_KEYS = \[([^\]]*)\]/s)?.[1] ?? ""
       )

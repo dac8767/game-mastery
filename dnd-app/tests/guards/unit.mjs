@@ -5207,12 +5207,43 @@ export const unit = {
       // on a field you cannot see anywhere reads as a broken search.
       check(
         "search reads only the fields the table has",
-        grid.searchText({ name: "Kelja", secret: "a traitor" }, ["name"]) ===
-          "kelja"
+        grid.searchText({ name: "Kelja", secret: "a traitor" }, [
+          { key: "name" },
+        ]) === "kelja"
       );
       check(
         "and reads numbers, which are values people search for",
-        grid.searchText({ n: 12 }, ["n"]) === "12"
+        grid.searchText({ n: 12 }, [{ key: "n" }]) === "12"
+      );
+      // A formatted column is searchable BOTH ways. Typing what is on
+      // the screen and not finding it is the failure worth avoiding;
+      // typing the bare number has to keep working too, because that
+      // is what somebody who knows the data types.
+      {
+        const hay = grid.searchText({ number: 7 }, [
+          { key: "number", format: (r) => `Session ${r}` },
+        ]);
+        check("a formatted column is searchable by what it shows", hay.includes("session 7"));
+        check("and by what it stores", hay.includes("7"));
+      }
+      check(
+        "a blank formatted column puts no stray word in the haystack",
+        grid.searchText({ number: null }, [
+          { key: "number", format: (r) => `Session ${r}` },
+        ]) === ""
+      );
+
+      // The same rule on the cell: a formatter must not put a word in
+      // front of nothing, or an empty row reads as "Session " rather
+      // than as the gap it is.
+      check(
+        "a formatted cell shows what the formatter says",
+        grid.display({ number: 7 }, "number", (r) => `Session ${r}`) ===
+          "Session 7"
+      );
+      check(
+        "and stays blank when the value is",
+        grid.display({ number: null }, "number", (r) => `Session ${r}`) === ""
       );
     }
 
@@ -5289,6 +5320,23 @@ export const unit = {
       check(
         "the log opens on the most recent night",
         sc.SESSION_DEFAULT_SORT.asc === false
+      );
+
+      // The primary column is a NUMBER, and a column of bare digits
+      // under a heading reads as row numbers rather than as sessions.
+      // Reported once already, so it is asserted rather than trusted.
+      const primary = sc.SESSION_COLUMNS.find(
+        (c) => c.key === sc.SESSION_PRIMARY_COLUMN
+      );
+      check(
+        "a session names itself in its own cell",
+        typeof primary.format === "function" && primary.format(7) === "Session 7"
+      );
+      // And it is still a number underneath, or the column would sort
+      // 10 between 1 and 2.
+      check(
+        "which is a label, not the stored value",
+        primary.kind === "number"
       );
     }
 
