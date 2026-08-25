@@ -100,23 +100,34 @@ export const SOURCE_NAMES: Record<string, string> = {
 };
 
 /**
- * The book's full name, keeping any printing year on the end.
+ * The book's full name, keeping any printing on the end.
  *
  * "PHB 2024" is the abbreviation plus the year the edition rule reads,
  * and both halves matter: expanding the abbreviation and dropping the
  * year would make the 2024 Player's Handbook indistinguishable from the
  * 2014 one in the one column whose job is telling you which book it is.
+ *
+ * A printing is a year OR a version. That second form is not a
+ * hypothetical: the importer writes the reference document as `SRD`
+ * plus whatever dnd5e's `source.rules` holds, which is "2014" in some
+ * versions of the system and "5.1" in others. Matching only the year
+ * meant SRD read out in one export and stayed an abbreviation in the
+ * next, for the single most common source in a stock library.
+ *
+ * Widening this cannot break a lookup: a suffix is only taken off in
+ * order to find a KNOWN book, and a miss returns the string untouched
+ * exactly as before.
  */
 export function expandSource(source: unknown): string {
   const raw = String(source ?? "").trim();
   if (!raw) return "";
 
-  const withYear = /^(.*\S)\s+(\d{4})$/.exec(raw);
-  const base = withYear ? withYear[1] : raw;
-  const year = withYear ? ` ${withYear[2]}` : "";
+  const printing = /^(.*\S)\s+(\d+(?:\.\d+)*)$/.exec(raw);
+  const base = printing ? printing[1] : raw;
+  const tail = printing ? ` ${printing[2]}` : "";
 
   const full = SOURCE_NAMES[base];
-  return full ? `${full}${year}` : raw;
+  return full ? `${full}${tail}` : raw;
 }
 
 /**

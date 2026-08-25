@@ -3910,6 +3910,33 @@ export const integrity = {
         problems.push("bookRank no longer knows what the PHB is");
       }
 
+      // What counts as a printing on the end of a book — "PHB 2024",
+      // "SRD 5.1" — is stated twice: expandSource takes it off to find
+      // the book, and the unknown-sources report takes it off to decide
+      // whether the app already knows that book. They disagreed within
+      // a minute of the second one being written, and the symptom was
+      // a report listing books that expand perfectly well.
+      const printing = (src, label) => {
+        const m = /\/\^\(\.\*\\S\)\\s\+\(.*?\)\$\//.exec(src);
+        if (!m) throw new Error(`no printing pattern in ${label}`);
+        return m[0];
+      };
+      const inApp = printing(
+        read("components", "sourceNames.ts"),
+        "sourceNames.ts"
+      );
+      const inReport = printing(
+        read("scripts", "unknown-sources.mjs"),
+        "unknown-sources.mjs"
+      );
+      if (inApp !== inReport) {
+        problems.push(
+          `the app strips a printing with ${inApp} and the sources report ` +
+            `with ${inReport} — the report would list books the column ` +
+            "already writes out in full"
+        );
+      }
+
       // "4 Variants", not "Variants 4". The count leads.
       const heading = tool.slice(
         tool.indexOf('<h3 className="lk-h">', tool.indexOf("function FamilyList")),

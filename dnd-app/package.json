@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "guards": "node tests/run_all.mjs",
     "feedback": "node scripts/feedback.mjs",
-    "art-check": "node scripts/art-check.mjs"
+    "art-check": "node scripts/art-check.mjs",
+    "sources": "node scripts/unknown-sources.mjs"
   },
   "dependencies": {
     "@auth/core": "^0.41.2",

@@ -5559,6 +5559,27 @@ export const unit = {
         "the year stays on the end",
         src.expandSource("PHB 2024") === "Player's Handbook 2024"
       );
+
+      // A printing is a year OR a version. The importer writes the
+      // reference document as `SRD` plus dnd5e's `source.rules`, which
+      // is "2014" in some versions of the system and "5.1" in others —
+      // so matching only the year left the single most common source in
+      // a stock library sitting there as three letters.
+      check(
+        "a version on the end is a printing too",
+        src.expandSource("SRD 5.1") === "System Reference Document 5.1" &&
+          src.expandSource("SRD 2014") === "System Reference Document 2014"
+      );
+      check(
+        "and a longer one, in case the SRD ever gets a third number",
+        src.expandSource("SRD 5.2.1") === "System Reference Document 5.2.1"
+      );
+      // Taking a suffix off is only ever a way to find a KNOWN book, so
+      // widening what counts as one cannot turn a miss into a hit.
+      check(
+        "a book it does not know still keeps its printing untouched",
+        src.expandSource("ZZZ 5.1") === "ZZZ 5.1"
+      );
       check(
         "and an unknown book keeps its year too",
         src.expandSource("ZZZ 2024") === "ZZZ 2024"
