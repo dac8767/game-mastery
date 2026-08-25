@@ -695,9 +695,12 @@ function FamilyList({
 }) {
   return (
     <section className="lk-subclasses">
+      {/* The count leads: "4 Variants" is a sentence, and the pill
+          trailing the word was a number you read second and had to
+          attach to the heading yourself. */}
       <h3 className="lk-h">
-        {FAMILY_LABEL[kind] ?? "Variants"}{" "}
         <span className="lk-subclass-count">{members.length}</span>
+        {FAMILY_LABEL[kind] ?? "Variants"}
       </h3>
       <div className="lk-subrows">
         {members.map((member) => (

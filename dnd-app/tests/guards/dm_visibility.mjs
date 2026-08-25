@@ -298,6 +298,16 @@ export const dmVisibility = {
       "sessions.getNotes must honour viewAsPlayer — otherwise the DM's " +
         "player preview shows the DM notes and reports nothing withheld"
     );
+    // The PAGE the boxes sit on is the same secret as the boxes, and it
+    // is newer — so it is the half likely to be forgotten. Same shape:
+    // never queried for a player, null rather than "".
+    requirePattern(
+      problems,
+      getNotes,
+      /dmBody: isDm \? await body\("dm"\) : null/,
+      "sessions.getNotes must not read the DM's page for a non-DM caller " +
+        "— the page carries the same secrets the boxes on it do"
+    );
     requirePattern(
       problems,
       bodyOf("listForCampaign"),
@@ -343,6 +353,27 @@ export const dmVisibility = {
         );
       }
     }
+    // setBody names its side in an argument, which is safe ONLY because
+    // requireWriter then refuses a non-DM the dm side. Without that
+    // call it is a mutation that writes the DM's page for anyone who
+    // passes side: "dm" — the exact hole the box mutations avoid by
+    // reading the side off the document instead.
+    {
+      const body = bodyOf("setBody");
+      if (!/requireWriter\(ctx, session\.campaignId, args\.side\)/.test(body)) {
+        problems.push(
+          "sessions.setBody does not pass the side to requireWriter — any " +
+            "member could write the DM's page by asking for it"
+        );
+      }
+      if (!/sanitizeBoxHtml\(args\.html\)/.test(body)) {
+        problems.push(
+          "sessions.setBody stores html unsanitised — the player page is " +
+            "written by any member and rendered in the DM's browser"
+        );
+      }
+    }
+
     for (const fn of ["createSession", "updateSession", "deleteSession"]) {
       const at = sessions.indexOf(`export const ${fn} = mutation`);
       if (at === -1) {

@@ -5843,6 +5843,110 @@ export const unit = {
       }
     }
 
+    // ---- the picture on a heading that has no entry ----------------
+    // A species family head is synthetic: no document, and so no
+    // artwork, which left exactly the rows that HAVE variants as the
+    // blank squares in a table of pictures. It borrows one from
+    // underneath, and which one it borrows is the whole of this.
+    {
+      const lf = look;
+
+      check(
+        "the Player's Handbook printing supplies the picture",
+        lf.familyImage([
+          { name: "Wood Elf", source: "MotM", image: "a.png" },
+          { name: "Elf", source: "PHB", image: "b.png" },
+          { name: "High Elf", source: "SCAG", image: "c.png" },
+        ]) === "b.png"
+      );
+      check(
+        "the 2014 book beats the 2024 one, which is what a 5e game reads",
+        lf.familyImage([
+          { name: "Elf", source: "XPHB", image: "new.png" },
+          { name: "Elf", source: "PHB", image: "old.png" },
+        ]) === "old.png"
+      );
+      check(
+        "with no PHB at all, the 2024 book still beats a supplement",
+        lf.familyImage([
+          { name: "Wood Elf", source: "MotM", image: "a.png" },
+          { name: "Elf", source: "XPHB", image: "b.png" },
+        ]) === "b.png"
+      );
+      check(
+        "otherwise the first printing in the list",
+        lf.familyImage([
+          { name: "Wood Elf", source: "MotM", image: "a.png" },
+          { name: "High Elf", source: "SCAG", image: "b.png" },
+        ]) === "a.png"
+      );
+      // The first WITH ART rather than simply the first: a leading
+      // variant with no picture would leave the heading blank while
+      // every row under it had one, which is the gap being closed.
+      check(
+        "a variant with no picture is skipped rather than chosen",
+        lf.familyImage([
+          { name: "Wood Elf", source: "MotM" },
+          { name: "High Elf", source: "SCAG", image: "" },
+          { name: "Drow Elf", source: "PHB2", image: "c.png" },
+        ]) === "c.png"
+      );
+      check(
+        "a family nobody drew stays undrawn",
+        lf.familyImage([{ name: "Wood Elf", source: "MotM" }]) === undefined
+      );
+      check(
+        "a book's printing year does not hide the book",
+        lf.familyImage([
+          { name: "Wood Elf", source: "MotM", image: "a.png" },
+          { name: "Elf", source: "PHB 2014", image: "b.png" },
+        ]) === "b.png"
+      );
+
+      // And the heading speciesRows builds actually wears one.
+      const withArt = lf.speciesRows([
+        { _id: "e1", name: "High Elf", source: "SCAG", image: "high.png" },
+        { _id: "e2", name: "Elf", source: "PHB", image: "elf.png" },
+        { _id: "e3", name: "Wood Elf", source: "PHB", image: "wood.png" },
+      ]);
+      const head = withArt.rows.find((r) => r.absent === true);
+      check(
+        "a species heading carries a picture borrowed from underneath",
+        head?.image === "elf.png"
+      );
+    }
+
+    // ---- a page is not a box, and the id is what says so -----------
+    // The format toolbar knows one kind of thing: a region with an id.
+    // Two kinds answer to that now, reached by different mutations, so
+    // an id that read wrong would send a page edit to updateBox — where
+    // it is not a document id and Convex refuses it in a way nobody can
+    // read.
+    {
+      const np = await import(
+        pathToFileURL(join(compile("components/notePage.ts"), "notePage.js"))
+          .href
+      );
+
+      check(
+        "a page id round-trips to its side",
+        np.pageSide(np.pageBoxId("dm")) === "dm" &&
+          np.pageSide(np.pageBoxId("player")) === "player"
+      );
+      check(
+        "a real box id is not a page",
+        np.pageSide("k17ezhmgzwdzfb0pr0ctahsgrx8cqn8a") === null
+      );
+      check(
+        "a prefixed id naming no real side is not a page either",
+        np.pageSide("page:everyone") === null && np.pageSide("page:") === null
+      );
+      check(
+        "and nothing at all is not a page",
+        np.pageSide(undefined) === null && np.pageSide(null) === null
+      );
+    }
+
     // ---- a rectangle drawn on a picture of the screen --------------
     // The capture itself needs a browser and a person clicking a share
     // picker. The arithmetic between "where the hand went" and "which

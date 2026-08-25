@@ -71,7 +71,13 @@ export function NoteLinkPicker({
   };
 
   return (
-    <span className="nb-fmt-pop" ref={wrap}>
+    /* nb-fmt-pop-HOST, not nb-fmt-pop. The second is the floating panel
+       itself — `position: absolute; top: 1.9rem` — so wearing it here
+       took the Link button out of the toolbar's flow and hung it in a
+       box of its own below the bar's right-hand end. Reported as "a
+       floating attachment icon out of place", which is precisely what
+       it was. */
+    <span className="nb-fmt-pop-host" ref={wrap}>
       <button
         type="button"
         className={`nb-fmt-btn${open ? " on" : ""}`}

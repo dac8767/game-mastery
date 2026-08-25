@@ -281,24 +281,86 @@ export const integrity = {
         );
       }
 
-      // DM notes on the LEFT, which is the way round it was asked for
-      // and is not otherwise recoverable: both sections are the same
-      // component with different props, so swapping them is a silent
-      // change that still renders perfectly.
-      const split = detailSrc.indexOf('className={`session-notes-split');
-      if (split === -1) {
+      // Tabs, DM first — which is the way round it was asked for and is
+      // not otherwise recoverable: both tabs are the same markup with
+      // different props, so swapping them is a silent change that still
+      // renders perfectly. They replaced a side-by-side split.
+      const tabs = detailSrc.indexOf('className="session-tabs"');
+      if (tabs === -1) {
         problems.push(
-          "the session's two note pages are no longer in a split — they " +
-            "are meant to sit side by side, not stacked"
+          "the session's two note pages are not tabs — a split showed a " +
+            "second page you were usually not looking at, and left no " +
+            "answer to which page a new box went on"
         );
       } else {
-        const dmAt = detailSrc.indexOf("session-notes dm-notes", split);
-        const playerAt = detailSrc.indexOf(">Player notes<", split);
+        // Anchored on the handlers rather than the labels: the label
+        // text sits on its own line inside the button, so a search for
+        // ">DM notes" finds nothing and reports the tabs in the wrong
+        // order regardless of what order they are in.
+        const dmAt = detailSrc.indexOf('setTab("dm")', tabs);
+        const playerAt = detailSrc.indexOf('setTab("player")', tabs);
         if (dmAt === -1 || playerAt === -1 || dmAt > playerAt) {
-          problems.push(
-            "the DM notes are not the first column of the split — they " +
-              "belong on the left"
-          );
+          problems.push("the DM notes are not the first tab");
+        }
+        for (const label of ["DM notes", "Player notes"]) {
+          if (!detailSrc.slice(tabs).includes(label)) {
+            problems.push(`the session tabs have no "${label}" tab`);
+          }
+        }
+      }
+      if (/session-notes-split/.test(detailSrc)) {
+        problems.push(
+          "SessionDetail still renders the old side-by-side split"
+        );
+      }
+
+      // The bar acts on the page below it, so it goes below whatever
+      // names that page. Reported the other way round: it sat above the
+      // "Player notes" heading, where it read as part of the record.
+      const barAt = detailSrc.indexOf("<NotebookFormatBar");
+      const canvasAt = detailSrc.indexOf("<BoxCanvas");
+      if (barAt === -1 || canvasAt === -1) {
+        problems.push("the session record lost its toolbar or its canvas");
+      } else if (!(tabs < barAt && barAt < canvasAt)) {
+        problems.push(
+          "the format toolbar is not between the tabs and the canvas — it " +
+            "belongs at the top of the editing area, under the name of the " +
+            "page it acts on"
+        );
+      }
+
+      // A page you click into and type on, which is the whole of the
+      // report: adding a text box before you could write a sentence
+      // made a page of notes into a layout exercise.
+      // `\bpage=` and not `page=`: the prop renamed to `notpage` is
+      // still a substring match, and the mutation that did exactly that
+      // walked past this check.
+      if (!/\bpage=\{\{/.test(detailSrc) || !/pageBoxId\(/.test(detailSrc)) {
+        problems.push(
+          "the session canvas has no page to write on — the notes would " +
+            "again need a text box added before anything could be typed"
+        );
+      }
+      // And the toolbar's saver has to know a page from a box, or a
+      // format applied to the page is sent to updateBox with an id that
+      // is not a document id.
+      if (!/pageSide\(/.test(detailSrc)) {
+        problems.push(
+          "the format saver does not route by pageSide — an edit to the " +
+            "page would be written as if it were a box"
+        );
+      }
+
+      // Two strings the report named, and one the same report is about:
+      // a centred "nothing here yet" over a page you can now type into
+      // is both wrong and in the way.
+      for (const gone of [
+        "Add to notes:",
+        "Add to DM notes:",
+        "Nothing written down yet",
+      ]) {
+        if (detailSrc.includes(gone)) {
+          problems.push(`SessionDetail still says "${gone}"`);
         }
       }
 
@@ -2159,13 +2221,14 @@ export const integrity = {
       }
     }
 
-    // The two tables a campaign owns only through a parent. Named here
-    // because the schema cannot say it: they carry an encounterId and a
-    // pageId, so the rule above cannot see them.
+    // The tables a campaign owns only through a parent. Named here
+    // because the schema cannot say it: they carry an encounterId, a
+    // pageId or a sessionId, so the rule above cannot see them.
     for (const [table, via] of [
       ["combatants", "encounters"],
       ["notebookBoxes", "notebookNodes"],
       ["sessionBoxes", "sessions"],
+      ["sessionPages", "sessions"],
     ]) {
       if (!new RegExp(`query\\("${table}"\\)`).test(purge)) {
         problems.push(
@@ -3619,6 +3682,150 @@ export const integrity = {
         'CATEGORIES contains a bare "Bug" — the shared table already ' +
           'drifted into holding both "Bug" and "Bug Report"'
       );
+    }
+
+    // ---- the format bar's buttons and its one popup class -----------
+    // Reported as "a floating attachment icon out of place": the Link
+    // button's WRAPPER wore `nb-fmt-pop`, which is the floating PANEL's
+    // class, so the button inherited `top: 1.9rem`, a border and a
+    // background and hung below the bar in a box of its own. Somebody
+    // had then redeclared `.nb-fmt-pop` further down the stylesheet to
+    // make the wrapper behave, which broke the real panel instead.
+    {
+      const css = read("app", "globals.css");
+      const picker = stripComments(read("components", "NoteLinkPicker.tsx"));
+      const bar = stripComments(read("components", "NotebookFormatBar.tsx"));
+
+      const popRules = (css.match(/^\.nb-fmt-pop\s*\{/gm) ?? []).length;
+      if (popRules !== 1) {
+        problems.push(
+          `globals.css declares .nb-fmt-pop ${popRules} times — two rules ` +
+            "for one class is how a wrapper and a floating panel end up " +
+            "sharing, and fighting over, the same properties"
+        );
+      }
+      if (/className="nb-fmt-pop"/.test(picker)) {
+        problems.push(
+          "NoteLinkPicker's wrapper wears nb-fmt-pop, the floating panel's " +
+            "class — the Link button would hang below the toolbar again"
+        );
+      }
+      if (!/className="nb-fmt-pop-host"/.test(picker)) {
+        problems.push(
+          "NoteLinkPicker's wrapper is not nb-fmt-pop-host — its panel is " +
+            "positioned against it, so without it the panel escapes"
+        );
+      }
+
+      // Four buttons that were four characters, two of which had no
+      // glyph in the app's fonts: the row rendered as ▤ ≡ ▤ ≡.
+      for (const glyph of ["⯇", "⯈", "☰"]) {
+        if (bar.includes(glyph)) {
+          problems.push(
+            `the format bar still labels a button "${glyph}" — the app's ` +
+              "fonts have no glyph for it and the browser substitutes"
+          );
+        }
+      }
+      // Comments stripped: this file's own doc comment says "One
+      // `<svg>`", and failing on a file for explaining itself is the
+      // guard punishing the thing it is asking for.
+      const icon = stripComments(read("components", "AlignIcon.tsx"));
+      for (const kind of ["left", "center", "right", "justify"]) {
+        if (!bar.includes(`<AlignIcon kind="${kind}" />`)) {
+          problems.push(`the format bar has no ${kind} alignment icon`);
+        }
+        if (!new RegExp(`^\\s*${kind}: \\[`, "m").test(icon)) {
+          problems.push(`AlignIcon draws nothing for "${kind}"`);
+        }
+      }
+      // One <svg>, so the four cannot drift apart in stroke weight —
+      // the same rule the sidebar's Glyph runs on.
+      const svgs = (icon.match(/<svg\b/g) ?? []).length;
+      if (svgs !== 1) {
+        problems.push(
+          `AlignIcon contains ${svgs} <svg> elements — four hand-written ` +
+            "ones drift the first time any of them is touched"
+        );
+      }
+      // No two of the four may draw the same picture. A copy-paste that
+      // left left and right pointing the same way typechecks, renders,
+      // and is only visible if you look closely at two 15px icons —
+      // which is the state the CHARACTERS were in, and the whole reason
+      // these are drawn.
+      const barsOf = (kind) =>
+        new RegExp(`\\b${kind}: \\[([^\\]]*)\\]`).exec(icon)?.[1]?.trim() ?? "";
+      const drawn = new Map();
+      for (const kind of ["left", "center", "right", "justify"]) {
+        const bars = barsOf(kind);
+        if (!bars) {
+          problems.push(`AlignIcon's bar table has no readable "${kind}"`);
+          continue;
+        }
+        const twin = drawn.get(bars);
+        if (twin) {
+          problems.push(
+            `the ${twin} and ${kind} alignment icons draw the same bars`
+          );
+        }
+        drawn.set(bars, kind);
+      }
+    }
+
+    // ---- a species heading, which is not one of its own printings ---
+    // It has no document, so it had no picture — leaving the rows that
+    // HAVE variants as the only blank squares in a table of artwork,
+    // and those are the rows people look for first.
+    {
+      const fields = read("components", "lookupFields.ts");
+      const tool = stripComments(read("components", "LookupTool.tsx"));
+      const css = read("app", "globals.css");
+
+      if (!/image: familyImage\(list\)/.test(fields)) {
+        problems.push(
+          "a species family heading carries no image — every other row in " +
+            "the table has one, so the headings read as species nobody drew"
+        );
+      }
+      // The Player's Handbook first: it is the picture OF the species
+      // rather than of one version of it.
+      const picker = blockAfter(
+        fields,
+        /export function familyImage/,
+        "familyImage"
+      );
+      if (!/bookRank\(/.test(picker)) {
+        problems.push(
+          "familyImage does not rank the books — it would take whichever " +
+            "printing happened to sort first rather than the PHB one"
+        );
+      }
+      if (!/const book = String/.test(fields) || !/"PHB"/.test(fields)) {
+        problems.push("bookRank no longer knows what the PHB is");
+      }
+
+      // "4 Variants", not "Variants 4". The count leads.
+      const heading = tool.slice(
+        tool.indexOf('<h3 className="lk-h">', tool.indexOf("function FamilyList")),
+        tool.indexOf("</h3>", tool.indexOf("function FamilyList"))
+      );
+      const countAt = heading.indexOf("lk-subclass-count");
+      const labelAt = heading.indexOf("FAMILY_LABEL");
+      if (countAt === -1 || labelAt === -1 || countAt > labelAt) {
+        problems.push(
+          "the variant count does not lead its heading — a pill trailing " +
+            "the word is a number you read second and attach yourself"
+        );
+      }
+
+      // And the rule above that heading, which separated it from
+      // nothing at all on a panel where the list is the whole content.
+      if (!/\.lk \.lk-subclasses:first-child\s*\{[^}]*border-top:\s*none/.test(css)) {
+        problems.push(
+          "globals.css does not drop the rule above a variants list that " +
+            "leads its panel — it was a line with nothing above it"
+        );
+      }
     }
 
     // ---- the feedback window floats, and photographs what is under it

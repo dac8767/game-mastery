@@ -426,6 +426,15 @@ export const purgeCampaign = internalMutation({
       ) {
         return await more();
       }
+
+      // And the page those boxes sat on. It holds no files, so it
+      // sweeps without the storage callback — but it holds the text,
+      // which is the part somebody asked to be rid of.
+      const pages = await ctx.db
+        .query("sessionPages")
+        .withIndex("by_session", (q) => q.eq("sessionId", session._id))
+        .take(left);
+      if (await sweep(pages)) return await more();
     }
     if (await sweep(sessions)) return await more();
 

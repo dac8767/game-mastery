@@ -363,6 +363,32 @@ export default defineSchema({
     .index("by_session_side", ["sessionId", "side"]),
 
   /**
+   * The page a session's notes are written ON.
+   *
+   * The boxes above are things you PLACE — a picture over here, a table
+   * over there. This is the document underneath them: click it and
+   * type, the way you would in any other editor. Reported as exactly
+   * that, and it was the right report — having to add a text box before
+   * you could write a sentence made a page of notes into a layout
+   * exercise.
+   *
+   * Its own table rather than two more fields on `sessions`, for the
+   * one reason the boxes are their own table too: the DM side must be
+   * withheld by NOT BEING QUERIED. Fields on the session row would be
+   * read into memory on a player's request — the row is fetched to
+   * check the campaign — and the whole guarantee would drop from "the
+   * server never asked for it" to "the server asked for it and then
+   * remembered to drop it". `by_session_side` keeps the strong version.
+   */
+  sessionPages: defineTable({
+    sessionId: v.id("sessions"),
+    side: v.union(v.literal("player"), v.literal("dm")),
+    html: v.string(),
+  })
+    .index("by_session", ["sessionId"])
+    .index("by_session_side", ["sessionId", "side"]),
+
+  /**
    * What a group IS, as opposed to who is in it.
    *
    * Membership is NOT here. An NPC carries `groups: string[]`, typed by

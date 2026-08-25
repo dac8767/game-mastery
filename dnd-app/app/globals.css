@@ -2815,6 +2815,16 @@ body.col-resizing {
   border-color: var(--border);
 }
 
+/* Sized against the letters beside it — B, I, U and S set the height
+   of this row, and an icon that ignored them would make the alignment
+   group read as a different toolbar. `display: block` because an
+   inline SVG sits on the text baseline and hangs below it. */
+.align-icon {
+  display: block;
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
 .nb-fmt-select {
   height: 1.7rem;
   font-size: 0.78rem;
@@ -3008,6 +3018,30 @@ body.col-resizing {
      what shows focus. */
   outline: none;
   /* A pasted URL must wrap rather than widen the box. */
+  overflow-wrap: anywhere;
+}
+
+/*
+  The page the boxes sit ON: the document you click into and type.
+
+  In the normal flow rather than absolutely positioned, so the canvas
+  scrolls as one thing when the writing runs past the bottom — an
+  `inset: 0` page would have kept its own scrollbar inside the canvas's,
+  which is two scrollbars for one page of text.
+
+  `min-height: 100%` is what makes the whole empty canvas clickable.
+  Without it the page is as tall as its text, and a blank page is a
+  one-line target at the top of a large rectangle that does nothing.
+*/
+.nb-page {
+  position: relative;
+  min-height: 100%;
+  padding: 1rem 1.25rem;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  /* Same reasoning as a text box: the canvas border shows focus, and
+     contentEditable's own ring is wrong here. */
+  outline: none;
   overflow-wrap: anywhere;
 }
 
@@ -6774,8 +6808,19 @@ button.cal-day:hover {
   border-top: 1px solid var(--border);
 }
 
+/* A species heading has no entry of its own — every printing is a
+   variant underneath it — so this section IS the whole panel, and the
+   rule above it separated the heading from nothing at all. Where
+   something does come first, which is every other use, the rule still
+   does the job it is there for. */
+.lk .lk-subclasses:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
 .lk-subclass-count {
-  margin-left: 0.4rem;
+  margin-right: 0.4rem;
   padding: 0.05rem 0.4rem;
   border-radius: 999px;
   background: var(--bg-inset);
@@ -7757,35 +7802,54 @@ button.cal-day:hover {
 /* The two pages of notes, side by side, DM on the left. Stacked below
    the width where two canvases stop being usable — a 14rem-wide
    notebook page is not a page. */
-.session-notes-split {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.2rem;
-  align-items: start;
+/* Two names, one of them current. They replaced a side-by-side split
+   that made both pages narrow to show a second one you were usually
+   not looking at — and left no answer to which page a new box went on.
+   The strip's own bottom rule runs the full width; the open tab breaks
+   it, which is the whole trick that makes a tab read as attached to
+   what is under it. */
+.session-tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border);
 }
 
-/* One page, full width: a player has no DM side, and half a screen of
-   canvas beside an empty half would be a gap where something they
-   cannot see would go. */
-.session-notes-split.single {
-  grid-template-columns: 1fr;
+.session-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: -1px;
+  padding: 0.4rem 0.85rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px 8px 0 0;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
 }
 
-@media (max-width: 1100px) {
-  .session-notes-split {
-    grid-template-columns: 1fr;
-  }
+.session-tab:hover {
+  color: var(--text);
+}
+
+.session-tab.on {
+  color: var(--text);
+  background: var(--bg-raised);
+  border-color: var(--border);
+  border-bottom-color: var(--bg-raised);
 }
 
 .session-notes .nb-canvas {
   flex: none;
-  height: 26rem;
+  height: 34rem;
 }
 
-/* Sticky, because there are two canvases stacked and the bar belongs to
-   both. Scrolling down to the DM notes would otherwise leave the
-   formatting controls off the top of the screen, which is the one place
-   they are no use at all. */
+/* Sticky, because the page under it is taller than the screen. Scroll
+   down to keep writing and the formatting controls would otherwise go
+   off the top, which is the one place they are no use at all. */
 .session-record .nb-fmtbar {
   position: sticky;
   top: 0;
@@ -7836,16 +7900,16 @@ button.cal-day:hover {
   padding: 0.2rem 0.5rem;
 }
 
-.nb-tools-label {
-  font-size: 0.7rem;
-  color: var(--text-dim);
-  margin-right: 0.1rem;
-}
-
-.nb-fmt-pop {
-  position: relative;
-  display: inline-flex;
-}
+/* There was a second `.nb-fmt-pop` rule here, redeclaring the popup
+   PANEL as `position: relative; display: inline-flex` — added to make
+   the Link button's wrapper behave, because the wrapper had been given
+   the panel's class by mistake. It half-worked and broke two things:
+   the Link button still inherited the panel's `top: 1.9rem`, border,
+   background and padding from the first rule and so hung below the bar
+   in a box of its own — reported as a floating icon out of place — and
+   the highlight popover, which really is a panel, stopped floating.
+   The wrapper wears `.nb-fmt-pop-host` now, and this override is gone
+   rather than adjusted. */
 
 /* Hung under the Link button, over the canvas. Same scrim-and-panel
    pattern the list's toolbar uses. */

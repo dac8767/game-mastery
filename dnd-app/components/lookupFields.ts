@@ -324,6 +324,53 @@ export function classRows(
 }
 
 /**
+ * How much a book is THE printing of a species.
+ *
+ * The Player's Handbook first. XPHB — the 2024 book — second rather
+ * than equal: a 5e campaign reads the 2014 one, so where the library
+ * holds both, the 2014 picture is the one the rest of the entry is
+ * about. Everything else is a printing like any other, and ties among
+ * those are settled by the order the list is already in.
+ */
+const bookRank = (source: unknown): number => {
+  const book = String(source ?? "")
+    .trim()
+    .replace(/\s+\d{4}$/, "");
+  if (book === "PHB") return 0;
+  if (book === "XPHB") return 1;
+  return 2;
+};
+
+/**
+ * The picture a family heading wears.
+ *
+ * A synthetic heading has no document, so it had no artwork — which
+ * left the species that have variants as the only rows in the table
+ * with a blank square where a picture goes, and those are the rows
+ * people look for first. It borrows one from underneath instead.
+ *
+ * The first printing WITH ART rather than simply the first: a leading
+ * variant that happens to have no picture would leave the heading
+ * blank while every row under it has one, which is exactly the gap
+ * this closes.
+ */
+export function familyImage(list: Record<string, unknown>[]): unknown {
+  let best: unknown;
+  let bestRank = Infinity;
+
+  for (const row of list) {
+    const image = row.image;
+    if (typeof image !== "string" || !image.trim()) continue;
+    const rank = bookRank(splitSource(row.name, row.source).source);
+    if (rank < bestRank) {
+      best = image;
+      bestRank = rank;
+    }
+  }
+  return best;
+}
+
+/**
  * Species, each holding its variations.
  *
  * Unlike a subclass, a species carries NO field saying what it is a
@@ -514,6 +561,9 @@ export function speciesRows(
       _id: `${ABSENT_PARENT_ID}${key}`,
       name: label,
       absent: true,
+      // Borrowed from underneath, because a heading with no picture in
+      // a table of pictures reads as a species nobody drew.
+      image: familyImage(list),
     });
   }
 

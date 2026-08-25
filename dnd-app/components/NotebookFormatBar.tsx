@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AlignIcon } from "@/components/AlignIcon";
 import {
   EXEC,
   FONTS,
@@ -36,7 +37,8 @@ function FormatButton({
   style,
 }: {
   cmd: keyof typeof EXEC | string;
-  label: string;
+  /** A letter for the ones a letter says, an icon for the rest. */
+  label: React.ReactNode;
   title: string;
   style?: React.CSSProperties;
 }) {
@@ -213,10 +215,29 @@ export function NotebookFormatBar({
 
       <span className="nb-fmt-sep" />
 
-      <FormatButton cmd="alignLeft" label="⯇" title="Align left" />
-      <FormatButton cmd="alignCenter" label="≡" title="Align centre" />
-      <FormatButton cmd="alignRight" label="⯈" title="Align right" />
-      <FormatButton cmd="alignJustify" label="☰" title="Justify" />
+      {/* Drawn, not typed. Two of the four characters these used had no
+          glyph in the app's fonts, so the row rendered as ▤ ≡ ▤ ≡ —
+          four buttons wearing two shapes. */}
+      <FormatButton
+        cmd="alignLeft"
+        label={<AlignIcon kind="left" />}
+        title="Align left"
+      />
+      <FormatButton
+        cmd="alignCenter"
+        label={<AlignIcon kind="center" />}
+        title="Align centre"
+      />
+      <FormatButton
+        cmd="alignRight"
+        label={<AlignIcon kind="right" />}
+        title="Align right"
+      />
+      <FormatButton
+        cmd="alignJustify"
+        label={<AlignIcon kind="justify" />}
+        title="Justify"
+      />
 
       <span className="nb-fmt-sep" />
 

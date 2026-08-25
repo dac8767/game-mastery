@@ -164,11 +164,24 @@ export const getNotes = query({
       );
     };
 
+    /** The page the boxes sit on — the document you type into. */
+    const body = async (which: Side) => {
+      const page = await ctx.db
+        .query("sessionPages")
+        .withIndex("by_session_side", (q) =>
+          q.eq("sessionId", args.sessionId).eq("side", which)
+        )
+        .first();
+      return page?.html ?? "";
+    };
+
     return {
       isDm,
       player: await side("player"),
-      // Never queried at all for a player.
+      playerBody: await body("player"),
+      // Neither of these is queried at all for a player.
       dm: isDm ? await side("dm") : null,
+      dmBody: isDm ? await body("dm") : null,
     };
   },
 });
@@ -243,7 +256,56 @@ export const deleteSession = mutation({
       if (box.storageId) await ctx.storage.delete(box.storageId);
       await ctx.db.delete(box._id);
     }
+
+    // The pages too, or the notes outlive the night they belong to.
+    const pages = await ctx.db
+      .query("sessionPages")
+      .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+      .take(4);
+    for (const page of pages) await ctx.db.delete(page._id);
+
     await ctx.db.delete(args.sessionId);
+  },
+});
+
+/**
+ * The page's own text, written back.
+ *
+ * One row per side, made on the first save rather than when the session
+ * is created — otherwise every session ever made before this existed
+ * would have no page to write to, and the fix for that is a migration
+ * where an upsert will do.
+ *
+ * Sanitised like every other stored HTML on this screen. The player
+ * page is written by any member and read by the DM, which is the
+ * direction that matters.
+ */
+export const setBody = mutation({
+  args: {
+    sessionId: v.id("sessions"),
+    side: v.union(v.literal("player"), v.literal("dm")),
+    html: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const session = await ownedSession(ctx, args.sessionId);
+    await requireWriter(ctx, session.campaignId, args.side);
+
+    const html = sanitizeBoxHtml(args.html);
+    const existing = await ctx.db
+      .query("sessionPages")
+      .withIndex("by_session_side", (q) =>
+        q.eq("sessionId", args.sessionId).eq("side", args.side)
+      )
+      .first();
+
+    if (existing) await ctx.db.patch(existing._id, { html });
+    else {
+      await ctx.db.insert("sessionPages", {
+        sessionId: args.sessionId,
+        side: args.side,
+        html,
+      });
+    }
   },
 });
 

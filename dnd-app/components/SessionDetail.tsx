@@ -8,6 +8,7 @@ import { Id } from "@/convex/_generated/dataModel";
 import { BoxCanvas, BoxTools, NewBox } from "@/components/BoxCanvas";
 import { NoteLinkPicker } from "@/components/NoteLinkPicker";
 import { linkTargets } from "@/components/noteLinks";
+import { NoteSide, pageBoxId, pageSide } from "@/components/notePage";
 import { ColumnDef } from "@/components/npcColumns";
 import {
   SESSION_COLUMNS,
@@ -41,12 +42,18 @@ import {
  *                  no version of this screen, and no devtools tab, in
  *                  which a player has that text.
  *
+ * They are TABS rather than two panes side by side. A DM reads one at
+ * a time — you are either writing what happened or writing what you
+ * are not telling them — and the split made both halves narrow to show
+ * a second page that was usually not the one being looked at. It also
+ * answers the question one shared toolbar could not: which page a new
+ * box lands on is the page you are looking at.
+ *
  * The format toolbar is mounted once, here, rather than inside each
  * canvas. notebookFormat holds one saver and one tracked selection for
  * the whole document, so two canvases each registering their own would
- * leave whichever mounted last writing both sides' edits. One bar also
- * reads correctly: it acts on whichever box the caret is in, and the
- * caret is only ever in one.
+ * leave whichever mounted last writing both sides' edits. It sits under
+ * the tabs, at the top of the page it acts on.
  */
 
 export type SessionRow = {
@@ -104,10 +111,16 @@ export function SessionDetail({
   const addBox = useMutation(api.sessions.addBox);
   const updateBox = useMutation(api.sessions.updateBox);
   const deleteBox = useMutation(api.sessions.deleteBox);
+  const setBody = useMutation(api.sessions.setBody);
   const generateUploadUrl = useMutation(api.sessions.generateUploadUrl);
 
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  /* Which page is open. The DM's own first — it is the one they are
+     writing during a session, and the player page is the one they read
+     back afterwards. A player never sees the tabs at all. */
+  const [tab, setTab] = useState<NoteSide>("dm");
 
   const run = useCallback(async (fn: () => Promise<unknown>) => {
     try {
@@ -130,14 +143,22 @@ export function SessionDetail({
   // notebookFormat is a plain DOM helper and knows nothing about Convex;
   // this is the one place on this screen that hands it a way to persist.
   // Without it a format is applied on screen and lost on reload.
+  //
+  // The toolbar knows only that it edited a region with an id. Two
+  // kinds of region answer to that now — the boxes, and the page they
+  // sit on — so the id says which, and this is where it is read. See
+  // components/notePage.ts.
   useEffect(
     () =>
-      registerScrapbookSaver((boxId, html) =>
+      registerScrapbookSaver((boxId, html) => {
+        const side = pageSide(boxId);
         void run(() =>
-          updateBox({ boxId: boxId as Id<"sessionBoxes">, html })
-        )
-      ),
-    [run, updateBox]
+          side
+            ? setBody({ sessionId: session._id, side, html })
+            : updateBox({ boxId: boxId as Id<"sessionBoxes">, html })
+        );
+      }),
+    [run, updateBox, setBody, session._id]
   );
 
   const uploadImage = async (
@@ -181,16 +202,21 @@ export function SessionDetail({
     onFollowLink: (href: string) => router.push(href),
   });
 
+  /* Whether there IS a DM page to show. Rendered only when the SERVER
+     sent one: a player's request never queries the DM side, so `dm`
+     comes back null rather than empty — and an empty page would say
+     "the DM has not written anything", which is a different claim from
+     "this is not yours to see". */
+  const hasDm = notes?.dm !== null && notes?.dm !== undefined;
+
   /**
-   * Which page a new box lands on.
+   * Which page you are on — and so which page a new box lands on.
    *
-   * One set of buttons for two canvases needs an answer, and the
-   * useful one is who you are: the DM writes in the DM notes, and a
-   * player has only the one page. It was one set per canvas before —
-   * six buttons for two pages — where the answer was which of the two
-   * rows you happened to click.
+   * The visible tab, which is the only answer that needs no explaining.
+   * It was "whichever side you are" before, which meant a DM had no way
+   * to put a picture on the player page at all.
    */
-  const side: "player" | "dm" = isDm ? "dm" : "player";
+  const side: NoteSide = hasDm && tab === "dm" ? "dm" : "player";
 
   const title = `Session ${session.number}`;
 
@@ -280,76 +306,84 @@ export function SessionDetail({
           ))}
         </section>
 
-        {/* One bar for the whole record. See the note at the top —
-            and the three buttons at the end of it are one set for both
-            pages, adding to whichever is yours to write. */}
-        <NotebookFormatBar
-          trailing={
-            <>
-            <NoteLinkPicker campaignId={campaignId} targets={targets} />
-            <BoxTools
-              label={isDm ? "Add to DM notes:" : "Add to notes:"}
-              onAdd={canvasProps(side).onAdd}
-              onUploadImage={(file) => uploadImage(side, file)}
-            />
-            </>
-          }
-        />
-
-        {/* Two columns, DM on the LEFT. Which side each is on is a
-            preference; that they are side by side is not — the notes
-            from one night are one thing read together, and stacked
-            they were a page of scrolling between the half you were
-            writing and the half you were writing it against.
-
-            One column when there is only one page to draw, so a
-            player does not get an empty half-width canvas beside a
-            gap where something they cannot see would be. */}
-        <div
-          className={`session-notes-split${
-            notes?.dm ? "" : " single"
-          }`}
+        <section
+          className={`session-notes${side === "dm" ? " dm-notes" : ""}`}
         >
-          {/* Rendered only when the SERVER sent a dm side. A player's
-              request never queries it, so `dm` is null rather than
-              empty — and an empty section would say "the DM has not
-              written anything", which is a different claim from "this
-              is not yours to see". */}
-          {notes?.dm !== null && notes?.dm !== undefined && (
-            <section className="session-notes dm-notes">
-              <h3 className="group-h">
+          {/* The tabs ARE the heading — two names, one of them current
+              — so there is no separate title above them repeating
+              whichever is open. A player gets the plain heading, since
+              a tab strip of one is a label wearing a border. */}
+          {hasDm ? (
+            <div className="session-tabs" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "dm"}
+                className={`session-tab${tab === "dm" ? " on" : ""}`}
+                onClick={() => setTab("dm")}
+              >
                 DM notes <span className="dm-tag">DM</span>
-              </h3>
-              <BoxCanvas
-                boxes={notes.dm}
-                canEdit
-                tools="elsewhere"
-                emptyNote="Yours alone. The table never sees this page."
-                {...canvasProps("dm")}
-              />
-            </section>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "player"}
+                className={`session-tab${tab === "player" ? " on" : ""}`}
+                onClick={() => setTab("player")}
+              >
+                Player notes
+              </button>
+            </div>
+          ) : (
+            <h3 className="group-h">Player notes</h3>
           )}
 
-          <section className="session-notes">
-            <h3 className="group-h">Player notes</h3>
-            {notes === undefined ? (
-              <p className="centered-note">Opening the notes…</p>
-            ) : notes === null ? (
-              /* Deleted out from under you — by you in another tab, or
-                 by nobody, but either way there is nothing to draw and
-                 an empty canvas would invite you to write into it. */
-              <p className="centered-note">This session is gone.</p>
-            ) : (
-              <BoxCanvas
-                boxes={notes.player}
-                canEdit
-                tools="elsewhere"
-                emptyNote="Nothing written down yet. Add a text box to start."
-                {...canvasProps("player")}
-              />
-            )}
-          </section>
-        </div>
+          {/* Under the tabs rather than above them: it acts on the page
+              below it, and a toolbar floating above the thing that
+              names the page reads as belonging to the record. */}
+          <NotebookFormatBar
+            trailing={
+              <>
+                <NoteLinkPicker campaignId={campaignId} targets={targets} />
+                <BoxTools
+                  onAdd={canvasProps(side).onAdd}
+                  onUploadImage={(file) => uploadImage(side, file)}
+                />
+              </>
+            }
+          />
+
+          {notes === undefined ? (
+            <p className="centered-note">Opening the notes…</p>
+          ) : notes === null ? (
+            /* Deleted out from under you — by you in another tab, or by
+               nobody, but either way there is nothing to draw and an
+               empty canvas would invite you to write into it. */
+            <p className="centered-note">This session is gone.</p>
+          ) : (
+            /* Keyed by side, so switching tabs builds a fresh canvas
+               rather than re-pointing the live one. The page is a
+               contentEditable holding its own DOM, and handing it a
+               different document to be is how the wrong side's text
+               gets saved over the right one. */
+            <BoxCanvas
+              key={side}
+              boxes={(side === "dm" ? notes.dm : notes.player) ?? []}
+              canEdit
+              tools="elsewhere"
+              page={{
+                id: pageBoxId(side),
+                html:
+                  (side === "dm" ? notes.dmBody : notes.playerBody) ?? "",
+                onChange: (html) =>
+                  void run(() =>
+                    setBody({ sessionId: session._id, side, html })
+                  ),
+              }}
+              {...canvasProps(side)}
+            />
+          )}
+        </section>
       </div>
     </section>
   );

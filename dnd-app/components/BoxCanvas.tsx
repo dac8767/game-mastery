@@ -107,18 +107,14 @@ export type NewBox = {
 export function BoxTools({
   onAdd,
   onUploadImage,
-  label,
 }: {
   onAdd: (box: NewBox) => void;
   onUploadImage: (file: File) => Promise<string | null>;
-  /** Said out loud where a click could plausibly land on two pages. */
-  label?: string;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
 
   return (
     <>
-      {label && <span className="nb-tools-label">{label}</span>}
       <button
         type="button"
         className="npc-btn"
@@ -183,6 +179,7 @@ export function BoxCanvas({
   onDelete,
   onUploadImage,
   onFollowLink,
+  page,
   emptyNote,
   children,
 }: {
@@ -214,6 +211,17 @@ export function BoxCanvas({
    * boxes come and go and the canvas does not.
    */
   onFollowLink?: (href: string) => void;
+  /**
+   * The page the boxes sit on: click it and type.
+   *
+   * Optional because the Notebook has not adopted it yet, but it is
+   * the thing that makes this a document rather than a pinboard. It
+   * fills the canvas and the boxes float over it, so a click on a box
+   * is a click on the box and a click anywhere else is a caret in the
+   * text — which is the behaviour anybody who has used an editor
+   * already expects, and the behaviour whose absence was reported.
+   */
+  page?: { id: string; html: string; onChange: (html: string) => void };
   emptyNote?: string;
   /** Anything the owner wants on the toolbar, after the three buttons. */
   children?: React.ReactNode;
@@ -234,12 +242,17 @@ export function BoxCanvas({
 
       <div
         className="nb-canvas"
-        // Only a click on the canvas ITSELF clears the focus ring; a
-        // click that landed on a box bubbles up here too, and treating
-        // that as "nothing selected" would unfocus the box you just
-        // clicked into.
+        // A click that landed on a box bubbles up here too, and
+        // treating that as "nothing selected" would unfocus the box you
+        // just clicked into. Anything else — the canvas itself, or the
+        // page you are typing on — means no box is selected. Testing
+        // for the canvas alone was right until the page filled it, at
+        // which point the canvas stopped ever being the target and the
+        // ring stuck on whichever box you last touched.
         onMouseDown={(e) => {
-          if (e.target === e.currentTarget) setFocusedBoxId(null);
+          if (!(e.target as HTMLElement).closest?.(".nb-box")) {
+            setFocusedBoxId(null);
+          }
         }}
         onClick={(e) => {
           if (!onFollowLink) return;
@@ -253,7 +266,21 @@ export function BoxCanvas({
           onFollowLink(href);
         }}
       >
-        {boxes.length === 0 && emptyNote && (
+        {/* Under the boxes, in DOM order as well as in meaning: the
+            boxes are absolutely positioned and painted after, so they
+            take their own clicks and the page takes the rest. */}
+        {page && (
+          <RichText
+            key={page.id}
+            id={page.id}
+            html={page.html}
+            className="nb-page"
+            editable={canEdit}
+            onCommit={page.onChange}
+          />
+        )}
+
+        {boxes.length === 0 && !page && emptyNote && (
           <p className="centered-note">{emptyNote}</p>
         )}
         {boxes.map((box) => (
@@ -413,6 +440,65 @@ function BoxView({
   );
 }
 
+/**
+ * An editable region of the notes: a text box, or the page itself.
+ *
+ * One component for both, because everything that is fiddly about a
+ * contentEditable is the same for either and getting it right twice is
+ * how the two drift apart. All of it is load-bearing:
+ *
+ *   - innerHTML is written in only when the caret is NOT here, or every
+ *     keystroke would reset it to the start
+ *   - `data-nb-box` is the attribute the format toolbar's tracker keys
+ *     on, and it goes on the editable element itself because the apply
+ *     helper reads innerHTML off whatever it finds
+ *   - onFocus registers as well as the selectionchange listener: the
+ *     very first toolbar press has to work, and clicking into an empty
+ *     region does not necessarily fire a selection change
+ *   - the commit is on BLUR, because clicking straight from one region
+ *     to another must save the first, and blur ordering is where
+ *     contentEditable loses edits
+ */
+function RichText({
+  id,
+  html,
+  className,
+  editable,
+  onCommit,
+}: {
+  id: string;
+  html: string;
+  className: string;
+  editable: boolean;
+  onCommit: (html: string) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || document.activeElement === el) return;
+    if (el.innerHTML !== html) el.innerHTML = html;
+  }, [html]);
+
+  // Nothing may format a region that has gone away.
+  useEffect(() => () => forgetScrapbookBox(id), [id]);
+
+  return (
+    <div
+      ref={ref}
+      className={className}
+      data-nb-box={id}
+      contentEditable={editable}
+      suppressContentEditableWarning
+      onFocus={() => focusScrapbookBox(ref.current, id)}
+      onBlur={() => {
+        const next = ref.current?.innerHTML ?? "";
+        if (next !== html) onCommit(next);
+      }}
+    />
+  );
+}
+
 function TextBox({
   box,
   onChange,
@@ -420,44 +506,13 @@ function TextBox({
   box: CanvasBox;
   onChange: (patch: Record<string, unknown>) => void;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  // Write the server's HTML in only when this box isn't being typed in.
-  // Reassigning innerHTML under the caret would move it to the start on
-  // every keystroke.
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || document.activeElement === el) return;
-    const next = box.html ?? "";
-    if (el.innerHTML !== next) el.innerHTML = next;
-  }, [box.html]);
-
-  // Nothing may format a box that has gone away.
-  const boxId = box._id as string;
-  useEffect(() => () => forgetScrapbookBox(boxId), [boxId]);
-
   return (
-    <div
-      ref={ref}
+    <RichText
+      id={box._id}
+      html={box.html ?? ""}
       className="nb-text"
-      // BOX_ATTR — the attribute the format toolbar's tracker keys on.
-      // It goes on the editable element itself, because the apply helper
-      // reads innerHTML off whatever it finds and persists that as the
-      // box's content.
-      data-nb-box={boxId}
-      contentEditable
-      suppressContentEditableWarning
-      // Belt and braces alongside the selectionchange listener: the very
-      // first toolbar press has to work, and clicking into an empty box
-      // does not necessarily fire a selection change.
-      onFocus={() => focusScrapbookBox(ref.current, boxId)}
-      // Commit on blur. Clicking straight from one box to another must
-      // save the first — blur ordering is where contentEditable loses
-      // edits.
-      onBlur={() => {
-        const html = ref.current?.innerHTML ?? "";
-        if (html !== (box.html ?? "")) onChange({ html });
-      }}
+      editable
+      onCommit={(html) => onChange({ html })}
     />
   );
 }
