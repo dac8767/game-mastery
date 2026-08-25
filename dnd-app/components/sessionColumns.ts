@@ -61,7 +61,11 @@ export const SESSION_COLUMNS: ColumnDef[] = [
   },
   {
     key: "description",
-    label: "Description",
+    // Stored as `description`, called Summary. The word is what a
+    // session has — a line about the night — and the field name is
+    // what the row has been called since the table was made; renaming
+    // the field would be a migration for a caption.
+    label: "Summary",
     kind: "longtext",
     defaultWidth: 360,
     defaultVisible: true,

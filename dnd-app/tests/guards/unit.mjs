@@ -12,7 +12,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -56,6 +56,23 @@ function compile(relPath) {
   }
   // The app is CommonJS by default, so mark the output as ESM.
   writeFileSync(join(out, "package.json"), '{"type":"module"}');
+
+  // And give every relative import the extension Node's ESM loader
+  // insists on. tsc emits `from "./noteFormat"` because a bundler
+  // resolves that; Node does not, and the module under test only fails
+  // once it imports a sibling — which is exactly when a module is
+  // worth compiling with its imports rather than alone.
+  for (const file of readdirSync(out)) {
+    if (!file.endsWith(".js")) continue;
+    const at = join(out, file);
+    writeFileSync(
+      at,
+      readFileSync(at, "utf8").replace(
+        /(from\s+")(\.\.?\/[^"]+?)(?<!\.js)(")/g,
+        "$1$2.js$3"
+      )
+    );
+  }
   return out;
 }
 
@@ -5501,6 +5518,225 @@ export const unit = {
       check(
         "which is a label, not the stored value",
         primary.kind === "number"
+      );
+    }
+
+    // ---- what a session's note box may contain ---------------------
+    // The notebook's boxes are private, so their HTML round-tripped
+    // untouched. A session's player notes are written by any member and
+    // read by the DM, which makes them the same problem notes already
+    // solved — and a wider vocabulary, because the format toolbar puts
+    // colours and alignment on the text.
+    {
+      const bh = await import(
+        pathToFileURL(join(compile("components/boxHtml.ts"), "boxHtml.js")).href
+      );
+
+      const clean = (h) => bh.sanitizeBoxHtml(h);
+
+      check(
+        "a script is gone, body and all",
+        clean("<p>hi</p><script>alert(1)</script>") === "<p>hi</p>"
+      );
+      check(
+        "an event handler is not an attribute this emits",
+        !clean('<p onclick="alert(1)">hi</p>').includes("onclick")
+      );
+      check(
+        "an image cannot ask for a url",
+        clean('<img src="http://x/pixel.gif">') === ""
+      );
+
+      // The format toolbar's own output has to survive, or sanitising
+      // the box is the same as deleting the formatting.
+      check(
+        "a colour survives",
+        clean('<span style="color: #c9a227">gold</span>') ===
+          '<span style="color: #c9a227">gold</span>'
+      );
+      check(
+        "so does an alignment and an rgb()",
+        clean('<div style="text-align: center; color: rgb(1, 2, 3)">x</div>')
+          .includes("text-align: center")
+      );
+      check(
+        "and a font face and size",
+        clean('<font face="Georgia" size="4">x</font>') ===
+          '<font face="Georgia" size="4">x</font>'
+      );
+
+      // style is a whole language and most of it does not belong here.
+      check(
+        "a style that can fetch is refused",
+        !clean('<p style="background: url(http://x/p.gif)">x</p>').includes("url")
+      );
+      check(
+        "and one that can cover the screen",
+        !clean('<p style="position: fixed; top: 0">x</p>').includes("position")
+      );
+      check(
+        "a declaration that is allowed survives beside one that is not",
+        clean('<p style="position: fixed; color: red">x</p>') ===
+          '<p style="color: red">x</p>'
+      );
+
+      // Links. These go through the router to a page in this app, so an
+      // app route is the only kind this emits.
+      check(
+        "an app route survives with its kind",
+        clean('<a data-gm="npc" href="/campaign/abc/npcs?open=Kelja">K</a>') ===
+          '<a href="/campaign/abc/npcs?open=Kelja" data-gm="npc">K</a>'
+      );
+      // The bug this test was written for: `[ -]` is a RANGE from space
+      // to hyphen, and "%" is inside it — so every url-encoded name was
+      // refused and every link with a space in it lost its href.
+      check(
+        "a url-encoded name is still an app route",
+        clean(
+          '<a href="/campaign/abc/npcs?open=Kelja%20Ironfist">K</a>'
+        ).includes("Kelja%20Ironfist")
+      );
+      check(
+        "javascript: is not a route",
+        !clean('<a href="javascript:alert(1)">x</a>').includes("href")
+      );
+      check(
+        "nor is somewhere else entirely",
+        !clean('<a href="https://evil.example">x</a>').includes("href")
+      );
+      // The one that looks like an app route and is not: a
+      // protocol-relative url starts with a slash too.
+      check(
+        "and neither is a protocol-relative url",
+        !clean('<a href="//evil.example">x</a>').includes("href")
+      );
+      check(
+        "a kind that is not a word cannot reach the route builder",
+        !clean('<a data-gm="../../etc" href="/x">y</a>').includes("data-gm")
+      );
+      check(
+        "the words are kept even when the tag is not",
+        clean("<marquee>still here</marquee>") === "still here"
+      );
+    }
+
+    // ---- where a link in the notes goes ----------------------------
+    {
+      const nl = await import(
+        pathToFileURL(join(compile("components/noteLinks.ts"), "noteLinks.js"))
+          .href
+      );
+
+      check(
+        "each kind goes to its own screen",
+        nl.linkHref("c1", "npc", "Kelja") === "/campaign/c1/npcs?open=Kelja" &&
+          nl.linkHref("c1", "location", "Mines") ===
+            "/campaign/c1/locations?open=Mines" &&
+          nl.linkHref("c1", "group", "Guild") ===
+            "/campaign/c1/groups?open=Guild" &&
+          nl.linkHref("c1", "species", "Elf") ===
+            "/campaign/c1/lookup?tab=species&open=Elf"
+      );
+      // Named per kind rather than reached by an else-branch, which is
+      // the mistake the NPC grid made once: every kind it did not name
+      // went somewhere plausible and wrong.
+      check(
+        "a kind nothing names goes NOWHERE, not somewhere plausible",
+        nl.linkHref("c1", "shop", "Anvil") === null
+      );
+      check(
+        "a name with a space is encoded, not broken in half",
+        nl.linkHref("c1", "npc", "Kelja Ironfist") ===
+          "/campaign/c1/npcs?open=Kelja%20Ironfist"
+      );
+      check(
+        "a blank name is not a link",
+        nl.linkHref("c1", "npc", "   ") === null
+      );
+
+      // The anchor is handed to insertHTML, so it is escaped HERE —
+      // before any mutation has a chance to rebuild it.
+      check(
+        "a name that looks like markup is escaped on the way in",
+        nl.linkHtml("c1", { kind: "npc", name: "A <b>Bold</b> One" }).includes(
+          "A &lt;b&gt;Bold&lt;/b&gt; One"
+        )
+      );
+      check(
+        "and the anchor says which kind it is",
+        nl
+          .linkHtml("c1", { kind: "group", name: "Guild" })
+          .includes('data-gm="group"')
+      );
+
+      const TARGETS = [
+        { kind: "npc", name: "Bruno Ironfist" },
+        { kind: "npc", name: "Ambruster" },
+        { kind: "group", name: "Mining Guild" },
+      ];
+      check(
+        "a match nearer the start of the name comes first",
+        nl.matchTargets(TARGETS, "bru").map((t) => t.name).join() ===
+          "Bruno Ironfist,Ambruster"
+      );
+      check(
+        "matching ignores case",
+        nl.matchTargets(TARGETS, "MINING").length === 1
+      );
+      check(
+        "an empty query offers everything, up to the cap",
+        nl.matchTargets(TARGETS, "").length === 3 &&
+          nl.matchTargets(TARGETS, "", 2).length === 2
+      );
+
+      check(
+        "the three lists become one list of targets",
+        nl
+          .linkTargets({
+            npcs: [{ name: "Kelja" }],
+            locations: [{ name: "Mines" }],
+            groups: [{ name: "Guild" }],
+          })
+          .length === 3
+      );
+      check(
+        "a nameless row is not offered",
+        nl.linkTargets({ npcs: [{ name: "" }, { name: null }, {}] }).length === 0
+      );
+      // The same name in two KINDS is two targets; twice in one kind is
+      // one.
+      check(
+        "a name in two kinds is two targets",
+        nl.linkTargets({ npcs: [{ name: "Moonbrook" }], locations: [{ name: "Moonbrook" }] })
+          .length === 2
+      );
+      check(
+        "and the same name twice in one kind is one",
+        nl.linkTargets({ npcs: [{ name: "Kelja" }, { name: "kelja" }] }).length === 1
+      );
+      check(
+        "nothing loaded yet is no targets, not a crash",
+        nl.linkTargets({}).length === 0
+      );
+
+      // The two halves have to agree: what linkHtml writes is what the
+      // sanitiser lets through, or every link is stripped on save.
+      const bh = await import(
+        pathToFileURL(join(compile("components/boxHtml.ts"), "boxHtml.js")).href
+      );
+      check(
+        "a link this app writes survives the sanitiser it is saved through",
+        (() => {
+          const html = nl.linkHtml("c1", {
+            kind: "npc",
+            name: "Kelja Ironfist",
+          });
+          const out = bh.sanitizeBoxHtml(html);
+          return (
+            out.includes("/campaign/c1/npcs?open=Kelja%20Ironfist") &&
+            out.includes('data-gm="npc"')
+          );
+        })()
       );
     }
 

@@ -183,3 +183,42 @@ export function applyScrapbookTextFormat(
   if (sel && sel.rangeCount) sbRange = sel.getRangeAt(0).cloneRange();
   return true;
 }
+
+/**
+ * Put a piece of markup where the caret is.
+ *
+ * The link picker's whole mechanism: `createLink` needs a selection and
+ * does nothing without one, which is the common case — you click Link
+ * to ADD a name, not to wrap one you already typed. Inserting the
+ * finished anchor covers both, because a selection is replaced by it.
+ *
+ * Same three obligations as applying a format, and skipping any of them
+ * is a link that looks inserted and is not: restore the remembered
+ * range, write the box's new HTML back through the saver, and keep
+ * tracking where the caret ended up.
+ */
+export function insertScrapbookHtml(html: string): boolean {
+  const el = sbBody;
+  if (!el || !sbBoxId || typeof document.execCommand !== "function") {
+    return false;
+  }
+
+  el.focus();
+  if (sbRange) {
+    const sel = document.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(sbRange);
+  }
+
+  document.execCommand("insertHTML", false, html);
+  sbSave?.(sbBoxId, el.innerHTML);
+
+  const sel = document.getSelection();
+  if (sel && sel.rangeCount) sbRange = sel.getRangeAt(0).cloneRange();
+  return true;
+}
+
+/** Whether the caret is in a text box, so Link has somewhere to go. */
+export function hasScrapbookFocus(): boolean {
+  return Boolean(sbBody && sbBoxId);
+}

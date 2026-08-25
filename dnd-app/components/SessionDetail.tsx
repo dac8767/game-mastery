@@ -1,10 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
-import { BoxCanvas, NewBox } from "@/components/BoxCanvas";
+import { BoxCanvas, BoxTools, NewBox } from "@/components/BoxCanvas";
+import { NoteLinkPicker } from "@/components/NoteLinkPicker";
+import { linkTargets } from "@/components/noteLinks";
 import { ColumnDef } from "@/components/npcColumns";
 import {
   SESSION_COLUMNS,
@@ -75,6 +78,22 @@ export function SessionDetail({
      while a session is open. */
   const members = useQuery(api.campaigns.listMembers, { campaignId });
   const characters = useQuery(api.campaigns.listCharacters, { campaignId });
+
+  /* What the notes can link to. The same three lists their own screens
+     subscribe to, so a name here is a name the destination will find. */
+  const npcs = useQuery(api.npcs.listForCampaign, { campaignId });
+  const locations = useQuery(api.locations.listForCampaign, { campaignId });
+  const groups = useQuery(api.groups.listForCampaign, { campaignId });
+  const targets = useMemo(
+    () =>
+      linkTargets({
+        npcs: npcs?.npcs,
+        locations: locations?.locations,
+        groups: groups?.groups,
+      }),
+    [npcs, locations, groups]
+  );
+  const router = useRouter();
   const players = useMemo(
     () => campaignPlayers(members, characters),
     [members, characters]
@@ -159,7 +178,19 @@ export function SessionDetail({
     onDelete: (boxId: string) =>
       void run(() => deleteBox({ boxId: boxId as Id<"sessionBoxes"> })),
     onUploadImage: (file: File) => uploadImage(side, file),
+    onFollowLink: (href: string) => router.push(href),
   });
+
+  /**
+   * Which page a new box lands on.
+   *
+   * One set of buttons for two canvases needs an answer, and the
+   * useful one is who you are: the DM writes in the DM notes, and a
+   * player has only the one page. It was one set per canvas before —
+   * six buttons for two pages — where the answer was which of the two
+   * rows you happened to click.
+   */
+  const side: "player" | "dm" = isDm ? "dm" : "player";
 
   const title = `Session ${session.number}`;
 
@@ -249,8 +280,21 @@ export function SessionDetail({
           ))}
         </section>
 
-        {/* One bar for the whole record. See the note at the top. */}
-        <NotebookFormatBar />
+        {/* One bar for the whole record. See the note at the top —
+            and the three buttons at the end of it are one set for both
+            pages, adding to whichever is yours to write. */}
+        <NotebookFormatBar
+          trailing={
+            <>
+            <NoteLinkPicker campaignId={campaignId} targets={targets} />
+            <BoxTools
+              label={isDm ? "Add to DM notes:" : "Add to notes:"}
+              onAdd={canvasProps(side).onAdd}
+              onUploadImage={(file) => uploadImage(side, file)}
+            />
+            </>
+          }
+        />
 
         {/* Two columns, DM on the LEFT. Which side each is on is a
             preference; that they are side by side is not — the notes
@@ -279,6 +323,7 @@ export function SessionDetail({
               <BoxCanvas
                 boxes={notes.dm}
                 canEdit
+                tools="elsewhere"
                 emptyNote="Yours alone. The table never sees this page."
                 {...canvasProps("dm")}
               />
@@ -298,6 +343,7 @@ export function SessionDetail({
               <BoxCanvas
                 boxes={notes.player}
                 canEdit
+                tools="elsewhere"
                 emptyNote="Nothing written down yet. Add a text box to start."
                 {...canvasProps("player")}
               />

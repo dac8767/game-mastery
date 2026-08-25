@@ -105,8 +105,55 @@ function safeHref(raw: string): string | null {
  * tags it recognises, with only the attributes it recognises, so
  * anything new is excluded by not being included.
  */
+/**
+ * What one rebuild is allowed to emit.
+ *
+ * Parameterised because there are now two surfaces with the same
+ * problem and different vocabularies: a note is prose, and a session's
+ * note BOX carries the format toolbar's colours and alignment as well.
+ * One scanner, two policies — a second scanner would be a second place
+ * for `javascript:` to be missed.
+ */
+export interface HtmlPolicy {
+  /** Tag -> attributes it may keep. A tag not here is unwrapped. */
+  allowed: Record<string, string[]>;
+  /** Longest body this surface accepts. */
+  limit: number;
+  /**
+   * What an attribute's value becomes, or null to drop it.
+   *
+   * Returning the whole attribute text rather than just the value is
+   * what lets `href` add `target` and `rel` alongside itself.
+   */
+  attr(tag: string, attr: string, value: string): string | null;
+}
+
+/** Anything a NOTE links to is elsewhere, so it opens there. */
+function noteAttr(tag: string, attr: string, value: string): string | null {
+  if (attr !== "href") {
+    return ` ${attr}="${escapeText(value).replace(/"/g, "&quot;")}"`;
+  }
+  const href = safeHref(value);
+  if (href === null) return null;
+  // noopener, or the page it opens can navigate this one.
+  return (
+    ` href="${escapeText(href).replace(/"/g, "&quot;")}"` +
+    ` target="_blank" rel="noopener noreferrer"`
+  );
+}
+
+export const NOTE_POLICY: HtmlPolicy = {
+  allowed: ALLOWED,
+  limit: NOTE_LIMITS.body,
+  attr: noteAttr,
+};
+
 export function sanitizeNoteHtml(input: string): string {
-  const html = String(input ?? "").slice(0, NOTE_LIMITS.body);
+  return sanitizeHtml(input, NOTE_POLICY);
+}
+
+export function sanitizeHtml(input: string, policy: HtmlPolicy): string {
+  const html = String(input ?? "").slice(0, policy.limit);
   let out = "";
   const open: string[] = [];
   let i = 0;
@@ -158,7 +205,7 @@ export function sanitizeNoteHtml(input: string): string {
       continue;
     }
 
-    const allowedAttrs = ALLOWED[name];
+    const allowedAttrs = policy.allowed[name];
     if (!allowedAttrs) continue; // unwrapped: tag gone, text kept
 
     if (closing) {
@@ -179,17 +226,8 @@ export function sanitizeNoteHtml(input: string): string {
         );
         const value = m?.[2] ?? m?.[3] ?? m?.[4];
         if (value === undefined) continue;
-        if (attr === "href") {
-          const href = safeHref(value);
-          if (href === null) continue;
-          // Anything a note links to is somewhere else, so it opens
-          // there — and noopener, or the page it opens can navigate
-          // this one.
-          attrs += ` href="${escapeText(href).replace(/"/g, "&quot;")}"`;
-          attrs += ` target="_blank" rel="noopener noreferrer"`;
-          continue;
-        }
-        attrs += ` ${attr}="${escapeText(value).replace(/"/g, "&quot;")}"`;
+        const written = policy.attr(name, attr.toLowerCase(), value);
+        if (written !== null) attrs += written;
       }
     }
 

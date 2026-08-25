@@ -356,6 +356,38 @@ export const dmVisibility = {
       }
     }
 
+    // Every write of a box's HTML is rebuilt from an allowlist.
+    //
+    // The notebook's boxes are one person's page and went to the
+    // database untouched, which was fine while that was true of every
+    // box in the app. A session's PLAYER notes are written by any
+    // member and rendered in the DM's browser, so the same markup is
+    // now a script running as them unless something rebuilds it. Two
+    // mutations write `html`, and one of them forgetting is not
+    // visible in anything you can look at.
+    for (const fn of ["addBox", "updateBox"]) {
+      const at = sessions.indexOf(`export const ${fn} = mutation`);
+      if (at === -1) continue; // the export check above already said so
+      const next = sessions.indexOf("export const ", at + 10);
+      const body = sessions.slice(at, next === -1 ? undefined : next);
+      if (!/sanitizeBoxHtml\(/.test(body)) {
+        problems.push(
+          `sessions.${fn} writes a box's html without rebuilding it — ` +
+            "the player side is written by any member and read by the DM, " +
+            "so unsanitised markup there runs as the DM"
+        );
+      }
+    }
+    // In the MUTATION, not in the editor: a hand-made call reaches the
+    // mutation and never touches the component.
+    if (/sanitizeBoxHtml/.test(read("components", "BoxCanvas.tsx"))) {
+      problems.push(
+        "BoxCanvas sanitises box html in the editor — that is the one " +
+          "place it does not belong, because a call that skips the editor " +
+          "skips the sanitiser with it"
+      );
+    }
+
     // And the screen must render the DM section from what the SERVER
     // sent rather than from its own idea of who is looking. `isDm` in a
     // component is a render decision; `dm === null` is the data not

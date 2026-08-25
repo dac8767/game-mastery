@@ -57,7 +57,20 @@ function FormatButton({
   );
 }
 
-export function NotebookFormatBar() {
+export function NotebookFormatBar({
+  trailing,
+}: {
+  /**
+   * Anything the screen wants at the far end of the bar.
+   *
+   * The session record puts its three "add a box" buttons here. They
+   * were one set per canvas — six buttons for two pages — and which
+   * page a click landed on was which of the two rows you had clicked.
+   * One set, at the end of the bar that already spans both, and the
+   * side is decided by who you are.
+   */
+  trailing?: React.ReactNode;
+} = {}) {
   const [colorOpen, setColorOpen] = useState(false);
   const [bgOpen, setBgOpen] = useState(false);
 
@@ -210,6 +223,8 @@ export function NotebookFormatBar() {
       <FormatButton cmd="bullets" label="•" title="Bulleted list" />
       <FormatButton cmd="numbers" label="1." title="Numbered list" />
       <FormatButton cmd="clear" label="⌫" title="Clear formatting" />
+
+      {trailing && <span className="nb-fmt-trailing">{trailing}</span>}
     </div>
   );
 }

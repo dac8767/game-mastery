@@ -95,24 +95,125 @@ export type NewBox = {
   rowHeights?: number[];
 };
 
+/**
+ * The three buttons that put something new on a page.
+ *
+ * Its own component because it is mounted in two different places: a
+ * canvas that owns its toolbar renders it above itself, and a screen
+ * with two canvases renders ONE of these in the format bar and decides
+ * the side. Copying the upload dance to the second site is how the two
+ * end up handling a failed upload differently.
+ */
+export function BoxTools({
+  onAdd,
+  onUploadImage,
+  label,
+}: {
+  onAdd: (box: NewBox) => void;
+  onUploadImage: (file: File) => Promise<string | null>;
+  /** Said out loud where a click could plausibly land on two pages. */
+  label?: string;
+}) {
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  return (
+    <>
+      {label && <span className="nb-tools-label">{label}</span>}
+      <button
+        type="button"
+        className="npc-btn"
+        onClick={() =>
+          onAdd({ type: "text", x: 40, y: 40, w: 280, h: 160, html: "" })
+        }
+      >
+        + Text
+      </button>
+      <button
+        type="button"
+        className="npc-btn"
+        onClick={() => fileInput.current?.click()}
+      >
+        + Image
+      </button>
+      <button
+        type="button"
+        className="npc-btn"
+        onClick={() => {
+          const t = emptyTable(3, 3);
+          onAdd({
+            type: "table",
+            x: 40,
+            y: 40,
+            w: 400,
+            h: 140,
+            rows: t.rows,
+            colWidths: t.colWidths,
+            rowHeights: t.rowHeights,
+          });
+        }}
+      >
+        + Table
+      </button>
+      <input
+        ref={fileInput}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          // Cleared straight away so choosing the SAME file twice still
+          // fires a change event the second time.
+          e.target.value = "";
+          if (!file) return;
+          const storageId = await onUploadImage(file);
+          if (!storageId) return;
+          onAdd({ type: "image", x: 60, y: 60, w: 320, h: 240, storageId });
+        }}
+      />
+    </>
+  );
+}
+
 export function BoxCanvas({
   boxes,
   canEdit,
+  tools = "own",
   onAdd,
   onUpdate,
   onDelete,
   onUploadImage,
+  onFollowLink,
   emptyNote,
   children,
 }: {
   boxes: CanvasBox[];
   /** A read-only canvas still draws; it just grows no controls. */
   canEdit: boolean;
+  /**
+   * Where the "add a box" buttons are.
+   *
+   * "own" is a toolbar above this canvas, which is right when the
+   * canvas is the screen. "elsewhere" is for a screen holding TWO of
+   * them — a session's two pages — where one set of buttons in the
+   * shared format bar is both fewer buttons and an unambiguous answer
+   * to which page a click adds to.
+   */
+  tools?: "own" | "elsewhere";
   onAdd: (box: NewBox) => void;
   onUpdate: (boxId: string, patch: Record<string, unknown>) => void;
   onDelete: (boxId: string) => void;
   /** Upload the file and return its storage id, or null if it failed. */
   onUploadImage: (file: File) => Promise<string | null>;
+  /**
+   * Follow a link written into a text box.
+   *
+   * Needed because a box is contentEditable, where a click on an
+   * anchor places the caret and goes nowhere — so a link in the notes
+   * looks like a link, is a link, and does nothing at all without
+   * this. Delegated from the canvas rather than bound per box: the
+   * boxes come and go and the canvas does not.
+   */
+  onFollowLink?: (href: string) => void;
   emptyNote?: string;
   /** Anything the owner wants on the toolbar, after the three buttons. */
   children?: React.ReactNode;
@@ -121,63 +222,12 @@ export function BoxCanvas({
   const [menu, setMenu] = useState<{ x: number; y: number; box: CanvasBox } | null>(
     null
   );
-  const fileInput = useRef<HTMLInputElement>(null);
 
   return (
     <div className="nb-canvas-wrap">
-      {canEdit && (
+      {canEdit && tools === "own" && (
         <div className="nb-toolbar">
-          <button
-            type="button"
-            className="npc-btn"
-            onClick={() =>
-              onAdd({ type: "text", x: 40, y: 40, w: 280, h: 160, html: "" })
-            }
-          >
-            + Text
-          </button>
-          <button
-            type="button"
-            className="npc-btn"
-            onClick={() => fileInput.current?.click()}
-          >
-            + Image
-          </button>
-          <button
-            type="button"
-            className="npc-btn"
-            onClick={() => {
-              const t = emptyTable(3, 3);
-              onAdd({
-                type: "table",
-                x: 40,
-                y: 40,
-                w: 400,
-                h: 140,
-                rows: t.rows,
-                colWidths: t.colWidths,
-                rowHeights: t.rowHeights,
-              });
-            }}
-          >
-            + Table
-          </button>
-          <input
-            ref={fileInput}
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              // Cleared straight away so choosing the SAME file twice
-              // still fires a change event the second time.
-              e.target.value = "";
-              if (!file) return;
-              const storageId = await onUploadImage(file);
-              if (!storageId) return;
-              onAdd({ type: "image", x: 60, y: 60, w: 320, h: 240, storageId });
-            }}
-          />
+          <BoxTools onAdd={onAdd} onUploadImage={onUploadImage} />
           {children}
         </div>
       )}
@@ -190,6 +240,17 @@ export function BoxCanvas({
         // clicked into.
         onMouseDown={(e) => {
           if (e.target === e.currentTarget) setFocusedBoxId(null);
+        }}
+        onClick={(e) => {
+          if (!onFollowLink) return;
+          const anchor = (e.target as HTMLElement).closest?.("a[data-gm]");
+          const href = anchor?.getAttribute("href");
+          // Only OUR links. Anything else in the box is text somebody
+          // pasted, and hijacking a click on it would be the editor
+          // deciding what a stray anchor meant.
+          if (!href) return;
+          e.preventDefault();
+          onFollowLink(href);
         }}
       >
         {boxes.length === 0 && emptyNote && (

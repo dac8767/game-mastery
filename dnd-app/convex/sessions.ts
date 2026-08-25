@@ -3,6 +3,7 @@ import { MutationCtx, mutation, query } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { requireDm, requireMember } from "./auth";
 import { getSettings } from "./settings";
+import { sanitizeBoxHtml } from "../components/boxHtml";
 
 /**
  * Sessions — one row per night at the table, and the notes from it.
@@ -277,8 +278,17 @@ export const addBox = mutation({
     }
     const order = existing.reduce((max, b) => Math.max(max, b.order), 0) + 1;
 
-    const { sessionId, ...rest } = args;
-    return await ctx.db.insert("sessionBoxes", { ...rest, sessionId, order });
+    const { sessionId, html, ...rest } = args;
+    return await ctx.db.insert("sessionBoxes", {
+      ...rest,
+      // Rebuilt here, in the mutation, rather than in the editor: a
+      // hand-made call would skip an editor-side sanitiser entirely,
+      // and the player side is written by any member and read by the
+      // DM. See components/boxHtml.ts.
+      html: html === undefined ? undefined : sanitizeBoxHtml(html),
+      sessionId,
+      order,
+    });
   },
 });
 
@@ -314,6 +324,12 @@ export const updateBox = mutation({
     for (const [key, value] of Object.entries(rest)) {
       if (value === undefined) continue;
       patch[key] = value === null ? undefined : value;
+    }
+    // Every write of `html` goes through the rebuild, including this
+    // one — it is the write the format toolbar makes on every command,
+    // so it is the one that carries markup most often.
+    if (typeof patch.html === "string") {
+      patch.html = sanitizeBoxHtml(patch.html);
     }
     if (Object.keys(patch).length === 0) return;
 
