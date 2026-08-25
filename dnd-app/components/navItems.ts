@@ -63,18 +63,19 @@ export const CAMPAIGN_ITEMS: NavItem[] = [
   { id: "groups", label: "Groups", icon: "⚑", slug: "groups" },
   { id: "shops", label: "Shops", icon: "⌂" },
   { id: "locations", label: "Locations", icon: "⌖", slug: "locations" },
-  { id: "calendar", label: "Calendar", icon: "◷", slug: "calendar" },
+  { id: "calendar", label: "Calendar", icon: "◷", art: "calendar", slug: "calendar" },
 ];
 
 export const TOOL_ITEMS: NavItem[] = [
-  { id: "chat", label: "Chat", icon: "◌", slug: "chat" },
-  { id: "dice", label: "Dice Roller", icon: "⚄" },
+  { id: "chat", label: "Chat", icon: "◌", art: "speech", slug: "chat" },
+  { id: "dice", label: "Dice Roller", icon: "⚄", art: "d20" },
   { id: "combat", label: "Combat Tracker", icon: "⚔" },
-  { id: "notebook", label: "Notebook", icon: "✎", slug: "notebook" },
+  { id: "notebook", label: "Notebook", icon: "✎", art: "book", slug: "notebook" },
   {
     id: "dm-screen",
     label: "DM Screen",
     icon: "▤",
+    art: "trifold",
     slug: "dm-screen",
     dmOnly: true,
   },

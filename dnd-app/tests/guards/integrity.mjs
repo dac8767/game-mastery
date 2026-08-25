@@ -1499,6 +1499,31 @@ export const integrity = {
           );
         }
       }
+
+      // Every drawing goes through Glyph, which owns the viewBox and the
+      // stroke. A drawing that brings its own <svg> renders perfectly
+      // and is simply the wrong weight beside the others — the sidebar
+      // reads as a set or it does not, and nothing else in the
+      // toolchain has an opinion about that. The people icon was the
+      // odd one out for exactly as long as it was the only drawing.
+      const svgs = [...iconSrc.matchAll(/<svg\b/g)].length;
+      if (svgs !== 1) {
+        problems.push(
+          `NavIcon.tsx has ${svgs} <svg> elements — there should be one, ` +
+            "inside Glyph, so every drawing is framed and stroked the same"
+        );
+      }
+      for (const m of iconSrc.matchAll(/function (\w+Icon)\(\)[\s\S]{0,120}?\{/g)) {
+        const at = m.index;
+        const body = iconSrc.slice(at, iconSrc.indexOf("\n}", at));
+        if (!/<Glyph>/.test(body)) {
+          problems.push(
+            `NavIcon's ${m[1]} does not draw inside Glyph — it would carry ` +
+              "its own viewBox and stroke, and sit at a different weight " +
+              "from every other icon in the sidebar"
+          );
+        }
+      }
       // Every site that renders an item's icon has to go through
       // NavIcon, or the drawing appears in one place and the old
       // character in the others.
