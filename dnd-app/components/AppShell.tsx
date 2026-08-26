@@ -60,9 +60,9 @@ function NavList({
         if (item.slug === undefined) {
           return (
             <li key={item.id}>
-              <span className="nav-item disabled">
+              <span className="nav-item disabled" title={item.label}>
                 <NavIcon icon={item.icon} art={item.art} />
-                {item.label}
+                <span className="nav-label">{item.label}</span>
                 <span className="soon">soon</span>
               </span>
             </li>
@@ -74,9 +74,10 @@ function NavList({
             <Link
               href={href}
               className={`nav-item${pathname === href ? " active" : ""}`}
+              title={item.label}
             >
               <NavIcon icon={item.icon} art={item.art} />
-              {item.label}
+              <span className="nav-label">{item.label}</span>
             </Link>
           </li>
         );
@@ -173,6 +174,14 @@ export function AppShell({
     void saveSettings({ sidebar: toggleSectionCollapsed(layout, sectionId) });
   };
 
+  /**
+   * The whole sidebar folded to a rail of icons — Airtable's arrow.
+   * Saved, not component state, for the same reason the section folds
+   * are: navigation remounts this shell, and a collapse kept in a
+   * useState would spring open on every screen change.
+   */
+  const collapsed = Boolean(settings?.sidebarCollapsed);
+
   return (
     /* The provider wraps the whole shell, not one screen: edit mode has
        to survive walking to another screen to change that one, and the
@@ -182,7 +191,7 @@ export function AppShell({
       canEdit={isDm}
       previewing={runsThis && previewing}
     >
-    <div className="shell">
+    <div className={`shell${collapsed ? " nav-collapsed" : ""}`}>
       <ThemeSync />
       <nav className="sidebar">
         {/* The campaign, on its own. It used to double as the heading of
@@ -285,7 +294,11 @@ export function AppShell({
                       possible reader something they already are. */}
                 </button>
               )}
-              {!folded && (
+              {/* A collapsed rail shows every icon regardless of the
+                  section folds: the headings that would explain a
+                  folded gap are hidden, so honouring the fold would
+                  just vanish those tools with no trace. */}
+              {(collapsed || !folded) && (
                 <NavList
                   items={section.items
                     .map((i) => NAV_ITEM_BY_ID.get(i.id))
@@ -310,9 +323,10 @@ export function AppShell({
             className={`nav-item${
               pathname === `${base}/settings` ? " active" : ""
             }`}
+            title="Settings"
           >
             <span className="nav-icon">⚙</span>
-            Settings
+            <span className="nav-label">Settings</span>
           </Link>
           {/* View as Player used to be here, and so was All campaigns.
               One is a switch about who you are and the other is the way
@@ -321,18 +335,33 @@ export function AppShell({
           <button
             type="button"
             className="nav-item subtle as-button"
+            title="Send Feedback"
             onClick={() => setFeedbackOpen(true)}
           >
             <span className="nav-icon">✉</span>
-            Send Feedback
+            <span className="nav-label">Send Feedback</span>
           </button>
           <button
             type="button"
             className="nav-item subtle as-button"
+            title="Sign out"
             onClick={() => signOut()}
           >
             <span className="nav-icon">⏻</span>
-            Sign out
+            <span className="nav-label">Sign out</span>
+          </button>
+          {/* Airtable's arrow, asked for by screenshot: one press folds
+              the sidebar to a thin rail of icons, the arrow flips, and
+              the same press brings it back. */}
+          <button
+            type="button"
+            className="nav-item subtle as-button nav-collapse-toggle"
+            title={collapsed ? "Expand the sidebar" : "Collapse the sidebar"}
+            aria-expanded={!collapsed}
+            onClick={() => void saveSettings({ sidebarCollapsed: !collapsed })}
+          >
+            <span className="nav-icon">{collapsed ? "»" : "«"}</span>
+            <span className="nav-label">Collapse</span>
           </button>
         </div>
       </nav>

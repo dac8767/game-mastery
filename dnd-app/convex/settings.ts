@@ -38,6 +38,8 @@ const DEFAULTS = {
   // tab" are the same thing here, which is why this needs no flag of
   // the kind the toolbar has.
   excludedSources: [] as string[],
+  // Open, the way the app has always started.
+  sidebarCollapsed: false,
 };
 
 /** Shared reader so queries can honour viewAsPlayer without duplication. */
@@ -63,6 +65,7 @@ export async function getSettings(ctx: QueryCtx, userId: Id<"users">) {
         // one", which the client needs to tell apart from an arranged
         // layout that happens to match the shipped grouping.
         sidebar: doc.sidebar ?? null,
+        sidebarCollapsed: doc.sidebarCollapsed ?? DEFAULTS.sidebarCollapsed,
       }
     : { ...DEFAULTS, sidebar: null };
 }
@@ -122,6 +125,7 @@ export const saveMySettings = mutation({
     dateFormat: v.optional(dateFormatValidator),
     excludedSources: v.optional(v.array(v.string())),
     sidebar: v.optional(v.union(sidebarValidator, v.null())),
+    sidebarCollapsed: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const userId = await requireUser(ctx);
@@ -157,6 +161,7 @@ export const saveMySettings = mutation({
           args.sidebar === null
             ? undefined
             : (args.sidebar ?? existing.sidebar),
+        sidebarCollapsed: args.sidebarCollapsed ?? existing.sidebarCollapsed,
       });
       return;
     }
@@ -171,6 +176,7 @@ export const saveMySettings = mutation({
       dateFormat: args.dateFormat,
       excludedSources: args.excludedSources,
       sidebar: args.sidebar ?? undefined,
+      sidebarCollapsed: args.sidebarCollapsed,
     });
   },
 });

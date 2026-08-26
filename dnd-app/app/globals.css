@@ -752,6 +752,42 @@ button {
   padding-top: 0.75rem;
 }
 
+/* ---------- The sidebar, collapsed to a rail ----------
+   Airtable's arrow button: one press and the sidebar is a thin strip
+   of icons, each carrying its name as a tooltip. The class sits on
+   .shell because the grid column has to shrink with it. */
+.shell.nav-collapsed {
+  grid-template-columns: 3.4rem minmax(0, 1fr);
+}
+
+.nav-collapsed .sidebar {
+  padding: 1rem 0.35rem;
+  gap: 1rem;
+  overflow-x: hidden;
+}
+
+/* Only the icons survive: the labels, the section headings, the soon
+   pills, the campaign name and the View-as switch all go. The way to
+   any of them is the arrow at the bottom, which stays. */
+.nav-collapsed .nav-label,
+.nav-collapsed .nav-group-title,
+.nav-collapsed .soon,
+.nav-collapsed .nav-campaign,
+.nav-collapsed .view-as {
+  display: none;
+}
+
+.nav-collapsed .nav-item {
+  justify-content: center;
+  gap: 0;
+  padding: 0.45rem 0;
+}
+
+.nav-collapsed .nav-campaign-row {
+  justify-content: center;
+  padding: 0.25rem 0 0.5rem;
+}
+
 .workspace {
   min-width: 0;
   display: flex;
@@ -1798,6 +1834,34 @@ body.col-resizing {
   }
 
   .soon {
+    display: none;
+  }
+
+  /* The rail is a desktop idea. The sidebar is already a top strip
+     here, so a saved collapse must not carry over and strip the strip
+     of its labels — everything the rail hides comes back, and the
+     arrow that would toggle it goes instead. */
+  .shell.nav-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .nav-collapsed .nav-label {
+    display: inline;
+  }
+
+  .nav-collapsed .nav-campaign,
+  .nav-collapsed .nav-group-title,
+  .nav-collapsed .view-as {
+    display: flex;
+  }
+
+  .nav-collapsed .nav-item {
+    justify-content: flex-start;
+    gap: 0.6rem;
+    padding: 0.42rem 0.6rem;
+  }
+
+  .nav-collapse-toggle {
     display: none;
   }
 }

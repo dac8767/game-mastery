@@ -575,6 +575,13 @@ export default defineSchema({
         ),
       })
     ),
+    /**
+     * The whole sidebar folded to a rail of icons — Airtable's arrow
+     * button. Stored like the section folds and for the same reason:
+     * walking between screens remounts the shell, and a collapse kept
+     * in component state would spring open on every navigation.
+     */
+    sidebarCollapsed: v.optional(v.boolean()),
   }).index("by_user", ["userId"]),
 
   /**

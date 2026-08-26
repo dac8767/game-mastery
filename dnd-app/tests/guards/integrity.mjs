@@ -4049,6 +4049,64 @@ export const integrity = {
       }
     }
 
+    // ---- the sidebar collapses to a rail, and stays collapsed -------
+    // Airtable's arrow button. Three ways it breaks with nothing red:
+    // a collapse kept in component state springs open on every
+    // navigation, a rail without the label rules is a 3.4rem strip
+    // with every label overflowing under the workspace, and a saved
+    // collapse carried onto the phone strips the top-strip layout of
+    // its labels with no arrow there to undo it.
+    {
+      const shell = stripComments(read("components", "AppShell.tsx"));
+      const shellCss = read("app", "globals.css");
+
+      if (!/saveSettings\(\{ sidebarCollapsed: !collapsed \}\)/.test(shell)) {
+        problems.push(
+          "the sidebar collapse is not written through to settings — " +
+            "kept anywhere else it springs open on every navigation"
+        );
+      }
+      if (
+        !/\.shell\.nav-collapsed\s*\{[^}]*grid-template-columns:\s*3\.\d+rem/.test(
+          shellCss
+        )
+      ) {
+        problems.push(
+          "no rail-width .shell.nav-collapsed rule — the arrow toggles " +
+            "a class that changes nothing"
+        );
+      }
+      if (
+        !/\.nav-collapsed \.nav-label[^{]*\{[^}]*display:\s*none/.test(
+          shellCss
+        )
+      ) {
+        problems.push(
+          "the collapsed rail does not hide .nav-label — every label " +
+            "overflows a 3.4rem strip"
+        );
+      }
+      const mobile = /@media \(max-width: 900px\) \{([\s\S]*?)\n\}/.exec(
+        shellCss
+      );
+      if (!mobile) {
+        problems.push("could not find the 900px sidebar media block");
+      } else {
+        if (!/\.shell\.nav-collapsed\s*\{[^}]*1fr/.test(mobile[1])) {
+          problems.push(
+            "a saved collapse is not neutralised on the phone layout — " +
+              "the top strip loses its labels with no arrow to undo it"
+          );
+        }
+        if (!/\.nav-collapse-toggle\s*\{[^}]*display:\s*none/.test(mobile[1])) {
+          problems.push(
+            "the collapse arrow still renders in the phone layout, " +
+              "where the rail it toggles does not exist"
+          );
+        }
+      }
+    }
+
     // ---- the expand cell must never ellipsise, and the thank-you
     // ---- closes itself ----------------------------------------------
     {
