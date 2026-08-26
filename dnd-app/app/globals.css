@@ -1153,9 +1153,11 @@ body.col-resizing {
    no visible control at all: you clicked the portrait, or a cell you
    could not edit, and learned that by trying — while every cell you
    COULD edit went into edit instead. */
-.expand-th {
+.npc-table th.expand-th {
   cursor: default;
   padding: 0.55rem 0.3rem;
+  overflow: visible;
+  text-overflow: clip;
   /* The divider on its right edge is absolutely positioned, like every
      other column's. Without this it anchors to the table instead and
      lands wherever the last positioned ancestor happens to be. */
@@ -1169,10 +1171,21 @@ body.col-resizing {
   align-self: stretch;
 }
 
-.expand-cell {
+/* `.npc-table td`, not bare `.expand-cell`: the bare selector LOSES to
+   `.npc-table td` on specificity, so this cell's overrides were dead
+   rules — it inherited `text-overflow: ellipsis` and the wide padding,
+   and at drag widths between the padding box and the button's edge the
+   browser drew the clipped button as a "…". Reported, reproduced at
+   46–54px, and fixed by winning rather than by hoping about order.
+
+   `text-overflow: clip` said out loud, because `overflow: visible`
+   alone still leaves the ellipsis armed for any future rule that clips
+   this cell again. */
+.npc-table td.expand-cell {
   padding: 0.45rem 0.3rem;
   text-align: center;
   overflow: visible;
+  text-overflow: clip;
 }
 
 .expand-btn {

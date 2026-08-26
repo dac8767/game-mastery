@@ -3836,6 +3836,56 @@ export const integrity = {
       }
     }
 
+    // ---- the expand cell must never ellipsise, and the thank-you
+    // ---- closes itself ----------------------------------------------
+    {
+      const css = read("app", "globals.css");
+      const fb = stripComments(read("components", "FeedbackForm.tsx"));
+
+      // The cell's own rules have to WIN. Bare `.expand-cell` loses to
+      // `.npc-table td` on specificity, which left its overrides dead:
+      // the cell inherited `text-overflow: ellipsis`, and at drag
+      // widths between the padding box and the button's edge the
+      // clipped button rendered as "…" in every row. Reported, and
+      // reproduced at 46–54px before fixing.
+      const cellRule = /\.npc-table td\.expand-cell\s*\{([^}]*)\}/.exec(css);
+      if (!cellRule) {
+        problems.push(
+          "no .npc-table td.expand-cell rule — a bare .expand-cell loses " +
+            "to .npc-table td and every override in it is dead"
+        );
+      } else {
+        if (!/text-overflow:\s*clip/.test(cellRule[1])) {
+          problems.push(
+            "the expand cell does not clear text-overflow — a drag width " +
+              "between the padding box and the button draws the button as " +
+              "a \u2026"
+          );
+        }
+        if (!/overflow:\s*visible/.test(cellRule[1])) {
+          problems.push("the expand cell clips its own button again");
+        }
+      }
+      if (/^\.expand-cell\s*\{/m.test(css)) {
+        problems.push(
+          "a bare .expand-cell rule is back — it loses to .npc-table td " +
+            "and reads as an override while doing nothing"
+        );
+      }
+
+      // The thank-you closes itself after two seconds, and the timer
+      // dies with the state: a timeout that survives its window closes
+      // whatever replaced it.
+      const auto = /if \(state !== "sent"\) return;\s*\n\s*const t = setTimeout\(onClose, 2000\);\s*\n\s*return \(\) => clearTimeout\(t\);/;
+      if (!auto.test(fb)) {
+        problems.push(
+          "the sent state does not auto-close in two seconds with a " +
+            "cleaned-up timer — either the thank-you sits until clicked, " +
+            "or a stale timeout closes whatever replaced it"
+        );
+      }
+    }
+
     // ---- the second morning's reports -------------------------------
     {
       const css = read("app", "globals.css");

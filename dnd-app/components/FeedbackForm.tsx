@@ -97,6 +97,21 @@ export function FeedbackForm({ onClose }: { onClose: () => void }) {
     setEmail((cur) => cur || me.email || "");
   }, [me]);
 
+  /**
+   * The thank-you closes itself. Two seconds is long enough to read
+   * one sentence and short enough that nobody reaches for the Close
+   * button first — which stays, for whoever does.
+   *
+   * The timer is cleared if the state changes out of "sent" or the
+   * form unmounts: a timeout that survives its window closes whatever
+   * REPLACED the window two seconds later.
+   */
+  useEffect(() => {
+    if (state !== "sent") return;
+    const t = setTimeout(onClose, 2000);
+    return () => clearTimeout(t);
+  }, [state, onClose]);
+
   // Anything stranded by an earlier failure gets another go on open.
   useEffect(() => {
     setPending(queuedCount());
