@@ -3836,6 +3836,73 @@ export const integrity = {
       }
     }
 
+    // ---- the DM Screen's controls live in the ribbon ----------------
+    // Moved there by request: Add Window, Workspaces and the note
+    // format bar are ribbon BUILTINS — arranged in Customize like
+    // everything else — whose rendering the screen injects. Each link
+    // in that chain fails silently on its own.
+    {
+      const registrySrc = read("components", "ribbonRegistry.ts");
+      const barSrc2 = stripComments(read("components", "RibbonBar.tsx"));
+      const screenSrc2 = stripComments(read("components", "DmScreen.tsx"));
+
+      for (const key of ["addWindow", "workspaces", "noteFormat"]) {
+        if (!new RegExp(`key: "${key}"`).test(registrySrc)) {
+          problems.push(
+            `ribbon builtin "${key}" is not registered — its token would ` +
+              "shed itself from every saved toolbar on the next load"
+          );
+        }
+        if (!new RegExp(`${key}:`).test(screenSrc2)) {
+          problems.push(
+            `DmScreen supplies no extras.${key} renderer — the ribbon ` +
+              "would filter the token out and the control would not exist"
+          );
+        }
+        if (!new RegExp(`"b:${key}"`).test(registrySrc)) {
+          problems.push(
+            `DEFAULT_RIBBON does not place b:${key} — a fresh account's ` +
+              "DM Screen would open with no way to add a window"
+          );
+        }
+      }
+      // Add Window and Workspaces are permanent: a layout that lost
+      // them is a DM Screen with no way to put windows on it.
+      for (const key of ["addWindow", "workspaces"]) {
+        const row = new RegExp(`key: "${key}"[^}]*`).exec(registrySrc);
+        if (!row || !/permanent: true/.test(row[0])) {
+          problems.push(
+            `ribbon builtin "${key}" is not permanent — a saved layout ` +
+              "that dropped it could never get it back"
+          );
+        }
+      }
+      // The injected tokens are filtered out where no screen supplies
+      // them, or a ribbon mounted anywhere else renders mystery gaps.
+      if (!/return Boolean\(extras\?\.\[tok\.slice\(2\)\]\)/.test(barSrc2)) {
+        problems.push(
+          "RibbonBar does not gate the injected builtins on extras — " +
+            "without a renderer the token renders an empty slot"
+        );
+      }
+      // The menus portal to the body. The ribbon scrolls horizontally,
+      // and an absolutely positioned menu inside a scroll container is
+      // clipped at the bar's edge — open, technically, and invisible.
+      if (!/createPortal\(/.test(screenSrc2)) {
+        problems.push(
+          "the DM Screen's menus no longer portal out of the ribbon — " +
+            "the scroll container clips them at the bar's edge"
+        );
+      }
+      // And the screen's own toolbar row is gone — the whole point.
+      if (/dm-toolbar/.test(screenSrc2)) {
+        problems.push(
+          "DmScreen still renders its own toolbar row under the ribbon — " +
+            "the controls were asked INTO the customizable bar, not beside it"
+        );
+      }
+    }
+
     // ---- the DM Screen's windows ------------------------------------
     // The registry, the geometry constants, and the two rules that keep
     // an arrangement from quietly losing pieces.

@@ -55,6 +55,21 @@ export const TOOLBAR_BUILTINS: ToolbarBuiltin[] = [
   { key: "theme", label: "Theme", icon: "◐", desktopOnly: true },
   { key: "viewAsPlayer", label: "View as Player", icon: "◉" },
   { key: "customize", label: "Customize", icon: "⚙", permanent: true },
+  /**
+   * The DM Screen's own controls, moved into this bar so they are
+   * arranged with everything else. Their RENDERING is injected by the
+   * screen (RibbonBar's `extras` prop) because the menus need the
+   * screen's state; the registry rows are what make them exist to the
+   * palette and the normalizer.
+   *
+   * Add Window and Workspaces are permanent: a saved layout that lost
+   * them would be a DM Screen with no way to put windows on it. The
+   * format bar is removable — that is a choice someone can mean, and
+   * the keyboard shortcuts still format without it.
+   */
+  { key: "addWindow", label: "Add Window", icon: "⊞", permanent: true },
+  { key: "workspaces", label: "Workspaces", icon: "⧉", permanent: true },
+  { key: "noteFormat", label: "Note Format", icon: "𝔸" },
 ];
 
 export const BUILTIN_BY_KEY: Record<string, ToolbarBuiltin> =
@@ -111,6 +126,11 @@ export const DEFAULT_RIBBON: string[] = [
   "b:theme",
   "r:row-2",
   "b:viewAsPlayer",
+  "2!d:sec-dm",
+  "b:addWindow",
+  "b:workspaces",
+  "2!d:sec-note",
+  "b:noteFormat",
   "a:split-1",
   "c:feedback",
   "b:customize",

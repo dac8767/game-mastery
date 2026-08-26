@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -114,7 +115,9 @@ function DmScreenBoard({ campaignId }: { campaignId: Id<"campaigns"> }) {
     v: [],
     h: [],
   });
-  const [menu, setMenu] = useState<null | "add" | "workspaces">(null);
+  const [menu, setMenu] = useState<
+    null | { kind: "add" | "workspaces"; x: number; y: number }
+  >(null);
   const [error, setError] = useState<string | null>(null);
 
   /** The canvas's size, for placement and clamping. */
@@ -345,24 +348,71 @@ function DmScreenBoard({ campaignId }: { campaignId: Id<"campaigns"> }) {
 
   if (!layout) return <p className="centered-note">Loading…</p>;
 
+  /**
+   * The screen's controls, handed INTO the customizable toolbar. They
+   * are ribbon builtins — arranged, moved and hidden in Customize like
+   * everything else — whose rendering lives here because the menus
+   * read this screen's state. Asked for: "move all of the buttons into
+   * the toolbar above them".
+   */
+  /* Render CALLBACKS, not components — RibbonBar calls these to fill
+     a token's slot, and the JSX they return reconciles by its own
+     element types. Named in lowercase so nothing mistakes them for
+     components, including the guard that hunts nested ones. */
+  const menuButton =
+    (kind: "add" | "workspaces", icon: string, label: string) =>
+    (big: boolean) => (
+      <button
+        type="button"
+        className={`rib-btn${big ? " rib-btn-big" : ""}`}
+        title={label}
+        onClick={(e) => {
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          setMenu((m) =>
+            m?.kind === kind ? null : { kind, x: r.left, y: r.bottom + 4 }
+          );
+        }}
+      >
+        <span className="rib-icon">{icon}</span>
+        {big && <span className="rib-label">{label}</span>}
+      </button>
+    );
+
+  const extras = {
+    addWindow: menuButton("add", "\u229e", "Add Window"),
+    workspaces: menuButton("workspaces", "\u29c9", "Workspaces"),
+    /* Acts on whichever note window holds the caret — the same
+       one-bar-per-screen contract the session notes run on. */
+    noteFormat: () => (
+      <div className="rib-fmt">
+        <NotebookFormatBar />
+      </div>
+    ),
+  };
+
   return (
     <div className="dmscreen">
-      <RibbonBar campaignId={campaignId} />
+      <RibbonBar campaignId={campaignId} extras={extras} />
 
-      <div className="dm-toolbar">
-        <div className="dm-menu-host">
-          <button
-            type="button"
-            className="npc-btn"
-            onClick={() => setMenu((m) => (m === "add" ? null : "add"))}
-          >
-            + Add window
-          </button>
-          {menu === "add" && (
-            <>
-              <span className="view-scrim" onClick={() => setMenu(null)} />
-              <div className="dm-menu">
-                {DM_PANEL_KINDS.map((kind) => (
+      {/* The dropdowns PORTAL to the body: the ribbon is a horizontal
+          scroll container, and an absolutely positioned menu inside one
+          is clipped at the bar's own edge. Anchored to the button that
+          opened them, fixed against the viewport. */}
+      {menu &&
+        createPortal(
+          <>
+            <span className="view-scrim" onClick={() => setMenu(null)} />
+            <div
+              className={`dm-menu${
+                menu.kind === "workspaces" ? " dm-workspaces" : ""
+              }`}
+              style={{
+                left: Math.min(menu.x, window.innerWidth - 360),
+                top: menu.y,
+              }}
+            >
+              {menu.kind === "add" ? (
+                DM_PANEL_KINDS.map((kind) => (
                   <button
                     type="button"
                     key={kind}
@@ -373,70 +423,68 @@ function DmScreenBoard({ campaignId }: { campaignId: Id<"campaigns"> }) {
                       <span className="muted"> — rich text</span>
                     )}
                   </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-
-        <WorkspacesMenu
-          open={menu === "workspaces"}
-          onToggle={() =>
-            setMenu((m) => (m === "workspaces" ? null : "workspaces"))
-          }
-          onClose={() => setMenu(null)}
-          workspaces={screen?.workspaces ?? []}
-          onSave={(name) =>
-            void saveWorkspace({
-              campaignId,
-              name,
-              layout: serializeLayout(layout),
-            }).catch((e) =>
-              setError(e instanceof Error ? e.message : "That didn't save.")
-            )
-          }
-          onLoad={(ws) => {
-            const parsed = parseLayout(ws.layout, noteIds);
-            if (!parsed) {
-              setError(
-                "That workspace's layout could not be read, so the screen " +
-                  "was left as it is."
-              );
-              return;
-            }
-            setLayout(() => parsed);
-          }}
-          onUpdate={(ws) =>
-            void updateWorkspace({
-              workspaceId: ws._id as Id<"dmWorkspaces">,
-              layout: serializeLayout(layout),
-            }).catch((e) =>
-              setError(e instanceof Error ? e.message : "That didn't save.")
-            )
-          }
-          onRename={(ws, name) =>
-            void updateWorkspace({
-              workspaceId: ws._id as Id<"dmWorkspaces">,
-              name,
-            }).catch((e) =>
-              setError(e instanceof Error ? e.message : "That didn't save.")
-            )
-          }
-          onDelete={(ws) =>
-            void deleteWorkspace({
-              workspaceId: ws._id as Id<"dmWorkspaces">,
-            }).catch((e) =>
-              setError(e instanceof Error ? e.message : "That didn't work.")
-            )
-          }
-        />
-
-        {/* Acts on whichever note window holds the caret — the same
-            one-bar-per-screen contract the session notes run on. */}
-        <div className="dm-fmt">
-          <NotebookFormatBar />
-        </div>
-      </div>
+                ))
+              ) : (
+                <WorkspacesPanel
+                  workspaces={screen?.workspaces ?? []}
+                  onSave={(name) =>
+                    void saveWorkspace({
+                      campaignId,
+                      name,
+                      layout: serializeLayout(layout),
+                    }).catch((e) =>
+                      setError(
+                        e instanceof Error ? e.message : "That didn't save."
+                      )
+                    )
+                  }
+                  onLoad={(ws) => {
+                    const parsed = parseLayout(ws.layout, noteIds);
+                    if (!parsed) {
+                      setError(
+                        "That workspace's layout could not be read, so the " +
+                          "screen was left as it is."
+                      );
+                      return;
+                    }
+                    setLayout(() => parsed);
+                    setMenu(null);
+                  }}
+                  onUpdate={(ws) =>
+                    void updateWorkspace({
+                      workspaceId: ws._id as Id<"dmWorkspaces">,
+                      layout: serializeLayout(layout),
+                    }).catch((e) =>
+                      setError(
+                        e instanceof Error ? e.message : "That didn't save."
+                      )
+                    )
+                  }
+                  onRename={(ws, name) =>
+                    void updateWorkspace({
+                      workspaceId: ws._id as Id<"dmWorkspaces">,
+                      name,
+                    }).catch((e) =>
+                      setError(
+                        e instanceof Error ? e.message : "That didn't save."
+                      )
+                    )
+                  }
+                  onDelete={(ws) =>
+                    void deleteWorkspace({
+                      workspaceId: ws._id as Id<"dmWorkspaces">,
+                    }).catch((e) =>
+                      setError(
+                        e instanceof Error ? e.message : "That didn't work."
+                      )
+                    )
+                  }
+                />
+              )}
+            </div>
+          </>,
+          document.body
+        )}
 
       {error && <p className="form-error">{error}</p>}
 
@@ -691,15 +739,17 @@ interface WorkspaceRow {
 }
 
 /**
- * Premiere's Workspaces menu: click a name to switch the whole screen
- * to it. Each row also carries Update (overwrite it with the current
- * arrangement), Rename and Delete, and the foot of the menu saves the
- * current arrangement under a new name.
+ * The Workspaces menu's CONTENT — the frame, the scrim and the button
+ * that opens it belong to the portal in DmScreenBoard, because the
+ * ribbon the button lives in is a scroll container that would clip an
+ * attached panel.
+ *
+ * Premiere's menu: click a name to switch the whole screen to it, and
+ * each row carries Update (overwrite it with the current arrangement),
+ * Rename and Delete. The foot saves the current arrangement under a
+ * new name.
  */
-function WorkspacesMenu({
-  open,
-  onToggle,
-  onClose,
+function WorkspacesPanel({
   workspaces,
   onSave,
   onLoad,
@@ -707,9 +757,6 @@ function WorkspacesMenu({
   onRename,
   onDelete,
 }: {
-  open: boolean;
-  onToggle: () => void;
-  onClose: () => void;
   workspaces: WorkspaceRow[];
   onSave: (name: string) => void;
   onLoad: (ws: WorkspaceRow) => void;
@@ -722,111 +769,98 @@ function WorkspacesMenu({
   const [renaming, setRenaming] = useState<string | null>(null);
 
   return (
-    <div className="dm-menu-host">
-      <button type="button" className="npc-btn" onClick={onToggle}>
-        Workspaces
-      </button>
-      {open && (
-        <>
-          <span className="view-scrim" onClick={onClose} />
-          <div className="dm-menu dm-workspaces">
-            {workspaces.length === 0 && (
-              <p className="muted dm-menu-note">
-                No workspaces yet. Arrange the screen, then save the
-                arrangement here under a name.
-              </p>
-            )}
-            {workspaces.map((ws) =>
-              renaming === ws._id ? (
-                <div className="dm-ws-row" key={ws._id}>
-                  <input
-                    autoFocus
-                    className="detail-input"
-                    defaultValue={ws.name}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        const next = e.currentTarget.value.trim();
-                        if (next) onRename(ws, next);
-                        setRenaming(null);
-                      }
-                      if (e.key === "Escape") setRenaming(null);
-                    }}
-                    onBlur={(e) => {
-                      const next = e.target.value.trim();
-                      if (next && next !== ws.name) onRename(ws, next);
-                      setRenaming(null);
-                    }}
-                  />
-                </div>
-              ) : (
-                <div className="dm-ws-row" key={ws._id}>
-                  <button
-                    type="button"
-                    className="dm-ws-load"
-                    title="Switch to this workspace"
-                    onClick={() => {
-                      onLoad(ws);
-                      onClose();
-                    }}
-                  >
-                    {ws.name}
-                  </button>
-                  <button
-                    type="button"
-                    className="text-button"
-                    title="Overwrite this workspace with the current arrangement"
-                    onClick={() => onUpdate(ws)}
-                  >
-                    Update
-                  </button>
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={() => setRenaming(ws._id)}
-                  >
-                    Rename
-                  </button>
-                  <button
-                    type="button"
-                    className="text-button danger"
-                    onClick={() => onDelete(ws)}
-                  >
-                    Delete
-                  </button>
-                </div>
-              )
-            )}
-
-            <div className="dm-ws-foot">
-              {saving ? (
-                <input
-                  autoFocus
-                  className="detail-input"
-                  placeholder="Workspace name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && name.trim()) {
-                      onSave(name.trim());
-                      setName("");
-                      setSaving(false);
-                    }
-                    if (e.key === "Escape") setSaving(false);
-                  }}
-                />
-              ) : (
-                <button
-                  type="button"
-                  className="npc-btn"
-                  onClick={() => setSaving(true)}
-                >
-                  Save current as…
-                </button>
-              )}
-            </div>
-          </div>
-        </>
+    <>
+      {workspaces.length === 0 && (
+        <p className="muted dm-menu-note">
+          No workspaces yet. Arrange the screen, then save the
+          arrangement here under a name.
+        </p>
       )}
-    </div>
+      {workspaces.map((ws) =>
+        renaming === ws._id ? (
+          <div className="dm-ws-row" key={ws._id}>
+            <input
+              autoFocus
+              className="detail-input"
+              defaultValue={ws.name}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const next = e.currentTarget.value.trim();
+                  if (next) onRename(ws, next);
+                  setRenaming(null);
+                }
+                if (e.key === "Escape") setRenaming(null);
+              }}
+              onBlur={(e) => {
+                const next = e.target.value.trim();
+                if (next && next !== ws.name) onRename(ws, next);
+                setRenaming(null);
+              }}
+            />
+          </div>
+        ) : (
+          <div className="dm-ws-row" key={ws._id}>
+            <button
+              type="button"
+              className="dm-ws-load"
+              title="Switch to this workspace"
+              onClick={() => onLoad(ws)}
+            >
+              {ws.name}
+            </button>
+            <button
+              type="button"
+              className="text-button"
+              title="Overwrite this workspace with the current arrangement"
+              onClick={() => onUpdate(ws)}
+            >
+              Update
+            </button>
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => setRenaming(ws._id)}
+            >
+              Rename
+            </button>
+            <button
+              type="button"
+              className="text-button danger"
+              onClick={() => onDelete(ws)}
+            >
+              Delete
+            </button>
+          </div>
+        )
+      )}
+
+      <div className="dm-ws-foot">
+        {saving ? (
+          <input
+            autoFocus
+            className="detail-input"
+            placeholder="Workspace name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && name.trim()) {
+                onSave(name.trim());
+                setName("");
+                setSaving(false);
+              }
+              if (e.key === "Escape") setSaving(false);
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            className="npc-btn"
+            onClick={() => setSaving(true)}
+          >
+            Save current as…
+          </button>
+        )}
+      </div>
+    </>
   );
 }

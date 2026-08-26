@@ -3842,29 +3842,29 @@ body.col-resizing {
   border-radius: 12px;
 }
 
-.dm-toolbar {
-  display: flex;
+/* Injected ribbon content — the DM Screen's controls standing in the
+   customizable toolbar. The format bar sheds its own frame: inside the
+   ribbon it is a run of buttons among buttons, not a second bar. */
+.rib-extra {
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  height: 100%;
 }
 
-.dm-fmt {
-  margin-left: auto;
-}
-
-.dm-fmt .nb-fmtbar {
-  margin-bottom: 0;
-}
-
-.dm-menu-host {
-  position: relative;
+.rib-fmt .nb-fmtbar {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  flex-wrap: nowrap;
 }
 
 .dm-menu {
-  position: absolute;
-  top: calc(100% + 0.35rem);
-  left: 0;
+  /* Fixed and portaled: the button that opens this lives in the
+     ribbon, a horizontal scroll container that clips anything
+     absolutely positioned inside it. The opener passes its own rect;
+     left and top arrive inline. */
+  position: fixed;
   z-index: 41;
   min-width: 13rem;
   max-height: min(60vh, 26rem);

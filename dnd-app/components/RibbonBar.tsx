@@ -50,7 +50,21 @@ import { FeedbackForm } from "@/components/FeedbackForm";
  * would replace.
  */
 
-export function RibbonBar({ campaignId }: { campaignId: Id<"campaigns"> }) {
+export function RibbonBar({
+  campaignId,
+  extras,
+}: {
+  campaignId: Id<"campaigns">;
+  /**
+   * Renderers for the builtins whose content belongs to the SCREEN the
+   * bar is standing on — the DM Screen's Add Window and Workspaces
+   * menus, and its note format bar. Injected rather than imported,
+   * because those menus read and write the screen's own state, and the
+   * bar knowing about DmScreen would be the dependency pointing the
+   * wrong way.
+   */
+  extras?: Record<string, (big: boolean) => React.ReactNode>;
+}) {
   const settings = useQuery(api.settings.mySettings);
   const campaigns = useQuery(api.campaigns.myCampaigns);
   const save = useMutation(api.settings.saveMySettings);
@@ -108,9 +122,19 @@ export function RibbonBar({ campaignId }: { campaignId: Id<"campaigns"> }) {
     (raw: string) => {
       const tok = stripTall(raw);
       if (tok === "b:viewAsPlayer") return isDm;
+      // An injected builtin exists only where its screen supplied the
+      // renderer — anywhere else the token is filtered out rather than
+      // rendered empty.
+      if (
+        tok === "b:addWindow" ||
+        tok === "b:workspaces" ||
+        tok === "b:noteFormat"
+      ) {
+        return Boolean(extras?.[tok.slice(2)]);
+      }
       return true;
     },
-    [isDm]
+    [isDm, extras]
   );
 
   const renderToken = (raw: string, big: boolean) => {
@@ -237,6 +261,17 @@ export function RibbonBar({ campaignId }: { campaignId: Id<"campaigns"> }) {
             {big && <span className="rib-label">{meta.label}</span>}
           </button>
         );
+
+      case "addWindow":
+      case "workspaces":
+      case "noteFormat": {
+        const extra = extras?.[key];
+        return extra ? (
+          <div key={raw} className="rib-extra">
+            {extra(big)}
+          </div>
+        ) : null;
+      }
 
       default:
         return null;
