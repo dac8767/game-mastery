@@ -4041,6 +4041,22 @@ export const integrity = {
         );
       }
 
+      // Maximize: every window head carries the control, wired to the
+      // model. Either half missing is a button that does nothing or a
+      // state nothing can reach.
+      if (!screenSrc.includes('className="dm-max"')) {
+        problems.push(
+          "the maximize control is gone from the window head — no way " +
+            "to give one window the whole canvas"
+        );
+      }
+      if (!/toggleMaximized\(/.test(screenSrc)) {
+        problems.push(
+          "the maximize control is not wired to toggleMaximized — the " +
+            "button presses into nothing"
+        );
+      }
+
       // The tab's × closes on RELEASE, like every standard button.
       // Reported: it fired the moment the press landed. The press
       // handler may only stop things — the close lives in onClick.

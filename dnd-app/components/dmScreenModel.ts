@@ -119,6 +119,12 @@ export interface DmLayout {
   nextId: number;
   /** The group new windows land in — the last one touched. */
   focused: number | null;
+  /**
+   * The one group covering the whole canvas, or null. The TREE is
+   * untouched while a window is maximized — restore is just letting
+   * this go, so "back to the exact arrangement" cannot drift.
+   */
+  maximized: number | null;
 }
 
 /** The bar between two windows. CSS states this again; a guard pins them. */
@@ -343,10 +349,16 @@ export function parseLayout(
   const focused =
     focusedIn !== null && findGroup(root, focusedIn) ? focusedIn : null;
 
+  // A maximized id pointing at nothing is let go, never fatal — the
+  // arrangement underneath is fine, it just is not covered any more.
+  const maxIn = isNum(o.maximized) ? Math.round(o.maximized) : null;
+  const maximized = maxIn !== null && findGroup(root, maxIn) ? maxIn : null;
+
   return {
     root,
     nextId: Math.max(maxId + 1, isNum(o.nextId) ? Math.round(o.nextId) : 1),
     focused,
+    maximized,
   };
 }
 
@@ -379,6 +391,7 @@ export function defaultLayout(): DmLayout {
     },
     nextId: 4,
     focused: 2,
+    maximized: null,
   };
 }
 
@@ -437,6 +450,9 @@ export function dropTargetAt(
   headerPx: number
 ): DmDropTarget | null {
   if (!layout.root) return null;
+  // While one window covers the canvas there is nothing to dock
+  // against — a drop here would rearrange a tree nobody can see.
+  if (layout.maximized !== null) return null;
 
   const toEdge: [DmEdge, number][] = [
     ["left", point.x],
@@ -784,6 +800,11 @@ export function closeTab(
   if (l.focused !== null && !findGroup(l.root, l.focused)) {
     l.focused = allGroups(l.root)[0]?.id ?? null;
   }
+  // The maximized window closing its last tab lets the cover go — the
+  // arrangement underneath comes back rather than an empty screen.
+  if (l.maximized !== null && !findGroup(l.root, l.maximized)) {
+    l.maximized = null;
+  }
   return l;
 }
 
@@ -805,6 +826,18 @@ export function focusGroup(layout: DmLayout, groupId: number): DmLayout {
     return layout;
   }
   return { ...layout, focused: groupId };
+}
+
+/**
+ * One window over the whole canvas, or back again. The tree is never
+ * touched: maximize is a cover over the arrangement, and restore is
+ * lifting it — which is what makes "the format it was in before"
+ * exact rather than remembered.
+ */
+export function toggleMaximized(layout: DmLayout, groupId: number): DmLayout {
+  if (layout.maximized === groupId) return { ...layout, maximized: null };
+  if (!findGroup(layout.root, groupId)) return layout;
+  return { ...layout, maximized: groupId, focused: groupId };
 }
 
 /**

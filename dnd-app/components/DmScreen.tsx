@@ -45,6 +45,7 @@ import {
   resizeSplit,
   serializeLayout,
   setActiveTab,
+  toggleMaximized,
 } from "@/components/dmScreenModel";
 import { LookupTool } from "@/components/LookupTool";
 import { ChatTool } from "@/components/ChatTool";
@@ -355,10 +356,16 @@ function DmScreenBoard({ campaignId }: { campaignId: Id<"campaigns"> }) {
     ? dropPreviewRect(layout, drop, viewSize(), HEADER_PX)
     : null;
 
+  const maxGroup =
+    layout.maximized !== null ? findGroup(layout.root, layout.maximized) : null;
+
   const tileCtx: TileCtx = {
     campaignId,
     noteById,
     focused: layout.focused,
+    maximized: layout.maximized,
+    onToggleMax: (groupId) =>
+      setLayout((cur) => toggleMaximized(cur, groupId)),
     beginDrag,
     beginDividerDrag,
     closeTabAt,
@@ -510,7 +517,11 @@ function DmScreenBoard({ campaignId }: { campaignId: Id<"campaigns"> }) {
       {error && <p className="form-error">{error}</p>}
 
       <div className="dm-canvas" ref={canvasRef}>
-        {layout.root ? (
+        {/* Maximized: the ONE window covers the canvas; the tree waits
+            underneath, untouched, for the shrink press. */}
+        {maxGroup ? (
+          <GroupTile group={maxGroup} ctx={tileCtx} />
+        ) : layout.root ? (
           <TileNode node={layout.root} ctx={tileCtx} />
         ) : (
           <p className="centered-note">
@@ -543,6 +554,8 @@ interface TileCtx {
   campaignId: Id<"campaigns">;
   noteById: Map<string, { _id: string; title: string; html: string }>;
   focused: number | null;
+  maximized: number | null;
+  onToggleMax: (groupId: number) => void;
   beginDrag: (
     groupId: number,
     tabIndex: number | null,
@@ -589,6 +602,7 @@ function TileNode({ node, ctx }: { node: DmNode; ctx: TileCtx }) {
 /** One window: the tab strip over whichever tab is active. */
 function GroupTile({ group, ctx }: { group: DmGroup; ctx: TileCtx }) {
   const activeTab = group.tabs[group.active] ?? group.tabs[0];
+  const isMax = ctx.maximized === group.id;
   return (
     <section
       className={`dm-panel${ctx.focused === group.id ? " focus" : ""}`}
@@ -603,6 +617,9 @@ function GroupTile({ group, ctx }: { group: DmGroup; ctx: TileCtx }) {
           ctx.beginDrag(group.id, null, e);
         }}
       >
+        {/* The tabs get their own overflow box so a crowded strip
+            squeezes the tabs, never the control in the corner. */}
+        <div className="dm-tabs">
         {group.tabs.map((tab, i) => (
           <button
             type="button"
@@ -636,6 +653,20 @@ function GroupTile({ group, ctx }: { group: DmGroup; ctx: TileCtx }) {
             </span>
           </button>
         ))}
+        </div>
+
+        {/* Upper right: one window over everything, and back. The
+            arrangement underneath is untouched while maximized, so
+            shrink restores the exact format it was in before. */}
+        <button
+          type="button"
+          className="dm-max"
+          title={isMax ? "Shrink back to the arrangement" : "Maximize this window"}
+          aria-pressed={isMax}
+          onClick={() => ctx.onToggleMax(group.id)}
+        >
+          {isMax ? "⤡" : "⤢"}
+        </button>
       </header>
 
       <div className="dm-panel-body">

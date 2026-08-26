@@ -6779,6 +6779,53 @@ export const unit = {
         );
       }
 
+      // Maximize: one window covers the whole canvas while the tree
+      // waits underneath UNTOUCHED — which is what makes shrink land
+      // on the exact arrangement rather than a remembered copy.
+      {
+        const maxed = dm.toggleMaximized(start, 2);
+        check(
+          "maximizing covers the arrangement without touching it",
+          maxed.maximized === 2 &&
+            JSON.stringify(maxed.root) === JSON.stringify(start.root)
+        );
+        check(
+          "the same press shrinks back to exactly what was there",
+          dm.toggleMaximized(maxed, 2).maximized === null
+        );
+        check(
+          "a maximized layout survives the round trip through storage",
+          JSON.stringify(dm.parseLayout(dm.serializeLayout(maxed), NOTES)) ===
+            JSON.stringify(maxed)
+        );
+        check(
+          "a stored maximized id pointing at nothing is let go, not fatal",
+          (() => {
+            const out = dm.parseLayout(
+              JSON.stringify({ ...start, maximized: 99 }),
+              NOTES
+            );
+            return out !== null && out.maximized === null;
+          })()
+        );
+        check(
+          "no drop zones exist while a window covers the canvas",
+          dm.dropTargetAt(maxed, { x: 650, y: 400 }, VIEW, 34) === null
+        );
+        check(
+          "the cover lifts when the maximized window closes its last tab",
+          (() => {
+            const m = dm.toggleMaximized(start, 1);
+            const out = dm.closeTab(m, 1, 0);
+            return out.maximized === null && out.root.type === "group";
+          })()
+        );
+        check(
+          "maximizing a window that does not exist is refused",
+          dm.toggleMaximized(start, 99) === start
+        );
+      }
+
       // The law of the screen, held across a working session: windows
       // always fill the canvas edge to edge — no overlap, no visible
       // background. Overlap is unrepresentable in the tree, but the

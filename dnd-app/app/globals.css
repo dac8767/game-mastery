@@ -4166,6 +4166,39 @@ body.col-resizing {
   overflow: hidden;
 }
 
+/* The tabs' own overflow box: a crowded strip squeezes the tabs and
+   never pushes the corner control out of the header. */
+.dm-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Upper right: maximize, or shrink back — Premiere's one-window view. */
+.dm-max {
+  flex: none;
+  align-self: center;
+  display: inline-grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-dim);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dm-max:hover {
+  background: var(--bg-raised);
+  color: var(--accent);
+}
+
 .dm-tab {
   display: inline-flex;
   align-items: center;
