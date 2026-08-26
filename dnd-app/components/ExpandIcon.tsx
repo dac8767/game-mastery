@@ -15,6 +15,16 @@
  * more below this", which is what the sidebar's folds and the family
  * carets say. This says "open this thing", and the two should not wear
  * the same symbol.
+ *
+ * Which cut the other way once the Lookup rows started expanding IN
+ * PLACE: they wore this icon while doing the chevron's job, promising
+ * a window and delivering a reveal. So the rule is now stated as a
+ * pair, in one file:
+ *
+ *   ExpandIcon   clicking this REPLACES the screen — the NPC record,
+ *                a session's notes, a group.
+ *   CaretIcon    clicking this reveals something under the row, and
+ *                the rest of the list is still there when it does.
  */
 export function ExpandIcon() {
   return (
@@ -30,6 +40,42 @@ export function ExpandIcon() {
         fill="none"
         stroke="currentColor"
         strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/**
+ * The in-place gesture's icon: a chevron, pointing right until the
+ * thing it reveals is showing, then down.
+ *
+ * Drawn rather than the ▸ character the family sub-rows use, because
+ * this one sits in the table's expand track next to rows that used to
+ * wear ExpandIcon — a text glyph there renders at the label font's
+ * size and weight and reads as a different control from one row to the
+ * next. Rotated by CSS transform so the open and closed states cannot
+ * drift apart in shape.
+ */
+export function CaretIcon({ open }: { open?: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="13"
+      height="13"
+      aria-hidden="true"
+      focusable="false"
+      style={{
+        transform: open ? "rotate(90deg)" : undefined,
+        transition: "transform 120ms ease",
+      }}
+    >
+      <path
+        d="M6 3.5L11 8L6 12.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
       />

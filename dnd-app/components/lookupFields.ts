@@ -956,10 +956,52 @@ export function splitSource(
   return looksLikeBook ? { name: base, source: paren } : fallback;
 }
 
+/**
+ * The Name column's default width, from what is actually in it.
+ *
+ * It was `minmax(11rem, 2fr)` — grow to fill — which on a wide screen
+ * put half the viewport between a spell's name and its level. Reported
+ * as exactly that. The declared width is now only the floor; the
+ * default the table renders comes from this, measured over the list.
+ *
+ * The arithmetic mirrors sourceLabel's: the same estimated char width,
+ * nudged up for the name cell's semibold. EXTRAS is the rest of what
+ * lives in a primary cell — the 2rem artwork and its gap, the variant
+ * count pill, the cell's own padding — and PAD is the "a little
+ * bigger" that was asked for, so the longest name is not flush against
+ * the next column.
+ *
+ * Capped, because one 70-character name in an import should not push
+ * every other column off screen for the whole table. Past the cap the
+ * one long row ellipsises, which is what long cells do everywhere else
+ * here, and a dragged column still overrides all of this.
+ */
+const NAME_CHAR_PX = 7.7;
+const NAME_EXTRAS_PX = 66;
+const NAME_PAD_PX = 18;
+const NAME_MIN_PX = 176; // the old 11rem floor
+const NAME_MAX_PX = 480; // 30rem
+
+export function nameTrackPx(names: readonly string[]): number {
+  const longest = names.reduce((max, n) => Math.max(max, n.length), 0);
+  const want = Math.round(
+    longest * NAME_CHAR_PX + NAME_EXTRAS_PX + NAME_PAD_PX
+  );
+  return Math.max(NAME_MIN_PX, Math.min(NAME_MAX_PX, want));
+}
+
 const NAME_COLUMN: LookupColumn = {
   key: "name",
   label: "Name",
-  width: "minmax(11rem, 2fr)",
+  /**
+   * The FLOOR, not the default: LookupTool passes a measured width for
+   * this column into columnTemplate, computed by nameTrackPx from the
+   * names on the tab. This track only renders if that stops happening
+   * — in which case an 11rem column that ellipsises long names is the
+   * failure you can see, and grow-to-fill was the one nobody reported
+   * for weeks.
+   */
+  width: "11rem",
   primary: true,
   get: (r) => splitSource(r.name, r.source).name,
   // Sorted on the CLEAN name, so "Arcane Archer (XGtE)" files under A

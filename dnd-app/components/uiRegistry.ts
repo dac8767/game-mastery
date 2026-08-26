@@ -155,12 +155,6 @@ export const TEXT_PIECES: TextPiece[] = [
     screen: "NPC record",
   },
   { id: "record.notes.player.title", value: "Player Notes", screen: "NPC record" },
-  {
-    id: "record.notes.player.blurb",
-    value: "Everyone at the table writes here and everyone reads it.",
-    screen: "NPC record",
-    note: "The helper line under the Player Notes title",
-  },
   { id: "record.notes.dm.title", value: "DM Notes", screen: "NPC record" },
   {
     id: "record.notes.dm.blurb",
@@ -179,12 +173,6 @@ export const TEXT_PIECES: TextPiece[] = [
     value: "Nothing here yet.",
     screen: "NPC record",
     note: "Shown in a notes pane with no notes in it",
-  },
-  {
-    id: "record.playerBlurb",
-    value: "You can edit Player Notes. Everything else is the DM’s.",
-    screen: "NPC record",
-    note: "Shown to players only",
   },
 
   // ---- Settings ---------------------------------------------------

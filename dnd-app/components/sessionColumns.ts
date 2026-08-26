@@ -26,7 +26,14 @@ export const SESSION_COLUMNS: ColumnDef[] = [
     format: (raw) => `Session ${String(raw)}`,
     defaultWidth: 130,
     defaultVisible: true,
-    editable: true,
+    /**
+     * NOT editable in the list, alone among these columns — clicking
+     * "Session 40" opens the session, because the label is the way in
+     * everywhere else a list has a name. Renumbering happens inside
+     * the record, where the same definition is rendered editable by
+     * the facts row (SessionDetail passes isDm, not this flag).
+     */
+    editable: false,
   },
   {
     // Stored as "YYYY-MM-DD" text rather than a timestamp: it is the

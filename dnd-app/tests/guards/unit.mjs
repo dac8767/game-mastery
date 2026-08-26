@@ -4187,9 +4187,22 @@ export const unit = {
         `${kind} gives the slack to the filler once nothing else flexes`,
         look.columnTemplate(kind, pinned).endsWith(" minmax(0, 1fr)")
       );
+      // No column flexes by default any more: the Name column's `2fr`
+      // became a measured width, because grow-to-fill put half a wide
+      // screen between a spell's name and its level. So the filler
+      // stretches from the start — and the flat-filler rule still holds
+      // where a template actually has an fr track.
       check(
-        `${kind} leaves the filler flat while a column still flexes`,
-        look.columnTemplate(kind).endsWith(" 0")
+        `${kind} hands the slack to the filler by default`,
+        look.columnTemplate(kind).endsWith(" minmax(0, 1fr)")
+      );
+      check(
+        `${kind} has no grow-to-fill column for the filler to fight`,
+        !look.columnTemplate(kind).includes("fr)) ") &&
+          !look
+            .columnTemplate(kind)
+            .split(" ")
+            .some((t) => /^\d+fr$/.test(t))
       );
       // The button LEADS the row — the whole point of moving it off the
       // right-hand edge — and its track is fixed, so it does not grow
@@ -4208,7 +4221,7 @@ export const unit = {
     check("a resized column becomes a pixel track", withWidth.includes("200px"));
     check(
       "an untouched column keeps its declared track",
-      withWidth.includes("minmax(11rem, 2fr)")
+      withWidth.includes("11rem")
     );
     check(
       "a width below the minimum is clamped, not obeyed",
@@ -4216,6 +4229,60 @@ export const unit = {
         .columnTemplate("items", { rarity: 4 })
         .includes(`${look.MIN_LOOKUP_COL}px`)
     );
+
+    // ---- the Name column, sized by what is in it -------------------
+    // It grew to fill, which on a wide screen put half the viewport
+    // between a spell's name and its level. The default is now "a
+    // little bigger than the longest name in that list" — Derek's
+    // words — with a floor and a ceiling, and a dragged width still
+    // wins over all of it.
+    {
+      const px = (names) => look.nameTrackPx(names);
+
+      check(
+        "a longer longest name gets a wider column",
+        px(["Abi-Dalzim's Horrid Wilting", "Aid"]) > px(["Aid", "Alarm"])
+      );
+      check(
+        "the longest name drives it, wherever it sits in the list",
+        px(["Aid", "Abi-Dalzim's Horrid Wilting"]) ===
+          px(["Abi-Dalzim's Horrid Wilting", "Aid"])
+      );
+      // "A little bigger" — but bigger than what? The primary cell is
+      // not just text: a 2rem artwork thumbnail and the variant count
+      // pill sit inside the same track. Demanding text-plus-a-whisker
+      // let a mutation zero the allowance for both and pass — every
+      // name would have ellipsised behind its own picture.
+      check(
+        "the column allows for the artwork and count beside the name",
+        px(["Abi-Dalzim's Horrid Wilting"]) >=
+          Math.round("Abi-Dalzim's Horrid Wilting".length * 7.7) + 32 + 18
+      );
+      check(
+        "an empty list still yields a usable column",
+        px([]) >= 176
+      );
+      check(
+        "short names do not shrink the column below its floor",
+        px(["Aid"]) === px([])
+      );
+      // One 70-character name in an import must not push every other
+      // column off screen for the whole table; past the cap the one
+      // long row ellipsises like any other long cell.
+      check(
+        "a pathological name hits the ceiling instead of taking the screen",
+        px(["x".repeat(70)]) === px(["x".repeat(200)]) &&
+          px(["x".repeat(200)]) <= 480
+      );
+      // The default is a default: a dragged width spreads OVER it in
+      // the template call, so the person's choice survives.
+      check(
+        "a dragged name width still beats the measured default",
+        look
+          .columnTemplate("spells", { name: 999 })
+          .includes("999px")
+      );
+    }
     check(
       "a fractional drag lands on a whole pixel",
       look.columnTemplate("items", { rarity: 199.6 }).includes("200px")

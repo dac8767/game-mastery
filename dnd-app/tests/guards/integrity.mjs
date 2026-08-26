@@ -1197,18 +1197,27 @@ export const integrity = {
       const lookup = stripComments(read("components", "LookupTool.tsx"));
 
       // One drawing. A second copy is how the two quietly diverge.
-      const drawn = [
-        ["ExpandIcon.tsx", read("components", "ExpandIcon.tsx")],
-        ["NpcTable.tsx", npc],
-        ["LookupTool.tsx", lookup],
-      ].filter(([, src]) => /function ExpandIcon\(/.test(src));
-      if (drawn.length !== 1 || drawn[0][0] !== "ExpandIcon.tsx") {
-        problems.push(
-          "ExpandIcon is drawn in " +
-            (drawn.map(([f]) => f).join(" and ") || "no file") +
-            " — it belongs in ExpandIcon.tsx alone, so the two lists " +
-            "cannot end up wearing different icons for the same gesture"
+      // Both icons, and every list file — a copy of either drawing is
+      // how two lists quietly diverge. The check that only watched
+      // ExpandIcon let a mutant draw a second CaretIcon unremarked.
+      for (const icon of ["ExpandIcon", "CaretIcon"]) {
+        const drawn = [
+          ["ExpandIcon.tsx", read("components", "ExpandIcon.tsx")],
+          ["NpcTable.tsx", npc],
+          ["LookupTool.tsx", lookup],
+          ["SessionTable.tsx", stripComments(read("components", "SessionTable.tsx"))],
+          ["GroupTable.tsx", stripComments(read("components", "GroupTable.tsx"))],
+        ].filter(([, src]) =>
+          new RegExp(`function ${icon}\\d*\\(`).test(src)
         );
+        if (drawn.length !== 1 || drawn[0][0] !== "ExpandIcon.tsx") {
+          problems.push(
+            `${icon} is drawn in ` +
+              (drawn.map(([f]) => f).join(" and ") || "no file") +
+              " — it belongs in ExpandIcon.tsx alone, so the lists " +
+              "cannot end up wearing different icons for the same gesture"
+          );
+        }
       }
 
       // One control, and in the Lookup row it comes BEFORE the columns.
@@ -1225,6 +1234,50 @@ export const integrity = {
               "way in, which is the state the NPC list was reported in"
           );
         }
+      }
+
+      // WHICH icon the button wears is meaning, not decoration, and it
+      // was reported when it lied: ExpandIcon promises a window, so a
+      // row that reveals its entry IN PLACE wears the caret instead.
+      // The three record lists open a full-screen record; Lookup does
+      // not.
+      const sessions = stripComments(read("components", "SessionTable.tsx"));
+      const groups = stripComments(read("components", "GroupTable.tsx"));
+      for (const [file, src] of [
+        ["NpcTable.tsx", npc],
+        ["SessionTable.tsx", sessions],
+        ["GroupTable.tsx", groups],
+      ]) {
+        if (!/<ExpandIcon\s*\/>/.test(src)) {
+          problems.push(
+            `${file} does not wear ExpandIcon — its rows replace the ` +
+              "screen, which is that icon's one meaning"
+          );
+        }
+        if (/<CaretIcon\b/.test(src)) {
+          problems.push(
+            `${file} wears the caret — but its rows open a full record, ` +
+              "and the caret promises a reveal under the row"
+          );
+        }
+      }
+      if (!/<CaretIcon open=\{isOpen\}\s*\/>/.test(lookup)) {
+        problems.push(
+          "LookupTool's rows do not wear CaretIcon — they reveal in " +
+            "place, and ExpandIcon there promises a window it never opens"
+        );
+      }
+      if (/<ExpandIcon\b/.test(lookup)) {
+        problems.push(
+          "LookupTool still renders ExpandIcon somewhere — the reveal " +
+            "gesture and the open-a-window gesture must not share a symbol"
+        );
+      }
+      if (!/export function CaretIcon\(/.test(read("components", "ExpandIcon.tsx"))) {
+        problems.push(
+          "CaretIcon is not drawn in ExpandIcon.tsx beside its sibling — " +
+            "the pair are one decision and drift apart in separate files"
+        );
       }
       const rowAt = lookup.indexOf('className="lk-tr"');
       if (rowAt === -1) {
@@ -3769,6 +3822,107 @@ export const integrity = {
           );
         }
         drawn.set(bars, kind);
+      }
+    }
+
+    // ---- three reports from one morning ------------------------------
+    // The session title opens the record, the name column is sized by
+    // its contents, and two sentences are gone. Each check pins the
+    // specific thing reported, because each is a change a later edit
+    // could quietly undo while everything still rendered.
+    {
+      const sessionsSrc = stripComments(read("components", "SessionTable.tsx"));
+      const sessionCols = read("components", "sessionColumns.ts");
+      const lookupSrc = stripComments(read("components", "LookupTool.tsx"));
+      const css = read("app", "globals.css");
+      const npcDetail = read("components", "NpcDetail.tsx");
+      const registry = read("components", "uiRegistry.ts");
+
+      // The title is the way in. An editable number cell meant a click
+      // on "Session 40" turned the label into an input — the row
+      // refusing to open.
+      const numberCol = sessionCols.slice(
+        sessionCols.indexOf('key: "number"'),
+        sessionCols.indexOf('key: "date"')
+      );
+      if (!/editable: false/.test(numberCol)) {
+        problems.push(
+          "the session number column is list-editable again — clicking " +
+            "the title would edit in place instead of opening the session"
+        );
+      }
+      // The cell's own markup, bounded to its td. The first version of
+      // this check was a tangle of fallbacks that passed with the
+      // onClick deleted — mutation-tested, caught, rewritten plainly.
+      const titleAt = sessionsSrc.indexOf('className="name-cell session-title"');
+      if (titleAt === -1) {
+        problems.push("the session title cell lost its class — the gap and cursor rules aim at it");
+      } else {
+        const cell = sessionsSrc.slice(titleAt, sessionsSrc.indexOf(">", titleAt));
+        if (!cell.includes("onClick={onOpen}")) {
+          problems.push(
+            "the session title cell does not open the record on click"
+          );
+        }
+      }
+      // And the record must still be able to renumber, or the number
+      // is editable nowhere. SessionDetail renders every column
+      // editable from isDm, not from the flag — checked, not assumed.
+      const detail = stripComments(read("components", "SessionDetail.tsx"));
+      if (!/editable=\{isDm\}/.test(detail)) {
+        problems.push(
+          "SessionDetail no longer gates fields on isDm alone — with the " +
+            "list's inline edit gone, the number would be editable nowhere"
+        );
+      }
+      if (!/\.session-table td\.session-title\s*\{[^}]*padding-left/.test(css)) {
+        problems.push(
+          "no breathing room between the expand button and the session " +
+            "title — the gap rule is gone"
+        );
+      }
+
+      // The name column is measured over the rows on the tab, and a
+      // dragged width still wins — the spread order IS the feature.
+      if (!/\{ name: nameWidth, \.\.\.layout\.widths \}/.test(lookupSrc)) {
+        problems.push(
+          "LookupTool does not lay the person's dragged widths over the " +
+            "measured name default — either the measurement is gone or it " +
+            "would overwrite what somebody chose"
+        );
+      }
+      if (!/nameTrackPx\(/.test(lookupSrc)) {
+        problems.push(
+          "LookupTool never measures the names — the Name column is back " +
+            "to its declared track on every tab"
+        );
+      }
+
+      // Two sentences, removed by name. The registry guard checks ids
+      // agree in both directions; this checks the WORDS are gone, so a
+      // rephrasing that keeps the sentence under a new id still fails.
+      for (const gone of [
+        "Everyone at the table writes here",
+        "You can edit Player Notes",
+      ]) {
+        for (const [file, src] of [
+          ["NpcDetail.tsx", npcDetail],
+          ["uiRegistry.ts", registry],
+        ]) {
+          if (src.includes(gone)) {
+            problems.push(
+              `${file} still says "${gone}…" — reported for removal`
+            );
+          }
+        }
+      }
+      // The DM pane's own line stays: it is a promise, not an
+      // explanation, and nothing asked for it to go.
+      if (!/record\.notes\.dm\.blurb/.test(npcDetail)) {
+        problems.push(
+          "the DM notes pane lost its blurb too — only the player-facing " +
+            "sentences were reported"
+        );
       }
     }
 

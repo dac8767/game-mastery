@@ -26,6 +26,7 @@ import {
   itemSubtitle,
   monsterSubtitle,
   monsterTraitLines,
+  nameTrackPx,
   sortByColumn,
   spellCells,
   expandSource,
@@ -43,7 +44,7 @@ import {
   applyFilters,
 } from "@/components/lookupFilters";
 import { LookupFilterBar } from "@/components/LookupFilterBar";
-import { ExpandIcon } from "@/components/ExpandIcon";
+import { CaretIcon } from "@/components/ExpandIcon";
 import { useLookupLayout } from "@/components/useLookupLayout";
 
 /**
@@ -272,7 +273,24 @@ export function LookupTool({
   // ONE template, shared by the header and every row. They are separate
   // grids, so anything that changes a track has to change both or the
   // columns walk away from their headings.
-  const template = columnTemplate(kind, layout.widths);
+  /**
+   * The Name column's default: a little bigger than the longest name
+   * on this tab, measured over the rows the table is drawing. A width
+   * the person dragged wins — the spread puts layout.widths second —
+   * and everything else about the template is untouched.
+   */
+  const nameWidth = useMemo(() => {
+    const nameCol = columns.find((c) => c.key === "name");
+    if (!nameCol) return null;
+    return nameTrackPx(listed.map((r) => String(nameCol.get(r) ?? "")));
+  }, [columns, listed]);
+
+  const template = columnTemplate(
+    kind,
+    nameWidth === null
+      ? layout.widths
+      : { name: nameWidth, ...layout.widths }
+  );
 
   /**
    * Drag a column's right-hand border.
@@ -462,7 +480,11 @@ export function LookupTool({
                             toggle(id);
                           }}
                         >
-                          <ExpandIcon />
+                          {/* A caret, not ExpandIcon: this row REVEALS
+                              its entry underneath, and the two-arrows
+                              icon promises a window. Reported as
+                              exactly that. */}
+                          <CaretIcon open={isOpen} />
                         </button>
                       </span>
 

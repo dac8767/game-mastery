@@ -1230,6 +1230,19 @@ body.col-resizing {
   color: var(--down);
 }
 
+/* Sessions only. Reported: the expand button sat flush against
+   "Session 40". The gap goes on the title's side rather than the
+   button's, so the button stays in the same track every other list
+   uses and the names still start on one line. */
+.session-table td.session-title {
+  padding-left: 1rem;
+  cursor: pointer;
+}
+
+.session-table td.session-title:hover {
+  color: var(--accent);
+}
+
 .pic-cell {
   padding: 0.3rem 0.7rem;
 }

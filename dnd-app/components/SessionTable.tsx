@@ -618,7 +618,7 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
       ) : (
         <div className="npc-table-wrap">
           <table
-            className="npc-table"
+            className="npc-table session-table"
             style={{ width: `${totalWidth + EXPAND_COL}px` }}
           >
             <colgroup>
@@ -830,15 +830,27 @@ function SessionRowCells({
         }
 
         const text = display(row, def.key, def.format);
+        /* The title is the way IN, same as a name anywhere else: it
+           opens the session rather than editing in place. Renumbering
+           lives inside the record — an editable cell here meant a
+           click on "Session 40" turned the label into an input, which
+           reads as the row refusing to open. */
+        if (def.key === SESSION_PRIMARY_COLUMN) {
+          return (
+            <td
+              key={state.key}
+              className="name-cell session-title"
+              title={`Open session ${row.number}`}
+              onClick={onOpen}
+            >
+              {text === "" ? <span className="blank">{BLANK}</span> : text}
+            </td>
+          );
+        }
         return (
           <td
             key={state.key}
-            className={[
-              def.key === SESSION_PRIMARY_COLUMN ? "name-cell" : "",
-              editable ? "editable" : "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
+            className={editable ? "editable" : undefined}
             title={text || undefined}
             onDoubleClick={open}
             onClick={editable ? open : undefined}

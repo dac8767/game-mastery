@@ -479,11 +479,6 @@ export function NpcDetail({
                 ))}
               </p>
             )}
-            {!isDm && (
-              <p className="settings-note">
-                <UiText id="record.playerBlurb" />
-              </p>
-            )}
           </div>
 
         </header>
@@ -643,7 +638,6 @@ export function NpcDetail({
             npcId={npc._id}
             channel="player"
             titleId="record.notes.player.title"
-            blurbId="record.notes.player.blurb"
             notes={noteData?.notes ?? []}
             youId={noteData?.youId ?? null}
             canWrite={Boolean(noteData)}

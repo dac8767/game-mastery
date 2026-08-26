@@ -61,7 +61,15 @@ export function NoteThread({
   channel: "player" | "dm";
   /** Registry ids, so edit mode can rename the pane in place. */
   titleId: string;
-  blurbId: string;
+  /**
+   * Optional since the player pane dropped its line. Two of these
+   * sentences were reported for removal one after the other —
+   * "Everyone at the table writes here…" and "You can edit Player
+   * Notes…" — and the shape of both was a pane explaining itself to
+   * the people who use it every week. The DM pane keeps its blurb
+   * because "never sent to a player" is a promise, not an explanation.
+   */
+  blurbId?: string;
   notes: Note[];
   youId: string | null;
   canWrite: boolean;
@@ -106,9 +114,11 @@ export function NoteThread({
           blurb fourteen pixels left of the notes under it — visible the
           moment edit mode outlined the blurb and not the list. */}
       <div className="note-thread-body">
-      <p className="settings-note">
-        <UiText id={blurbId} />
-      </p>
+      {blurbId && (
+        <p className="settings-note">
+          <UiText id={blurbId} />
+        </p>
+      )}
 
       {error && <p className="form-error">{error}</p>}
 
