@@ -4004,6 +4004,16 @@ export const integrity = {
           ".dm-panel is absolutely positioned again — that is the " +
             "floating-window model back, overlap and background and all"
         );
+      } else if (!/isolation:\s*isolate/.test(panelRule[1])) {
+        // Reported as "the table top bar from one window shows on top
+        // of everything": sticky headers carry z-indexes, and without
+        // a stacking context per window they paint over whatever
+        // overlaps the window — the drop highlight included.
+        problems.push(
+          ".dm-panel no longer isolates its stacking context — a " +
+            "sticky table header inside one window paints over the " +
+            "drop highlight and anything else laid over the window"
+        );
       }
 
       // The drop pipeline: zones read under the pointer, the landing

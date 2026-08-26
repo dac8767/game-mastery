@@ -4105,12 +4105,18 @@ body.col-resizing {
   background: var(--accent-soft);
 }
 
-/* One window — a tile of the layout, never floating, never overlapped. */
+/* One window — a tile of the layout, never floating, never overlapped.
+   isolation: isolate is load-bearing: the tables inside carry sticky
+   headers with z-indexes of their own, and without a stacking context
+   per window one window's header bar paints straight across whatever
+   overlaps it — the drop highlight here, and entire neighbouring
+   windows in the floating build this was reported against. */
 .dm-panel {
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  isolation: isolate;
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: 6px;
