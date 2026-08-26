@@ -676,7 +676,9 @@ function PanelContent({
     case "backgrounds":
     case "feats":
     case "classes":
-      return <LookupTool kind={tab.kind} campaignId={campaignId} />;
+      /* condensed: in a window the search/filter section is one row
+         of dropdowns — asked for by report. */
+      return <LookupTool kind={tab.kind} campaignId={campaignId} condensed />;
     case "npcs":
       return <NpcTable campaignId={campaignId} />;
     case "sessions":

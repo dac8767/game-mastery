@@ -5077,6 +5077,92 @@ button.cal-day:hover {
   border-radius: 12px;
 }
 
+/* ---------- The condensed bar the DM Screen's windows use ----------
+   One row, dropdowns only, asked for by report. It SCROLLS rather
+   than wraps — one row is the contract — and each control names
+   itself, so there are no labels spending height above it. */
+.lf.lf-mini {
+  padding: 0.3rem 0.4rem;
+  border-radius: 8px;
+  margin-bottom: 0.4rem;
+}
+
+.lf-mini-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.3rem;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.lf-mini-row .lf-count {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.lf-mini-search {
+  flex: 0 1 9rem;
+  min-width: 5.5rem;
+}
+
+.lf-mini-select,
+.lf-mini-btn {
+  flex: 0 0 auto;
+  height: 1.75rem;
+  max-width: 10rem;
+  padding: 0 0.35rem;
+  font: inherit;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.lf-mini-select:hover,
+.lf-mini-btn:hover {
+  color: var(--text);
+}
+
+.lf-mini-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
+}
+
+.lf-mini-btn.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.lf-mini-dot {
+  color: var(--accent);
+}
+
+.lf-mini-caret {
+  font-size: 0.6rem;
+  opacity: 0.8;
+}
+
+/* The dropdown panel behind a mini button — portaled to the body,
+   because the bar lives inside a window whose body scrolls and would
+   clip anything positioned within it. */
+.lf-menu {
+  position: fixed;
+  z-index: 41;
+  display: grid;
+  gap: 0.3rem;
+  min-width: 13rem;
+  max-width: 20rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
 /* The category row scrolls rather than wrapping to three lines on a
    narrow window — fourteen creature types is a lot of chips. */
 .lf-chips {

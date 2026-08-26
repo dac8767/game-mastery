@@ -4098,6 +4098,44 @@ export const integrity = {
       }
     }
 
+    // ---- the DM Screen's windows condense their filter bars ---------
+    // Asked for by report: inside a window the search/filter section
+    // is ONE row of dropdowns, and minor filters (species Size, by
+    // name) are left off entirely. Three links, each of which fails
+    // silently: the prop not passed renders the full multi-row bar in
+    // every window; the minor filter not skipped puts Size back; the
+    // flag not set makes the skip a no-op.
+    {
+      const dmSrc = stripComments(read("components", "DmScreen.tsx"));
+      const barSrc = stripComments(read("components", "LookupFilterBar.tsx"));
+      const defsSrc = read("components", "lookupFilters.ts");
+
+      if (!/<LookupTool kind=\{tab\.kind\} campaignId=\{campaignId\} condensed \/>/.test(dmSrc)) {
+        problems.push(
+          "DmScreen no longer opens LookupTool condensed — every " +
+            "window shows the full multi-row filter section again"
+        );
+      }
+      if (!/\.filter\(\(f\) => !f\.minor\)/.test(barSrc)) {
+        problems.push(
+          "the condensed bar no longer skips minor filters — species " +
+            "Size is back in the one-row bar it was cut from"
+        );
+      }
+      // Anchored on SPECIES_SIZES: monsters have a "size" filter of
+      // their own that must NOT need the flag, so the key alone is not
+      // enough to name the right one.
+      const sizeDef = /options: SPECIES_SIZES \},\s*minor: true/.exec(
+        defsSrc.replace(/\/\/[^\n]*/g, "")
+      );
+      if (!sizeDef) {
+        problems.push(
+          'the species "size" filter lost its minor flag — the report ' +
+            "that named it would reopen"
+        );
+      }
+    }
+
     // ---- the sidebar collapses to a rail, and stays collapsed -------
     // Airtable's arrow button. Three ways it breaks with nothing red:
     // a collapse kept in component state springs open on every

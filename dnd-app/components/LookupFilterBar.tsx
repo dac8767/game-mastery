@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { ReactNode, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   FilterDef,
   FilterState,
@@ -37,12 +38,23 @@ export function LookupFilterBar({
   setState,
   matched,
   total,
+  condensed,
+  trailing,
 }: {
   kind: LookupKind;
   state: FilterState;
   setState: (next: FilterState) => void;
   matched: number;
   total: number;
+  /**
+   * The DM Screen's windows ask for this: the whole section as ONE
+   * row of dropdowns — nothing listed out on screen, minor filters
+   * left off entirely, advanced ones behind their own dropdowns
+   * instead of a second row.
+   */
+  condensed?: boolean;
+  /** Extra controls rendered into the condensed row — the edition pick. */
+  trailing?: ReactNode;
 }) {
   const defs = FILTERS[kind];
   const compact = defs.filter((f) => !f.advanced);
@@ -55,6 +67,34 @@ export function LookupFilterBar({
 
   const set = (key: string, value: FilterValue) =>
     setState({ ...state, [key]: value });
+
+  if (condensed) {
+    return (
+      <section className="lf lf-mini">
+        <div className="lf-mini-row">
+          {defs
+            .filter((f) => !f.minor)
+            .map((def) => (
+              <MiniControl key={def.key} def={def} state={state} set={set} />
+            ))}
+          {trailing}
+          <span className="lf-count">
+            {matched === total ? `${total}` : `${matched}/${total}`}
+          </span>
+          {active > 0 && (
+            <button
+              type="button"
+              className="text-button lf-reset"
+              title="Reset all filters"
+              onClick={() => setState({})}
+            >
+              Reset
+            </button>
+          )}
+        </div>
+      </section>
+    );
+  }
 
   const chips = compact.find((f) => f.control.type === "chips");
   const fields = compact.filter((f) => f.control.type !== "chips");
@@ -104,6 +144,131 @@ export function LookupFilterBar({
         </button>
       )}
     </section>
+  );
+}
+
+/**
+ * One filter, condensed to a single control in the one-row bar.
+ *
+ * Whatever can be a native dropdown IS one — chips and selects
+ * directly, a toggle as a two-option pick — with the filter's own
+ * label standing as the empty option, so the closed control names
+ * itself. The name search stays a typing box (a dropdown cannot hold
+ * typing), and everything else opens a small dropdown panel holding
+ * its full control.
+ */
+function MiniControl({
+  def,
+  state,
+  set,
+}: {
+  def: FilterDef;
+  state: FilterState;
+  set: (key: string, value: FilterValue) => void;
+}) {
+  const c = def.control;
+  const value = state[def.key];
+
+  if (c.type === "text" && def.key === "name") {
+    return (
+      <input
+        className="lf-input lf-mini-search"
+        type="search"
+        placeholder="Search"
+        value={typeof value === "string" ? value : ""}
+        onChange={(e) => set(def.key, e.target.value)}
+      />
+    );
+  }
+
+  if (c.type === "chips" || c.type === "select") {
+    return (
+      <select
+        className="lf-mini-select"
+        title={def.label}
+        value={typeof value === "string" ? value : ""}
+        onChange={(e) => set(def.key, e.target.value)}
+      >
+        <option value="">{def.label}</option>
+        {c.options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  if (c.type === "toggle") {
+    return (
+      <select
+        className="lf-mini-select"
+        title={def.label}
+        value={value === true ? "on" : ""}
+        onChange={(e) => set(def.key, e.target.value === "on")}
+      >
+        <option value="">{def.label}</option>
+        <option value="on">{def.label}: Yes</option>
+      </select>
+    );
+  }
+
+  // multi, range, and the advanced text filters: a dropdown panel
+  // holding the standard control.
+  return <MiniMenu def={def} state={state} set={set} />;
+}
+
+/**
+ * A dropdown panel for the controls a native select cannot be.
+ *
+ * PORTALED to the body like the DM Screen's own menus, because this
+ * bar lives inside a window whose body is a scroll container — a
+ * panel positioned inside it would be clipped at the window's edge.
+ */
+function MiniMenu({
+  def,
+  state,
+  set,
+}: {
+  def: FilterDef;
+  state: FilterState;
+  set: (key: string, value: FilterValue) => void;
+}) {
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null);
+  const on = !isEmptyValue(state[def.key]);
+
+  return (
+    <>
+      <button
+        type="button"
+        className={`lf-mini-btn${on ? " on" : ""}`}
+        onClick={(e) => {
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          setAt((cur) => (cur ? null : { x: r.left, y: r.bottom + 4 }));
+        }}
+      >
+        {def.label}
+        {on && <span className="lf-mini-dot">•</span>}
+        <span className="lf-mini-caret">▾</span>
+      </button>
+      {at &&
+        createPortal(
+          <>
+            <span className="view-scrim" onClick={() => setAt(null)} />
+            <div
+              className="lf-menu"
+              style={{
+                left: Math.min(at.x, window.innerWidth - 280),
+                top: at.y,
+              }}
+            >
+              <span className="lf-label">{def.label}</span>
+              <Control def={def} value={state[def.key]} set={set} />
+            </div>
+          </>,
+          document.body
+        )}
+    </>
   );
 }
 

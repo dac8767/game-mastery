@@ -263,6 +263,13 @@ export interface FilterDef {
    * filters". Ordered as declared.
    */
   advanced?: boolean;
+  /**
+   * Not worth a slot where space is tight: the condensed one-row bar
+   * the DM Screen's windows use leaves minor filters out entirely.
+   * Named by report: "unimportant options can be removed (like the
+   * size option in the species tab)".
+   */
+  minor?: boolean;
   /** Placeholder for text and range controls. */
   hint?: string;
   /** True when this row passes. `value` is never empty when called. */
@@ -802,6 +809,7 @@ const SPECIES_FILTERS: FilterDef[] = [
     key: "size",
     label: "Size",
     control: { type: "multi", options: SPECIES_SIZES },
+    minor: true,
     // "Small or Medium" is a real entry, so this reads the field as
     // text rather than matching it whole — a Halfling filtered under
     // Small must not vanish because its field says both.

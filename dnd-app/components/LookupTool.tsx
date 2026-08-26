@@ -85,9 +85,16 @@ const MAX_ROWS = 300;
 export function LookupTool({
   kind,
   campaignId,
+  condensed,
 }: {
   kind: LookupKind;
   campaignId: Id<"campaigns">;
+  /**
+   * Inside a DM Screen window the search/filter section is ONE row of
+   * dropdowns — asked for by report — with the edition pair folded
+   * into a dropdown of its own instead of standing as a second row.
+   */
+  condensed?: boolean;
 }) {
   const [filters, setFilters] = useState<FilterState>({});
   const [sort, setSort] = useState<{ key: string; desc: boolean }>({
@@ -364,32 +371,65 @@ export function LookupTool({
             setState={setFilters}
             matched={matched.length}
             total={listed.length}
+            condensed={condensed}
+            trailing={
+              condensed ? (
+                /* The edition pair as one dropdown, riding in the same
+                   row. Both-off is a state the buttons can reach and
+                   this pick cannot — it only appears here to describe
+                   it, never to offer it. */
+                <select
+                  className="lf-mini-select"
+                  title="Which editions to show"
+                  value={
+                    editions["2014"] && editions["2024"]
+                      ? "both"
+                      : editions["2014"]
+                        ? "2014"
+                        : editions["2024"]
+                          ? "2024"
+                          : "none"
+                  }
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setEditions({ "2014": v !== "2024", "2024": v !== "2014" });
+                  }}
+                >
+                  <option value="both">Both editions</option>
+                  <option value="2014">{EDITION_LABEL["2014"]}</option>
+                  <option value="2024">{EDITION_LABEL["2024"]}</option>
+                  {noEdition && <option value="none">No editions</option>}
+                </select>
+              ) : undefined
+            }
           />
 
           {/* Never a silently shorter list. It used to say which
               edition was in force and send you to Settings to change
               it; now the thing that changes it is right here, and the
               count is what it costs. */}
-          <div className="lk-editions">
-            {(["2014", "2024"] as const).map((e) => (
-              <button
-                key={e}
-                type="button"
-                className={`lk-edition-btn${editions[e] ? " on" : ""}`}
-                aria-pressed={editions[e]}
-                onClick={() =>
-                  setEditions((cur) => ({ ...cur, [e]: !cur[e] }))
-                }
-              >
-                Show {EDITION_LABEL[e]}
-              </button>
-            ))}
-            {folded > 0 && (
-              <span className="muted lk-edition-note">
-                {folded} {folded === 1 ? "entry" : "entries"} hidden
-              </span>
-            )}
-          </div>
+          {!condensed && (
+            <div className="lk-editions">
+              {(["2014", "2024"] as const).map((e) => (
+                <button
+                  key={e}
+                  type="button"
+                  className={`lk-edition-btn${editions[e] ? " on" : ""}`}
+                  aria-pressed={editions[e]}
+                  onClick={() =>
+                    setEditions((cur) => ({ ...cur, [e]: !cur[e] }))
+                  }
+                >
+                  Show {EDITION_LABEL[e]}
+                </button>
+              ))}
+              {folded > 0 && (
+                <span className="muted lk-edition-note">
+                  {folded} {folded === 1 ? "entry" : "entries"} hidden
+                </span>
+              )}
+            </div>
+          )}
 
           {noEdition && (
             <p className="muted lk-edition-none">
