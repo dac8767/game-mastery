@@ -6362,21 +6362,32 @@ export const unit = {
     }
 
     // ---- the DM Screen's windows -----------------------------------
-    // Panels, tabs, snapping, tearing off, and the parser every stored
-    // layout comes through. The failures here are all invisible in a
-    // demo: a snap one pixel off, a merge that loses a tab, a saved
-    // layout from last month that crashes the screen open.
+    // The tiling tree: drop zones, splits, shares, and the parser
+    // every stored layout comes through. The failures here are all
+    // invisible in a demo: a drop zone that reads the wrong edge, a
+    // share sum that drifts off 1 so windows shrink from the right,
+    // a saved layout from last month that crashes the screen open.
     {
       const dm = await import(
         pathToFileURL(
           join(compile("components/dmScreenModel.ts"), "dmScreenModel.js")
         ).href
       );
-      const VIEW = { w: 1200, h: 800 };
+      // 1206 wide = two 600px halves + one 6px divider: the arithmetic
+      // below comes out in whole numbers on purpose.
+      const VIEW = { w: 1206, h: 800 };
       const NOTES = new Set(["n1"]);
+      const group = (id, kinds, active = 0) => ({
+        type: "group",
+        id,
+        tabs: kinds.map((kind) => ({ kind })),
+        active,
+      });
+      const store = (root, nextId, focused = null) =>
+        JSON.stringify({ root, nextId, focused });
 
       // Round trip: what serialize writes, parse reads back whole.
-      const start = dm.defaultLayout(VIEW);
+      const start = dm.defaultLayout();
       check(
         "a layout survives the round trip through storage",
         JSON.stringify(dm.parseLayout(dm.serializeLayout(start), NOTES)) ===
@@ -6385,197 +6396,409 @@ export const unit = {
       check(
         "garbage parses to null rather than a crash or a screen",
         dm.parseLayout("{not json", NOTES) === null &&
-          dm.parseLayout('{"panels": 7}', NOTES) === null &&
+          dm.parseLayout('{"root": 7}', NOTES) === null &&
           dm.parseLayout(null, NOTES) === null
+      );
+      // A layout from the floating era has no faithful place in a
+      // tiling — the default steps in rather than a guessed conversion.
+      check(
+        "a floating-era layout parses to null, not a guess",
+        dm.parseLayout(
+          JSON.stringify({
+            panels: [{ id: 1, x: 5, y: 5, w: 300, h: 200, tabs: [{ kind: "chat" }], active: 0 }],
+            nextId: 2,
+          }),
+          NOTES
+        ) === null
       );
       // The reason parseLayout exists: stored kinds the app no longer
       // has, and notes deleted elsewhere, are dropped rather than
-      // rendered as broken windows.
+      // rendered as broken windows — and the space they held goes to
+      // their siblings, never to the background.
       check(
-        "an unknown kind and a dead note are dropped, their panel with them",
+        "an unknown kind and a dead note are dropped, their window's share absorbed",
         (() => {
-          const raw = JSON.stringify({
-            panels: [
-              { id: 1, x: 0, y: 0, w: 300, h: 200, tabs: [{ kind: "widget" }], active: 0 },
-              { id: 2, x: 0, y: 0, w: 300, h: 200, tabs: [{ kind: "note", noteId: "gone" }], active: 0 },
-              { id: 3, x: 0, y: 0, w: 300, h: 200, tabs: [{ kind: "monsters" }, { kind: "widget" }], active: 1 },
-            ],
-            nextId: 4,
-          });
+          const raw = store(
+            {
+              type: "split",
+              id: 9,
+              dir: "row",
+              children: [
+                group(1, ["monsters"]),
+                { type: "group", id: 2, tabs: [{ kind: "widget" }, { kind: "note", noteId: "gone" }], active: 0 },
+                group(3, ["chat", "widget"], 1),
+              ],
+              sizes: [0.25, 0.25, 0.5],
+            },
+            10
+          );
           const out = dm.parseLayout(raw, NOTES);
+          if (!out || out.root.type !== "split") return false;
+          const rects = dm.layoutRects(out, VIEW);
+          const r1 = rects.get(1);
           return (
-            out !== null &&
-            out.panels.length === 1 &&
-            out.panels[0].tabs.length === 1 &&
-            out.panels[0].active === 0
+            out.root.children.length === 2 &&
+            out.root.children[1].tabs.length === 1 &&
+            out.root.children[1].active === 0 &&
+            Math.abs(out.root.sizes[0] + out.root.sizes[1] - 1) < 1e-9 &&
+            r1 !== undefined &&
+            Math.abs(r1.w - 1200 / 3) < 0.001
           );
         })()
       );
       check(
         "a layout with nothing left in it is null, so the default steps in",
-        dm.parseLayout(
-          JSON.stringify({ panels: [{ id: 1, x: 0, y: 0, w: 300, h: 200, tabs: [{ kind: "widget" }], active: 0 }], nextId: 2 }),
-          NOTES
-        ) === null
+        dm.parseLayout(store(group(1, ["widget"]), 2), NOTES) === null
       );
       check(
-        "ids stay unique after a reload — nextId clears every survivor",
+        "a split left holding one child collapses into that child",
         (() => {
           const out = dm.parseLayout(
-            JSON.stringify({ panels: [{ id: 9, x: 0, y: 0, w: 300, h: 200, tabs: [{ kind: "chat" }], active: 0 }], nextId: 2 }),
+            store(
+              {
+                type: "split",
+                id: 4,
+                dir: "col",
+                children: [group(1, ["chat"]), group(2, ["widget"])],
+                sizes: [0.5, 0.5],
+              },
+              5
+            ),
             NOTES
           );
-          return out !== null && out.nextId > 9;
+          return out !== null && out.root.type === "group" && out.root.id === 1;
+        })()
+      );
+      check(
+        "duplicate ids are reassigned — a drop must never move two windows",
+        (() => {
+          const out = dm.parseLayout(
+            store(
+              {
+                type: "split",
+                id: 7,
+                dir: "row",
+                children: [group(5, ["chat"]), group(5, ["rules"])],
+                sizes: [0.5, 0.5],
+              },
+              2
+            ),
+            NOTES
+          );
+          if (!out) return false;
+          const ids = [out.root.id, ...out.root.children.map((c) => c.id)];
+          return new Set(ids).size === 3 && out.nextId > Math.max(...ids);
+        })()
+      );
+      check(
+        "a focused group that no longer exists is let go",
+        (() => {
+          const out = dm.parseLayout(store(group(1, ["chat"]), 2, 99), NOTES);
+          return out !== null && out.focused === null;
         })()
       );
 
-      // Stacking: dropping a window on another header merges its tabs
-      // at the end, activates the first arrival, and closes the source.
+      // The geometry: shares become rectangles, dividers counted.
       {
-        const two = dm.defaultLayout(VIEW);
-        const merged = dm.mergePanels(two, 1, 2);
-        const target = merged.panels.find((p) => p.id === 2);
+        const rects = dm.layoutRects(start, VIEW);
+        const [r1, r2] = [rects.get(1), rects.get(2)];
+        check(
+          "two half shares land as two halves either side of the divider",
+          r1.x === 0 && r1.w === 600 && r2.x === 606 && r2.w === 600 &&
+            r1.h === 800 && r2.h === 800
+        );
+      }
+
+      // The drop zones, Premiere's exactly: canvas edge first, then
+      // the tab strip, then the middle box as a tab dock, then the
+      // nearest quarter as a split.
+      {
+        check(
+          "the canvas's own edge outranks whatever window sits against it",
+          (() => {
+            const t = dm.dropTargetAt(start, { x: 4, y: 400 }, VIEW, 34);
+            const b = dm.dropTargetAt(start, { x: 300, y: 795 }, VIEW, 34);
+            return (
+              t !== null && t.type === "root" && t.edge === "left" &&
+              b !== null && b.type === "root" && b.edge === "bottom"
+            );
+          })()
+        );
+        check(
+          "the tab strip is a tab dock",
+          (() => {
+            const t = dm.dropTargetAt(start, { x: 100, y: 25 }, VIEW, 34);
+            return t !== null && t.type === "tabs" && t.group === 1;
+          })()
+        );
+        check(
+          "the middle of a window stacks; its outer quarter splits",
+          (() => {
+            const mid = dm.dropTargetAt(start, { x: 300, y: 400 }, VIEW, 34);
+            const side = dm.dropTargetAt(start, { x: 650, y: 400 }, VIEW, 34);
+            return (
+              mid !== null && mid.type === "tabs" && mid.group === 1 &&
+              side !== null && side.type === "edge" &&
+              side.group === 2 && side.edge === "left"
+            );
+          })()
+        );
+        check(
+          "the highlight shows the half being given up, before the drop",
+          (() => {
+            const r = dm.dropPreviewRect(
+              start,
+              { type: "edge", group: 1, edge: "right" },
+              VIEW,
+              34
+            );
+            const strip = dm.dropPreviewRect(
+              start,
+              { type: "tabs", group: 2 },
+              VIEW,
+              34
+            );
+            const dock = dm.dropPreviewRect(
+              start,
+              { type: "root", edge: "left" },
+              VIEW,
+              34
+            );
+            return (
+              r.x === 300 && r.w === 300 && r.h === 800 &&
+              strip.x === 606 && strip.h === 34 && strip.w === 600 &&
+              dock.x === 0 && dock.h === 800 &&
+              dock.w === Math.round(VIEW.w * dm.DOCK_FRAC)
+            );
+          })()
+        );
+      }
+
+      // Stacking: a window dropped on a strip dissolves into it, the
+      // first arrival on top, and its old space goes to a neighbour.
+      {
+        const merged = dm.moveGroup(start, 2, { type: "tabs", group: 1 });
         check(
           "a merge keeps every tab from both windows",
-          merged.panels.length === 1 && target.tabs.length === 3
+          merged.root.type === "group" && merged.root.tabs.length === 3
         );
         check(
           "the dropped window's first tab is the active one",
-          target.tabs[target.active].kind === "reference"
+          merged.root.tabs[merged.root.active].kind === "monsters"
         );
         check(
-          "merging a window into itself changes nothing",
-          dm.mergePanels(two, 1, 1) === two
+          "dropping a window onto itself changes nothing",
+          dm.moveGroup(start, 1, { type: "tabs", group: 1 }) === start &&
+            dm.moveGroup(start, 1, { type: "edge", group: 1, edge: "left" }) ===
+              start
+        );
+        check(
+          "a tab dropped back on its own strip stays where it was",
+          dm.moveTab(start, 2, 0, { type: "tabs", group: 2 }) === start
         );
       }
 
-      // Tearing off: a tab dragged out is a window of its own, at the
-      // pointer, at its old window's size.
+      // Splitting: dropping against a window's side takes half of it.
       {
-        const two = dm.defaultLayout(VIEW);
-        const torn = dm.tearOffTab(two, 2, 1, { x: 300, y: 200 });
-        const born = torn.panels[torn.panels.length - 1];
+        const split = dm.moveTab(start, 2, 1, {
+          type: "edge",
+          group: 1,
+          edge: "bottom",
+        });
+        const left = split.root.children[0];
         check(
-          "a torn-off tab becomes its own window where it was dropped",
-          torn.panels.length === 3 &&
-            born.tabs.length === 1 &&
-            born.tabs[0].kind === "spells" &&
-            born.x === 300 &&
-            born.y === 200
+          "a drop on a window's side splits that window's own space",
+          split.root.type === "split" &&
+            left.type === "split" &&
+            left.dir === "col" &&
+            left.children[0].tabs[0].kind === "reference" &&
+            left.children[1].tabs[0].kind === "spells" &&
+            Math.abs(left.sizes[0] - 0.5) < 1e-9
         );
         check(
-          "it keeps the size it was being read at",
-          born.w === two.panels[1].w && born.h === two.panels[1].h
+          "the new window is the focused one",
+          split.focused === left.children[1].id
         );
         check(
-          "the last tab cannot be torn off — that is a move",
-          dm.tearOffTab(two, 1, 0, { x: 10, y: 10 }) === two
-        );
-      }
-
-      // Closing: the last tab takes its window with it.
-      {
-        const two = dm.defaultLayout(VIEW);
-        const one = dm.closeTab(two, 1, 0);
-        check(
-          "closing a window's last tab closes the window",
-          one.panels.length === 1 && one.panels[0].id === 2
-        );
-        const partial = dm.closeTab(two, 2, 0);
-        check(
-          "closing one tab of a stack keeps the stack",
-          partial.panels.length === 2 &&
-            partial.panels.find((p) => p.id === 2).tabs.length === 1
+          "the source stack keeps what was not moved",
+          split.root.children[1].tabs.length === 1 &&
+            split.root.children[1].tabs[0].kind === "monsters"
         );
       }
-
-      // The z-order is the array order, and clicking brings to front.
       check(
-        "a raised window draws last",
+        "a drop along an existing run joins the run, never nests a frame",
         (() => {
-          const two = dm.defaultLayout(VIEW);
-          const raised = dm.bringToFront(two, 1);
-          return raised.panels[raised.panels.length - 1].id === 1;
+          const three = dm.parseLayout(
+            store(
+              {
+                type: "split",
+                id: 9,
+                dir: "row",
+                children: [group(1, ["chat"]), group(2, ["rules"]), group(3, ["calendar"])],
+                sizes: [0.5, 0.25, 0.25],
+              },
+              10
+            ),
+            NOTES
+          );
+          const out = dm.moveGroup(three, 3, {
+            type: "edge",
+            group: 1,
+            edge: "left",
+          });
+          // Detaching renormalises the survivors (2/3 and 1/3), and
+          // the halved landing share makes it even thirds.
+          return (
+            out.root.type === "split" &&
+            out.root.children.length === 3 &&
+            out.root.children.every((c) => c.type === "group") &&
+            out.root.children[0].id === 3 &&
+            out.root.sizes.every((s) => Math.abs(s - 1 / 3) < 1e-9)
+          );
         })()
       );
 
-      // Snapping — the arithmetic of "align them".
+      // The canvas edge: a full-length dock at DOCK_FRAC, everything
+      // already there scaled into the rest.
       {
-        const others = [{ x: 400, y: 300, w: 200, h: 100 }];
-        const snapped = dm.snapBox(
-          { x: 605, y: 150, w: 100, h: 80 },
-          others,
-          VIEW
-        );
+        const docked = dm.moveGroup(start, 2, { type: "root", edge: "bottom" });
         check(
-          "an edge within reach snaps flush to its neighbour",
-          snapped.x === 600 && snapped.vGuides.includes(600)
+          "a canvas-edge drop docks the full length of that side",
+          docked.root.type === "split" &&
+            docked.root.dir === "col" &&
+            docked.root.children[1].id === 2 &&
+            Math.abs(docked.root.sizes[1] - dm.DOCK_FRAC) < 1e-9 &&
+            Math.abs(docked.root.sizes[0] - (1 - dm.DOCK_FRAC)) < 1e-9
         );
+        const again = dm.moveTab(docked, 2, 0, { type: "root", edge: "top" });
         check(
-          "an edge out of reach is left where the hand put it",
-          dm.snapBox({ x: 620, y: 150, w: 100, h: 80 }, others, VIEW).x === 620
-        );
-        check(
-          "the canvas edge snaps too",
-          dm.snapBox({ x: 5, y: 5, w: 100, h: 80 }, [], VIEW).x === 0 &&
-            dm.snapBox({ x: 5, y: 5, w: 100, h: 80 }, [], VIEW).y === 0
-        );
-        check(
-          "the RIGHT edge of the box is a candidate, not just the left",
-          dm.snapBox({ x: 295, y: 150, w: 100, h: 80 }, others, VIEW).x === 300
+          "a root split already running that way takes the newcomer as a child",
+          again.root.type === "split" &&
+            again.root.dir === "col" &&
+            again.root.children.length === 3 &&
+            Math.abs(again.root.sizes[0] - dm.DOCK_FRAC) < 1e-9 &&
+            Math.abs(again.root.sizes.reduce((a, b) => a + b, 0) - 1) < 1e-9
         );
       }
 
-      // Drop-to-merge hit testing: front-most header wins.
+      // Moving the ONLY tab of a window is moving the window: the
+      // emptied frame must not survive as a hole in the tiling.
+      check(
+        "no window outlives its last tab, wherever the tab went",
+        (() => {
+          const out = dm.moveTab(start, 1, 0, {
+            type: "edge",
+            group: 2,
+            edge: "top",
+          });
+          return dm.allGroups(out.root).every((g) => g.tabs.length > 0);
+        })()
+      );
+
+      // Closing: the last tab takes its window with it, the space goes
+      // to the neighbours, and closing everything empties the screen.
       {
-        const two = dm.defaultLayout(VIEW);
-        const p2 = two.panels[1];
+        const one = dm.closeTab(start, 2, 0);
+        const gone = dm.closeTab(one, 2, 0);
         check(
-          "the pointer finds the header under it",
-          dm.panelHeaderAt(two, { x: p2.x + 10, y: p2.y + 10 }, 34) === 2
+          "closing one tab of a stack keeps the stack",
+          one.root.type === "split" &&
+            dm.findGroup(one.root, 2).tabs.length === 1
         );
         check(
-          "a point below the header strip finds nothing",
-          dm.panelHeaderAt(two, { x: p2.x + 10, y: p2.y + 60 }, 34) === null
+          "closing a window's last tab hands its space to the neighbour",
+          gone.root.type === "group" && gone.root.id === 1
         );
         check(
-          "the dragged window does not catch its own drop",
-          dm.panelHeaderAt(two, { x: p2.x + 10, y: p2.y + 10 }, 34, 2) === null
-        );
-        // Overlapping headers: the FRONT one takes the drop, because it
-        // is the one the eye sees the tab land on. The default layout's
-        // panels do not overlap, so this needs its own fixture — the
-        // mutation that walked the array forwards passed everything
-        // else.
-        const stacked = {
-          panels: [
-            { id: 1, x: 100, y: 100, w: 300, h: 200, tabs: [{ kind: "chat" }], active: 0 },
-            { id: 2, x: 150, y: 100, w: 300, h: 200, tabs: [{ kind: "rules" }], active: 0 },
-          ],
-          nextId: 3,
-        };
-        check(
-          "where headers overlap, the front-most window takes the drop",
-          dm.panelHeaderAt(stacked, { x: 200, y: 110 }, 34) === 2
+          "closing the last window leaves an empty screen, not a crash",
+          dm.closeTab(gone, 1, 0).root === null
         );
       }
 
-      // Adding cascades rather than piling.
+      // Adding: the new window stacks into the focused group, and an
+      // empty screen grows its first window whole.
       {
-        let l = dm.defaultLayout(VIEW);
-        l = dm.addPanel(l, { kind: "chat" }, VIEW);
-        l = dm.addPanel(l, { kind: "rules" }, VIEW);
-        const a = l.panels[l.panels.length - 2];
-        const b = l.panels[l.panels.length - 1];
+        const added = dm.addTab(start, { kind: "chat" });
+        const home = dm.findGroup(added.root, start.focused);
         check(
-          "two added windows do not land in one pile",
-          a.x !== b.x || a.y !== b.y
+          "a new window lands in the focused group, on top",
+          home.tabs[home.tabs.length - 1].kind === "chat" &&
+            home.active === home.tabs.length - 1
         );
+        const empty = dm.closeTab(
+          dm.closeTab(dm.closeTab(start, 2, 1), 2, 0),
+          1,
+          0
+        );
+        const first = dm.addTab(empty, { kind: "rules" });
         check(
-          "every added window gets a fresh id",
-          new Set(l.panels.map((p) => p.id)).size === l.panels.length
+          "the first window on an empty screen takes the whole screen",
+          first.root !== null &&
+            first.root.type === "group" &&
+            first.root.tabs[0].kind === "rules"
         );
       }
+
+      // The divider: both neighbours re-divide the span they share —
+      // one grows by exactly what the other gives up — and neither
+      // may pass the minimum.
+      {
+        const wider = dm.resizeSplit(start, 3, 0, 0.1, 0.05);
+        check(
+          "a divider drag moves exactly the pair astride it",
+          Math.abs(wider.root.sizes[0] - 0.6) < 1e-9 &&
+            Math.abs(wider.root.sizes[1] - 0.4) < 1e-9
+        );
+        const floored = dm.resizeSplit(start, 3, 0, -10, 0.05);
+        check(
+          "the minimum share holds against any pull",
+          Math.abs(floored.root.sizes[0] - 0.05) < 1e-9 &&
+            Math.abs(floored.root.sizes[1] - 0.95) < 1e-9
+        );
+        check(
+          "a divider that does not exist moves nothing",
+          dm.resizeSplit(start, 3, 5, 0.1, 0.05) === start
+        );
+      }
+
+      // The law of the screen, held across a working session: windows
+      // always fill the canvas edge to edge — no overlap, no visible
+      // background. Overlap is unrepresentable in the tree, but the
+      // ARITHMETIC could still break it, so it is asserted on the
+      // rectangles that reach the screen.
+      check(
+        "after a session of drops the tiling still fills the screen without overlap",
+        (() => {
+          let l = start;
+          l = dm.addTab(l, { kind: "chat" });
+          l = dm.moveTab(l, 2, 2, { type: "edge", group: 1, edge: "bottom" });
+          l = dm.moveGroup(l, 2, { type: "root", edge: "left" });
+          l = dm.addTab(l, { kind: "rules" });
+          l = dm.moveTab(l, 2, 1, { type: "edge", group: 1, edge: "right" });
+          l = dm.closeTab(l, 1, 0);
+          const rects = [...dm.layoutRects(l, VIEW).values()];
+          const inBounds = rects.every(
+            (r) =>
+              r.x >= -0.01 && r.y >= -0.01 &&
+              r.x + r.w <= VIEW.w + 0.01 && r.y + r.h <= VIEW.h + 0.01
+          );
+          const overlap = rects.some((a, i) =>
+            rects.some(
+              (b, j) =>
+                i < j &&
+                a.x < b.x + b.w - 0.01 && b.x < a.x + a.w - 0.01 &&
+                a.y < b.y + b.h - 0.01 && b.y < a.y + a.h - 0.01
+            )
+          );
+          const area = rects.reduce((sum, r) => sum + r.w * r.h, 0);
+          return (
+            rects.length >= 3 &&
+            inBounds &&
+            !overlap &&
+            area > VIEW.w * VIEW.h * 0.9
+          );
+        })()
+      );
 
       // Every kind in the menu has a name to show on its tab.
       check(

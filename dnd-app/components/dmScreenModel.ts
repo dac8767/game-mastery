@@ -1,28 +1,32 @@
 /**
- * The DM Screen's window model: panels, tabs, snapping, workspaces.
+ * The DM Screen's window model: a Premiere-style tiled dock.
  *
- * Premiere's idea, not its implementation: the screen is a set of
- * WINDOWS the DM arranges — each one hosting a tool of this app, a
- * rich-text note, or the rules reference — and windows stack into one
- * another as TABS. What Premiere calls a workspace is a named copy of
- * the whole arrangement you can switch back to.
+ * Premiere's behaviour, matched from four filmed scenarios: windows
+ * NEVER float. The screen is one tree of splits whose leaves are tab
+ * groups, so the arrangement always fills the canvas edge to edge —
+ * no background showing through, no window partially covering another.
+ * Dropping a window on a neighbour's side splits that neighbour's
+ * space; dropping it on the tab strip (or dead centre) stacks it as a
+ * tab; dropping it on the canvas's own edge docks it the full length
+ * of that side; and the bar between two windows resizes both at once.
+ * Overlap is not prevented — it is unrepresentable.
  *
  * Everything here is arithmetic and data — no React, no DOM, no Convex
  * — so the unit guard can exercise the parts that go wrong invisibly:
- * a snap that lands one pixel off reads as "the align is mushy", a
- * merge that drops a tab reads as "my window vanished", and a saved
- * layout from last month has to open rather than crash.
+ * a drop zone that picks the wrong edge, a split whose shares stop
+ * summing to one, a saved layout from last month that has to open
+ * rather than crash.
  *
  * The layout PERSISTS AS JSON in one string column. Deliberate: this
  * shape will keep changing, and a Convex validator for it would turn
  * every tweak into a migration of a personal preference blob. The
  * price is that nothing checks it on the way in — so `parseLayout`
- * trusts nothing, and every field of every panel is rebuilt from
- * whatever survives inspection.
+ * trusts nothing, and every node of the tree is rebuilt from whatever
+ * survives inspection.
  */
 
 // ---------------------------------------------------------------------
-// What a panel can hold
+// What a window can hold
 // ---------------------------------------------------------------------
 
 /**
@@ -30,7 +34,7 @@
  *
  * The Lookup tabs are separate kinds on purpose: "a spell lookup" is
  * what the DM adds, and one generic Lookup window whose kind lived in
- * panel state would be a second copy of the tab strip to keep in step.
+ * group state would be a second copy of the tab strip to keep in step.
  */
 export const DM_PANEL_KINDS = [
   "spells",
@@ -79,45 +83,211 @@ export interface DmTab {
   noteId?: string;
 }
 
-export interface DmPanel {
+// ---------------------------------------------------------------------
+// The tree
+// ---------------------------------------------------------------------
+
+/** A leaf: one window frame holding a stack of tabs. */
+export interface DmGroup {
+  type: "group";
   id: number;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
   tabs: DmTab[];
   /** Index into tabs. */
   active: number;
 }
 
-export interface DmLayout {
-  /** Back-to-front: the last panel draws on top. */
-  panels: DmPanel[];
-  nextId: number;
+/**
+ * An interior node: children laid side by side ("row") or stacked
+ * ("col"), each taking `sizes[i]` of the space after dividers.
+ * `sizes` sums to 1 — every operation below preserves that, and the
+ * parser restores it, because a sum that drifts reads as windows
+ * slowly shrinking away from the right edge.
+ */
+export interface DmSplit {
+  type: "split";
+  id: number;
+  dir: "row" | "col";
+  children: DmNode[];
+  sizes: number[];
 }
 
-export const MIN_PANEL_W = 260;
-export const MIN_PANEL_H = 180;
+export type DmNode = DmGroup | DmSplit;
 
-/** How close an edge has to be before it snaps, in px. */
-export const SNAP_PX = 8;
+export interface DmLayout {
+  /** Null only when every window has been closed. */
+  root: DmNode | null;
+  nextId: number;
+  /** The group new windows land in — the last one touched. */
+  focused: number | null;
+}
+
+/** The bar between two windows. CSS states this again; a guard pins them. */
+export const DIVIDER_PX = 6;
+
+/** No window may be squeezed thinner than this by a divider drag. */
+export const MIN_TILE_PX = 120;
+
+/** A window docked to the canvas edge takes this share of the screen. */
+export const DOCK_FRAC = 0.25;
+
+/**
+ * How far inside a window its edge drop zones reach, as a fraction of
+ * its size. Inside the middle box is a tab drop, Premiere-style.
+ */
+export const EDGE_ZONE = 0.25;
+
+/** Within this many px of the canvas boundary, the drop is a full-edge dock. */
+export const ROOT_EDGE_PX = 16;
+
+export type DmEdge = "left" | "right" | "top" | "bottom";
+
+/** Where a dragged window or tab would land, shown before it does. */
+export type DmDropTarget =
+  | { type: "tabs"; group: number }
+  | { type: "edge"; group: number; edge: DmEdge }
+  | { type: "root"; edge: DmEdge };
+
+export interface DmRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+// ---------------------------------------------------------------------
+// Walking
+// ---------------------------------------------------------------------
+
+export function findGroup(node: DmNode | null, id: number): DmGroup | null {
+  if (!node) return null;
+  if (node.type === "group") return node.id === id ? node : null;
+  for (const c of node.children) {
+    const hit = findGroup(c, id);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function findSplit(node: DmNode | null, id: number): DmSplit | null {
+  if (!node || node.type !== "split") return null;
+  if (node.id === id) return node;
+  for (const c of node.children) {
+    const hit = findSplit(c, id);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/** Every group, left-to-right, top-to-bottom — tree order is reading order. */
+export function allGroups(node: DmNode | null): DmGroup[] {
+  if (!node) return [];
+  if (node.type === "group") return [node];
+  return node.children.flatMap(allGroups);
+}
+
+const clone = (layout: DmLayout): DmLayout =>
+  JSON.parse(JSON.stringify(layout)) as DmLayout;
 
 // ---------------------------------------------------------------------
 // Parsing — the only door stored JSON comes through
 // ---------------------------------------------------------------------
 
-const num = (v: unknown, fallback: number): number =>
-  typeof v === "number" && Number.isFinite(v) ? Math.round(v) : fallback;
+const isNum = (v: unknown): v is number =>
+  typeof v === "number" && Number.isFinite(v);
 
 /**
- * A stored layout, rebuilt field by field.
+ * `sizes` restored to a clean distribution: one positive number per
+ * child, summing to 1. A stored array that is missing, short, or
+ * carrying zeros and negatives is replaced with equal shares rather
+ * than guessed at.
+ */
+function cleanSizes(raw: unknown, count: number): number[] {
+  const even = () => Array.from({ length: count }, () => 1 / count);
+  if (!Array.isArray(raw) || raw.length !== count) return even();
+  const nums = raw.map((v) => (isNum(v) && v > 0 ? v : NaN));
+  if (nums.some((v) => Number.isNaN(v))) return even();
+  const sum = nums.reduce((a, b) => a + b, 0);
+  if (!(sum > 0)) return even();
+  // Normalise only when actually off — exact stored shares round-trip.
+  if (Math.abs(sum - 1) < 0.001) return nums;
+  return nums.map((v) => v / sum);
+}
+
+function parseNode(
+  raw: unknown,
+  validNoteIds: ReadonlySet<string>
+): DmNode | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+
+  if (o.type === "group") {
+    const kinds = new Set<string>(DM_PANEL_KINDS);
+    const tabs: DmTab[] = [];
+    for (const t of Array.isArray(o.tabs) ? o.tabs : []) {
+      if (!t || typeof t !== "object") continue;
+      const kind = (t as Record<string, unknown>).kind;
+      if (typeof kind !== "string" || !kinds.has(kind)) continue;
+      if (kind === "note") {
+        const noteId = (t as Record<string, unknown>).noteId;
+        if (typeof noteId !== "string" || !validNoteIds.has(noteId)) continue;
+        tabs.push({ kind, noteId });
+      } else {
+        tabs.push({ kind: kind as DmPanelKind });
+      }
+    }
+    if (tabs.length === 0) return null;
+    return {
+      type: "group",
+      id: isNum(o.id) ? Math.round(o.id) : 0,
+      tabs,
+      active: Math.min(
+        Math.max(0, isNum(o.active) ? Math.round(o.active) : 0),
+        tabs.length - 1
+      ),
+    };
+  }
+
+  if (o.type === "split") {
+    const childrenIn = Array.isArray(o.children) ? o.children : [];
+    const sizesIn = Array.isArray(o.sizes) ? o.sizes : [];
+    const children: DmNode[] = [];
+    const sizes: unknown[] = [];
+    childrenIn.forEach((c, i) => {
+      const node = parseNode(c, validNoteIds);
+      if (node) {
+        children.push(node);
+        sizes.push(sizesIn[i]);
+      }
+    });
+    if (children.length === 0) return null;
+    // A split of one is not a split — the child stands where it stood,
+    // at full size, rather than wrapped in a frame that divides nothing.
+    if (children.length === 1) return children[0];
+    return {
+      type: "split",
+      id: isNum(o.id) ? Math.round(o.id) : 0,
+      dir: o.dir === "col" ? "col" : "row",
+      children,
+      sizes: cleanSizes(sizes, children.length),
+    };
+  }
+
+  return null;
+}
+
+/**
+ * A stored layout, rebuilt node by node.
  *
  * `validNoteIds` is the set of note documents that still exist: a note
  * tab whose document was deleted elsewhere is dropped here rather than
- * rendered as an empty pane titled "Note". A panel with no surviving
- * tabs goes too, and a layout with no surviving panels returns null so
- * the caller falls back to the default rather than presenting an empty
- * screen as a choice somebody made.
+ * rendered as an empty pane titled "Note". A group with no surviving
+ * tabs goes too — its siblings absorb the space — and a layout with
+ * nothing left returns null so the caller falls back to the default
+ * rather than presenting an empty screen as a choice somebody made.
+ *
+ * Layouts from the floating era (a `panels` array) also come back
+ * null: a pile of overlapping rectangles has no faithful place in a
+ * tiling, so the default steps in rather than a guessed conversion.
  */
 export function parseLayout(
   raw: string | null | undefined,
@@ -132,50 +302,42 @@ export function parseLayout(
     return null;
   }
   if (!data || typeof data !== "object") return null;
+  const o = data as Record<string, unknown>;
 
-  const panelsIn = (data as { panels?: unknown }).panels;
-  if (!Array.isArray(panelsIn)) return null;
+  const root = parseNode(o.root, validNoteIds);
+  if (!root) return null;
 
-  const kinds = new Set<string>(DM_PANEL_KINDS);
-  const panels: DmPanel[] = [];
+  // Ids must be unique — drops and closes address nodes by id, and a
+  // duplicate means "some other window moves when this one is dragged".
+  // Invalid and repeated ids are reassigned past the highest survivor.
   let maxId = 0;
-
-  for (const p of panelsIn) {
-    if (!p || typeof p !== "object") continue;
-    const o = p as Record<string, unknown>;
-
-    const tabs: DmTab[] = [];
-    for (const t of Array.isArray(o.tabs) ? o.tabs : []) {
-      if (!t || typeof t !== "object") continue;
-      const kind = (t as Record<string, unknown>).kind;
-      if (typeof kind !== "string" || !kinds.has(kind)) continue;
-      if (kind === "note") {
-        const noteId = (t as Record<string, unknown>).noteId;
-        if (typeof noteId !== "string" || !validNoteIds.has(noteId)) continue;
-        tabs.push({ kind, noteId });
-      } else {
-        tabs.push({ kind: kind as DmPanelKind });
-      }
+  const seen = new Set<number>();
+  const scan = (n: DmNode) => {
+    if (n.id > 0 && !seen.has(n.id)) {
+      seen.add(n.id);
+      maxId = Math.max(maxId, n.id);
     }
-    if (tabs.length === 0) continue;
+    if (n.type === "split") n.children.forEach(scan);
+  };
+  scan(root);
+  const fix = (n: DmNode) => {
+    if (n.id <= 0 || !seen.has(n.id)) n.id = ++maxId;
+    else seen.delete(n.id);
+    if (n.type === "split") n.children.forEach(fix);
+  };
+  // `seen` now holds each id once; fix() spends them, so a SECOND node
+  // claiming a spent id reads as unseen and gets a fresh one.
+  fix(root);
 
-    const id = num(o.id, 0);
-    if (id <= 0) continue;
-    maxId = Math.max(maxId, id);
+  const focusedIn = isNum(o.focused) ? Math.round(o.focused) : null;
+  const focused =
+    focusedIn !== null && findGroup(root, focusedIn) ? focusedIn : null;
 
-    panels.push({
-      id,
-      x: num(o.x, 0),
-      y: num(o.y, 0),
-      w: Math.max(MIN_PANEL_W, num(o.w, MIN_PANEL_W)),
-      h: Math.max(MIN_PANEL_H, num(o.h, MIN_PANEL_H)),
-      tabs,
-      active: Math.min(Math.max(0, num(o.active, 0)), tabs.length - 1),
-    });
-  }
-
-  if (panels.length === 0) return null;
-  return { panels, nextId: Math.max(maxId + 1, num((data as Record<string, unknown>).nextId, 1)) };
+  return {
+    root,
+    nextId: Math.max(maxId + 1, isNum(o.nextId) ? Math.round(o.nextId) : 1),
+    focused,
+  };
 }
 
 export function serializeLayout(layout: DmLayout): string {
@@ -184,272 +346,472 @@ export function serializeLayout(layout: DmLayout): string {
 
 /**
  * The screen a DM sees before arranging anything: the reference panel
- * the old DM Screen WAS — conditions and death saves — plus a monster
- * lookup beside it, so the first visit shows the idea rather than an
- * empty grey field with a menu.
+ * the old DM Screen WAS — conditions and death saves — beside a
+ * monster-and-spell lookup stack, so the first visit shows the idea
+ * rather than an empty grey field with a menu.
  */
-export function defaultLayout(view: { w: number; h: number }): DmLayout {
-  const gap = 16;
-  const half = Math.max(MIN_PANEL_W, Math.round((view.w - gap * 3) / 2));
-  const height = Math.max(MIN_PANEL_H, view.h - gap * 2);
+export function defaultLayout(): DmLayout {
   return {
-    panels: [
-      {
-        id: 1,
-        x: gap,
-        y: gap,
-        w: half,
-        h: height,
-        tabs: [{ kind: "reference" }],
-        active: 0,
-      },
-      {
-        id: 2,
-        x: gap * 2 + half,
-        y: gap,
-        w: half,
-        h: height,
-        tabs: [{ kind: "monsters" }, { kind: "spells" }],
-        active: 0,
-      },
-    ],
-    nextId: 3,
+    root: {
+      type: "split",
+      id: 3,
+      dir: "row",
+      children: [
+        { type: "group", id: 1, tabs: [{ kind: "reference" }], active: 0 },
+        {
+          type: "group",
+          id: 2,
+          tabs: [{ kind: "monsters" }, { kind: "spells" }],
+          active: 0,
+        },
+      ],
+      sizes: [0.5, 0.5],
+    },
+    nextId: 4,
+    focused: 2,
   };
 }
 
 // ---------------------------------------------------------------------
-// Arranging
+// Geometry — where the tree puts each window
 // ---------------------------------------------------------------------
 
-/** The panel, brought to the front. Order IS the z-order. */
-export function bringToFront(layout: DmLayout, panelId: number): DmLayout {
-  const at = layout.panels.findIndex((p) => p.id === panelId);
-  if (at === -1 || at === layout.panels.length - 1) return layout;
-  const panels = [...layout.panels];
-  const [p] = panels.splice(at, 1);
-  panels.push(p);
-  return { ...layout, panels };
-}
-
-export function patchPanel(
+/**
+ * Every group's rectangle, computed from the shares. The flexbox that
+ * renders the tree and this arithmetic must agree — dividers take
+ * DIVIDER_PX each, children share what remains — because these rects
+ * are what the drop zones are measured against.
+ */
+export function layoutRects(
   layout: DmLayout,
-  panelId: number,
-  patch: Partial<DmPanel>
-): DmLayout {
-  return {
-    ...layout,
-    panels: layout.panels.map((p) =>
-      p.id === panelId ? { ...p, ...patch } : p
-    ),
+  view: { w: number; h: number },
+  dividerPx = DIVIDER_PX
+): Map<number, DmRect> {
+  const out = new Map<number, DmRect>();
+  const walk = (node: DmNode, rect: DmRect) => {
+    if (node.type === "group") {
+      out.set(node.id, rect);
+      return;
+    }
+    const row = node.dir === "row";
+    const total = row ? rect.w : rect.h;
+    const avail = Math.max(0, total - dividerPx * (node.children.length - 1));
+    let at = row ? rect.x : rect.y;
+    node.children.forEach((child, i) => {
+      const size = node.sizes[i] * avail;
+      walk(
+        child,
+        row
+          ? { x: at, y: rect.y, w: size, h: rect.h }
+          : { x: rect.x, y: at, w: rect.w, h: size }
+      );
+      at += size + dividerPx;
+    });
   };
+  if (layout.root) walk(layout.root, { x: 0, y: 0, w: view.w, h: view.h });
+  return out;
 }
 
 /**
- * A new window for `kind`, cascaded from the top-left.
+ * Which drop the pointer is proposing, Premiere's zones exactly:
+ * within reach of the canvas boundary it is a full-edge dock; over a
+ * window's tab strip, or the middle box of its body, it stacks as a
+ * tab; over the outer quarter on any side it splits that side. The
+ * canvas edge is checked FIRST — near the boundary both readings
+ * apply, and the full-length dock is the one the highlight promised.
+ */
+export function dropTargetAt(
+  layout: DmLayout,
+  point: { x: number; y: number },
+  view: { w: number; h: number },
+  headerPx: number
+): DmDropTarget | null {
+  if (!layout.root) return null;
+
+  const toEdge: [DmEdge, number][] = [
+    ["left", point.x],
+    ["right", view.w - point.x],
+    ["top", point.y],
+    ["bottom", view.h - point.y],
+  ];
+  toEdge.sort((a, b) => a[1] - b[1]);
+  if (toEdge[0][1] <= ROOT_EDGE_PX) {
+    return { type: "root", edge: toEdge[0][0] };
+  }
+
+  for (const [id, r] of layoutRects(layout, view)) {
+    if (
+      point.x < r.x ||
+      point.x > r.x + r.w ||
+      point.y < r.y ||
+      point.y > r.y + r.h
+    ) {
+      continue;
+    }
+    if (point.y <= r.y + headerPx) return { type: "tabs", group: id };
+    const nx = r.w > 0 ? (point.x - r.x) / r.w : 0.5;
+    const ny = r.h > 0 ? (point.y - r.y) / r.h : 0.5;
+    const zones: [DmEdge, number][] = [
+      ["left", nx],
+      ["right", 1 - nx],
+      ["top", ny],
+      ["bottom", 1 - ny],
+    ];
+    zones.sort((a, b) => a[1] - b[1]);
+    if (zones[0][1] > EDGE_ZONE) return { type: "tabs", group: id };
+    return { type: "edge", group: id, edge: zones[0][0] };
+  }
+  return null;
+}
+
+/**
+ * The highlight for a proposed drop — the space the window WILL take,
+ * drawn before it does. A tab drop lights the strip it would join; an
+ * edge drop lights the half being given up; a canvas-edge drop lights
+ * the full length of that side at the share it will get.
+ */
+export function dropPreviewRect(
+  layout: DmLayout,
+  target: DmDropTarget,
+  view: { w: number; h: number },
+  headerPx: number
+): DmRect | null {
+  if (target.type === "root") {
+    const dw = Math.round(view.w * DOCK_FRAC);
+    const dh = Math.round(view.h * DOCK_FRAC);
+    switch (target.edge) {
+      case "left":
+        return { x: 0, y: 0, w: dw, h: view.h };
+      case "right":
+        return { x: view.w - dw, y: 0, w: dw, h: view.h };
+      case "top":
+        return { x: 0, y: 0, w: view.w, h: dh };
+      case "bottom":
+        return { x: 0, y: view.h - dh, w: view.w, h: dh };
+    }
+  }
+  const r = layoutRects(layout, view).get(target.group);
+  if (!r) return null;
+  if (target.type === "tabs") return { x: r.x, y: r.y, w: r.w, h: headerPx };
+  switch (target.edge) {
+    case "left":
+      return { x: r.x, y: r.y, w: r.w / 2, h: r.h };
+    case "right":
+      return { x: r.x + r.w / 2, y: r.y, w: r.w / 2, h: r.h };
+    case "top":
+      return { x: r.x, y: r.y, w: r.w, h: r.h / 2 };
+    case "bottom":
+      return { x: r.x, y: r.y + r.h / 2, w: r.w, h: r.h / 2 };
+  }
+}
+
+// ---------------------------------------------------------------------
+// Rearranging — every mutation keeps the tiling whole
+// ---------------------------------------------------------------------
+
+/**
+ * The node removed from the tree, siblings absorbing its share.
  *
- * Cascade rather than centre: three panels added in a row must not
- * land in one pile where only the last is visible and the other two
- * read as "the menu did nothing".
+ * The invariants live here: a split never keeps a hole (the removed
+ * child's share is redistributed pro rata), and a split of one child
+ * collapses into that child — so the space a window leaves is always
+ * immediately owned by its neighbours, never by the background.
  */
-export function addPanel(
-  layout: DmLayout,
-  tab: DmTab,
-  view: { w: number; h: number }
-): DmLayout {
-  const step = 32;
-  const n = layout.panels.length;
-  const w = Math.min(480, Math.max(MIN_PANEL_W, Math.round(view.w * 0.38)));
-  const h = Math.min(560, Math.max(MIN_PANEL_H, Math.round(view.h * 0.6)));
-  const x = Math.min(24 + (n % 8) * step, Math.max(0, view.w - w));
-  const y = Math.min(24 + (n % 8) * step, Math.max(0, view.h - h));
-
-  return {
-    panels: [
-      ...layout.panels,
-      { id: layout.nextId, x, y, w, h, tabs: [tab], active: 0 },
-    ],
-    nextId: layout.nextId + 1,
+function detachNode(layout: DmLayout, id: number): DmNode | null {
+  if (!layout.root) return null;
+  if (layout.root.id === id) {
+    const detached = layout.root;
+    layout.root = null;
+    return detached;
+  }
+  let detached: DmNode | null = null;
+  const walk = (node: DmNode, parent: DmSplit | null): DmNode | null => {
+    if (node.type === "group") return node;
+    const at = node.children.findIndex((c) => c.id === id);
+    if (at !== -1) {
+      detached = node.children[at];
+      node.children.splice(at, 1);
+      node.sizes.splice(at, 1);
+      const sum = node.sizes.reduce((a, b) => a + b, 0);
+      node.sizes = node.sizes.map((s) => (sum > 0 ? s / sum : 1));
+      if (node.children.length === 1) return node.children[0];
+      return node;
+    }
+    node.children = node.children.map((c) => walk(c, node) ?? c);
+    if (node.children.length === 1) return node.children[0];
+    return node;
   };
+  layout.root = walk(layout.root, null);
+  return detached;
+}
+
+const dirOf = (edge: DmEdge): "row" | "col" =>
+  edge === "left" || edge === "right" ? "row" : "col";
+
+const firstOf = (edge: DmEdge): boolean =>
+  edge === "left" || edge === "top";
+
+/**
+ * `node` docked against one side of group `groupId`, which gives up
+ * half its space. Where the group already sits in a split running the
+ * same way, the newcomer joins that split as a sibling — Premiere
+ * extends the run rather than nesting a frame inside a frame.
+ */
+function insertAtGroupEdge(
+  layout: DmLayout,
+  groupId: number,
+  node: DmNode,
+  edge: DmEdge
+): boolean {
+  const dir = dirOf(edge);
+  const before = firstOf(edge);
+  if (!layout.root) return false;
+
+  const wrap = (target: DmNode): DmSplit => ({
+    type: "split",
+    id: layout.nextId++,
+    dir,
+    children: before ? [node, target] : [target, node],
+    sizes: [0.5, 0.5],
+  });
+
+  if (layout.root.type === "group" && layout.root.id === groupId) {
+    layout.root = wrap(layout.root);
+    return true;
+  }
+  let done = false;
+  const walk = (split: DmSplit) => {
+    if (done) return;
+    const at = split.children.findIndex(
+      (c) => c.type === "group" && c.id === groupId
+    );
+    if (at !== -1) {
+      if (split.dir === dir) {
+        const share = split.sizes[at] / 2;
+        split.sizes[at] = share;
+        split.children.splice(before ? at : at + 1, 0, node);
+        split.sizes.splice(before ? at : at + 1, 0, share);
+      } else {
+        split.children[at] = wrap(split.children[at]);
+      }
+      done = true;
+      return;
+    }
+    for (const c of split.children) {
+      if (c.type === "split") walk(c);
+    }
+  };
+  if (layout.root.type === "split") walk(layout.root);
+  return done;
 }
 
 /**
- * One tab closed. A panel losing its last tab closes with it — an
- * empty window has nothing left to say and no reason to hold its
- * ground on the screen.
+ * `node` docked the full length of one canvas edge at DOCK_FRAC of the
+ * screen, everything already there scaled into the rest. A root split
+ * already running that way takes it as a new first or last child.
+ */
+function insertAtRootEdge(layout: DmLayout, node: DmNode, edge: DmEdge) {
+  const dir = dirOf(edge);
+  const before = firstOf(edge);
+  if (!layout.root) {
+    layout.root = node;
+    return;
+  }
+  if (layout.root.type === "split" && layout.root.dir === dir) {
+    const scaled = layout.root.sizes.map((s) => s * (1 - DOCK_FRAC));
+    layout.root.children.splice(
+      before ? 0 : layout.root.children.length,
+      0,
+      node
+    );
+    layout.root.sizes = before
+      ? [DOCK_FRAC, ...scaled]
+      : [...scaled, DOCK_FRAC];
+    return;
+  }
+  layout.root = {
+    type: "split",
+    id: layout.nextId++,
+    dir,
+    children: before ? [node, layout.root] : [layout.root, node],
+    sizes: before ? [DOCK_FRAC, 1 - DOCK_FRAC] : [1 - DOCK_FRAC, DOCK_FRAC],
+  };
+}
+
+/** Tabs stacked into a group; the first arrival is the one on top. */
+function mergeTabsInto(layout: DmLayout, groupId: number, tabs: DmTab[]) {
+  const group = findGroup(layout.root, groupId);
+  if (!group) return false;
+  group.active = group.tabs.length;
+  group.tabs = [...group.tabs, ...tabs];
+  layout.focused = groupId;
+  return true;
+}
+
+/**
+ * One tab carried to a drop target. The tab leaves its group — which
+ * closes if that was its last — and lands as a stack member or as a
+ * new window splitting the target's space.
+ */
+export function moveTab(
+  layout: DmLayout,
+  fromGroup: number,
+  tabIndex: number,
+  target: DmDropTarget
+): DmLayout {
+  const source = findGroup(layout.root, fromGroup);
+  const tab = source?.tabs[tabIndex];
+  if (!source || !tab) return layout;
+  // Back onto its own strip is where it already lives; splitting a
+  // window against itself when it holds nothing else is the same.
+  if (target.type !== "root" && target.group === fromGroup) {
+    if (target.type === "tabs" || source.tabs.length === 1) return layout;
+  }
+
+  const l = clone(layout);
+  const from = findGroup(l.root, fromGroup)!;
+  from.tabs.splice(tabIndex, 1);
+  from.active = Math.min(from.active, from.tabs.length - 1);
+  if (from.tabs.length === 0) detachNode(l, fromGroup);
+
+  if (target.type === "tabs") {
+    if (!mergeTabsInto(l, target.group, [tab])) return layout;
+    return l;
+  }
+  const node: DmGroup = { type: "group", id: l.nextId++, tabs: [tab], active: 0 };
+  if (target.type === "edge") {
+    if (!insertAtGroupEdge(l, target.group, node, target.edge)) return layout;
+  } else {
+    insertAtRootEdge(l, node, target.edge);
+  }
+  l.focused = node.id;
+  return l;
+}
+
+/**
+ * A whole window carried to a drop target, tabs and all — the header
+ * drag. Same landings as a tab; the window keeps its identity when it
+ * splits and dissolves into the stack when it docks as tabs.
+ */
+export function moveGroup(
+  layout: DmLayout,
+  groupId: number,
+  target: DmDropTarget
+): DmLayout {
+  if (target.type !== "root" && target.group === groupId) return layout;
+  if (!findGroup(layout.root, groupId)) return layout;
+
+  const l = clone(layout);
+  const detached = detachNode(l, groupId);
+  if (!detached || detached.type !== "group") return layout;
+
+  if (target.type === "tabs") {
+    if (!mergeTabsInto(l, target.group, detached.tabs)) return layout;
+    return l;
+  }
+  if (target.type === "edge") {
+    if (!insertAtGroupEdge(l, target.group, detached, target.edge)) {
+      return layout;
+    }
+  } else {
+    insertAtRootEdge(l, detached, target.edge);
+  }
+  l.focused = groupId;
+  return l;
+}
+
+/**
+ * A new window for `tab`, stacked into the focused group — the one
+ * last touched — or standing alone as the whole screen when nothing
+ * is open. Adding never splits: where the new window should LIVE is
+ * exactly what dragging is for, and a guess would put it somewhere
+ * arbitrary to be moved anyway.
+ */
+export function addTab(layout: DmLayout, tab: DmTab): DmLayout {
+  const l = clone(layout);
+  if (!l.root) {
+    const node: DmGroup = {
+      type: "group",
+      id: l.nextId++,
+      tabs: [tab],
+      active: 0,
+    };
+    l.root = node;
+    l.focused = node.id;
+    return l;
+  }
+  const groups = allGroups(l.root);
+  const home =
+    (l.focused !== null && groups.find((g) => g.id === l.focused)) ||
+    groups[0];
+  home.tabs = [...home.tabs, tab];
+  home.active = home.tabs.length - 1;
+  l.focused = home.id;
+  return l;
+}
+
+/**
+ * One tab closed. A window losing its last tab closes with it, and its
+ * neighbours absorb the space — the tiling never keeps a hole open.
  */
 export function closeTab(
   layout: DmLayout,
-  panelId: number,
+  groupId: number,
   tabIndex: number
 ): DmLayout {
-  const panels = layout.panels.flatMap((p) => {
-    if (p.id !== panelId) return [p];
-    const tabs = p.tabs.filter((_, i) => i !== tabIndex);
-    if (tabs.length === 0) return [];
-    return [{ ...p, tabs, active: Math.min(p.active, tabs.length - 1) }];
-  });
-  return { ...layout, panels };
+  const l = clone(layout);
+  const group = findGroup(l.root, groupId);
+  if (!group || !group.tabs[tabIndex]) return layout;
+  group.tabs.splice(tabIndex, 1);
+  group.active = Math.min(group.active, group.tabs.length - 1);
+  if (group.tabs.length === 0) detachNode(l, groupId);
+  if (l.focused !== null && !findGroup(l.root, l.focused)) {
+    l.focused = allGroups(l.root)[0]?.id ?? null;
+  }
+  return l;
 }
 
-/**
- * Every tab of `sourceId` stacked into `targetId` — dropping a window
- * onto another's header. The moved tabs land at the end and the first
- * of them becomes active, because the thing you just dropped is the
- * thing you mean to be looking at.
- */
-export function mergePanels(
+export function setActiveTab(
   layout: DmLayout,
-  sourceId: number,
-  targetId: number
+  groupId: number,
+  tabIndex: number
 ): DmLayout {
-  if (sourceId === targetId) return layout;
-  const source = layout.panels.find((p) => p.id === sourceId);
-  const target = layout.panels.find((p) => p.id === targetId);
-  if (!source || !target) return layout;
+  const l = clone(layout);
+  const group = findGroup(l.root, groupId);
+  if (!group || !group.tabs[tabIndex]) return layout;
+  group.active = tabIndex;
+  l.focused = groupId;
+  return l;
+}
 
-  const panels = layout.panels
-    .filter((p) => p.id !== sourceId)
-    .map((p) =>
-      p.id === targetId
-        ? { ...p, tabs: [...p.tabs, ...source.tabs], active: p.tabs.length }
-        : p
-    );
-  return bringToFront({ ...layout, panels }, targetId);
+export function focusGroup(layout: DmLayout, groupId: number): DmLayout {
+  if (layout.focused === groupId || !findGroup(layout.root, groupId)) {
+    return layout;
+  }
+  return { ...layout, focused: groupId };
 }
 
 /**
- * One tab torn out of a stack into its own window at `at`.
- *
- * The new window keeps the old one's SIZE: a tab dragged out of a big
- * reference stack is probably going to be read at the size it was
- * being read at, and a hardcoded default would make every tear-off a
- * resize chore. No-op on a single-tab panel — that is a move, and the
- * caller handles moves.
+ * The divider between children `index` and `index + 1` of a split,
+ * dragged by `delta` (a fraction of the split's span): one neighbour
+ * grows by exactly what the other gives up, every other child holds
+ * still, and neither may pass `minFrac` — the pixel minimum, expressed
+ * as a share by the caller who knows the pixels.
  */
-export function tearOffTab(
+export function resizeSplit(
   layout: DmLayout,
-  panelId: number,
-  tabIndex: number,
-  at: { x: number; y: number }
+  splitId: number,
+  index: number,
+  delta: number,
+  minFrac: number
 ): DmLayout {
-  const panel = layout.panels.find((p) => p.id === panelId);
-  if (!panel || panel.tabs.length < 2) return layout;
-  const tab = panel.tabs[tabIndex];
-  if (!tab) return layout;
-
-  const remaining = {
-    ...panel,
-    tabs: panel.tabs.filter((_, i) => i !== tabIndex),
-    active: 0,
-  };
-  return {
-    panels: [
-      ...layout.panels.map((p) => (p.id === panelId ? remaining : p)),
-      {
-        id: layout.nextId,
-        x: Math.round(at.x),
-        y: Math.round(at.y),
-        w: panel.w,
-        h: panel.h,
-        tabs: [tab],
-        active: 0,
-      },
-    ],
-    nextId: layout.nextId + 1,
-  };
-}
-
-// ---------------------------------------------------------------------
-// Snapping — what "align them" means while dragging
-// ---------------------------------------------------------------------
-
-export interface SnapResult {
-  x: number;
-  y: number;
-  /** Vertical guide lines to draw, as x positions. */
-  vGuides: number[];
-  /** Horizontal guide lines, as y positions. */
-  hGuides: number[];
-}
-
-/**
- * The dragged box, pulled onto nearby edges.
- *
- * Both edges of the box are candidates against both edges of every
- * other panel and the canvas itself, which is what makes windows butt
- * up flush instead of hovering a few pixels apart. Nearest candidate
- * wins per axis; a tie keeps the earlier (left/top) edge, so the
- * result is deterministic rather than dependent on panel order.
- */
-export function snapBox(
-  box: { x: number; y: number; w: number; h: number },
-  others: readonly { x: number; y: number; w: number; h: number }[],
-  view: { w: number; h: number },
-  threshold = SNAP_PX
-): SnapResult {
-  const vTargets = [0, view.w];
-  const hTargets = [0, view.h];
-  for (const o of others) {
-    vTargets.push(o.x, o.x + o.w);
-    hTargets.push(o.y, o.y + o.h);
-  }
-
-  let x = box.x;
-  let bestV = threshold + 1;
-  const vGuides: number[] = [];
-  for (const t of vTargets) {
-    for (const edge of [box.x, box.x + box.w]) {
-      const d = Math.abs(edge - t);
-      if (d < bestV) {
-        bestV = d;
-        x = box.x + (t - edge);
-        vGuides.length = 0;
-        vGuides.push(t);
-      }
-    }
-  }
-
-  let y = box.y;
-  let bestH = threshold + 1;
-  const hGuides: number[] = [];
-  for (const t of hTargets) {
-    for (const edge of [box.y, box.y + box.h]) {
-      const d = Math.abs(edge - t);
-      if (d < bestH) {
-        bestH = d;
-        y = box.y + (t - edge);
-        hGuides.length = 0;
-        hGuides.push(t);
-      }
-    }
-  }
-
-  return { x: Math.round(x), y: Math.round(y), vGuides, hGuides };
-}
-
-/**
- * Which panel's HEADER the pointer is over, for drop-to-merge.
- *
- * Front-most wins where headers overlap, which is why the panels are
- * walked back to front — the one you can see is the one you drop into.
- */
-export function panelHeaderAt(
-  layout: DmLayout,
-  point: { x: number; y: number },
-  headerHeight: number,
-  ignoreId?: number
-): number | null {
-  for (let i = layout.panels.length - 1; i >= 0; i--) {
-    const p = layout.panels[i];
-    if (p.id === ignoreId) continue;
-    if (
-      point.x >= p.x &&
-      point.x <= p.x + p.w &&
-      point.y >= p.y &&
-      point.y <= p.y + headerHeight
-    ) {
-      return p.id;
-    }
-  }
-  return null;
+  const l = clone(layout);
+  const split = findSplit(l.root, splitId);
+  if (!split || index < 0 || index + 1 >= split.sizes.length) return layout;
+  const pair = split.sizes[index] + split.sizes[index + 1];
+  const lo = Math.min(minFrac, pair / 2);
+  const a = Math.min(Math.max(split.sizes[index] + delta, lo), pair - lo);
+  split.sizes[index] = a;
+  split.sizes[index + 1] = pair - a;
+  return l;
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -20,25 +21,30 @@ import {
   trackScrapbookSelection,
 } from "@/components/notebookFormat";
 import {
+  DIVIDER_PX,
   DM_PANEL_KINDS,
   DM_PANEL_TITLES,
+  DmDropTarget,
+  DmGroup,
   DmLayout,
-  DmPanel,
+  DmNode,
   DmPanelKind,
+  DmSplit,
   DmTab,
-  MIN_PANEL_H,
-  MIN_PANEL_W,
-  addPanel,
-  bringToFront,
+  MIN_TILE_PX,
+  addTab,
   closeTab,
   defaultLayout,
-  mergePanels,
-  panelHeaderAt,
+  dropPreviewRect,
+  dropTargetAt,
+  findGroup,
+  focusGroup,
+  moveGroup,
+  moveTab,
   parseLayout,
-  patchPanel,
+  resizeSplit,
   serializeLayout,
-  snapBox,
-  tearOffTab,
+  setActiveTab,
 } from "@/components/dmScreenModel";
 import { LookupTool } from "@/components/LookupTool";
 import { ChatTool } from "@/components/ChatTool";
@@ -52,13 +58,14 @@ import { SessionTable } from "@/components/SessionTable";
 /**
  * The DM Screen — the physical screen you sit behind, made of windows.
  *
- * Premiere's model, asked for by name: floating panels the DM arranges,
- * each hosting one of this app's tools, a rich-text note, or the rules
- * reference the old static screen was. Windows drag by their header,
- * resize by their corner, SNAP to each other's edges while dragging
- * (which is what "align them" means in practice), and stack into one
- * another as tabs — drop a window on another's header and they share a
- * frame; drag a tab out and it is a window again.
+ * Premiere's docking, matched to four filmed scenarios: the screen is
+ * ONE TILING — windows always fill the whole canvas, edge to edge,
+ * never floating, never overlapping. Dragging a window over another's
+ * side highlights the half it would take and splits it on release;
+ * over the tab strip or the centre, it stacks in as a tab; against
+ * the canvas's own edge, it docks the full length of that side. The
+ * bar between two windows drags to resize both at once. The highlight
+ * always shows the landing before the drop commits it.
  *
  * The arrangement autosaves per person per campaign, and the Workspaces
  * menu keeps named copies of it: save the combat setup, save the prep
@@ -66,18 +73,21 @@ import { SessionTable } from "@/components/SessionTable";
  * the live screen is itself always saved, so nothing is lost beyond
  * the arrangement you just chose to leave.
  *
- * All the arithmetic — snapping, merging, tearing off, parsing stored
- * layouts — lives in components/dmScreenModel.ts where the unit guard can
- * reach it. This file is pointers and rendering.
+ * All the arithmetic — the tree, the drop zones, the shares, parsing
+ * stored layouts — lives in components/dmScreenModel.ts where the unit
+ * guard can reach it. This file is pointers and rendering.
  *
  * The DM check here hides a screen; the DATA is gated in
  * convex/dmscreen.ts, where every function goes through requireDm.
  */
 
-/** The tab strip's height — panelHeaderAt needs the same number. */
+/** The tab strip's height — the drop zones measure with the same number. */
 const HEADER_PX = 34;
 
 const SAVE_DEBOUNCE_MS = 800;
+
+/** Travel in px before a press reads as a drag rather than a click. */
+const DRAG_START_PX = 5;
 
 export function DmScreen({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const campaigns = useQuery(api.campaigns.myCampaigns);
@@ -111,16 +121,18 @@ function DmScreenBoard({ campaignId }: { campaignId: Id<"campaigns"> }) {
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const [layout, setLayoutRaw] = useState<DmLayout | null>(null);
-  const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({
-    v: [],
-    h: [],
-  });
+  const [drop, setDrop] = useState<DmDropTarget | null>(null);
   const [menu, setMenu] = useState<
     null | { kind: "add" | "workspaces"; x: number; y: number }
   >(null);
   const [error, setError] = useState<string | null>(null);
 
-  /** The canvas's size, for placement and clamping. */
+  // The drag handlers hit-test against the layout as it stands, not as
+  // it stood when the drag began — a click already refocused it.
+  const layoutRef = useRef<DmLayout | null>(null);
+  layoutRef.current = layout;
+
+  /** The canvas's size, the space every share is a fraction of. */
   const viewSize = useCallback(() => {
     const el = canvasRef.current;
     return el
@@ -146,10 +158,8 @@ function DmScreenBoard({ campaignId }: { campaignId: Id<"campaigns"> }) {
   useEffect(() => {
     if (screen === undefined || hydrated.current) return;
     hydrated.current = true;
-    setLayoutRaw(
-      parseLayout(screen?.layout, noteIds) ?? defaultLayout(viewSize())
-    );
-  }, [screen, noteIds, viewSize]);
+    setLayoutRaw(parseLayout(screen?.layout, noteIds) ?? defaultLayout());
+  }, [screen, noteIds]);
 
   /* A note deleted elsewhere leaves its tabs pointing at nothing;
      re-parsing this layout would drop them, but the cheap fix in place
@@ -201,69 +211,72 @@ function DmScreenBoard({ campaignId }: { campaignId: Id<"campaigns"> }) {
   // ---- the drags ----------------------------------------------------
 
   /**
-   * One handler for both gestures. Everything is computed from where
-   * the drag STARTED plus total travel, never incrementally — the same
-   * rule the feedback window follows, so a drag into an edge and back
-   * lands under the hand.
+   * One handler for tabs and headers. A press activates and focuses at
+   * once; only travel past the threshold makes it a drag. While
+   * dragging, every move re-reads the drop zone under the pointer and
+   * the highlight follows — the landing is shown before it happens,
+   * which is the half of Premiere's behaviour people actually feel.
+   * Release commits whatever the highlight last promised, or nothing.
    */
-  const beginPanelDrag = (
-    panel: DmPanel,
-    e: React.PointerEvent,
-    mode: "move" | "size"
+  const beginDrag = (
+    groupId: number,
+    tabIndex: number | null,
+    e: React.PointerEvent
   ) => {
     e.preventDefault();
     e.stopPropagation();
-    setLayout((cur) => bringToFront(cur, panel.id));
+    setLayout((cur) =>
+      tabIndex === null
+        ? focusGroup(cur, groupId)
+        : setActiveTab(cur, groupId, tabIndex)
+    );
+
     const startX = e.clientX;
     const startY = e.clientY;
-    const from = { x: panel.x, y: panel.y, w: panel.w, h: panel.h };
+    let dragging = false;
+    let target: DmDropTarget | null = null;
 
     const onMove = (ev: PointerEvent) => {
-      const dx = ev.clientX - startX;
-      const dy = ev.clientY - startY;
-      const view = viewSize();
-      if (mode === "move") {
-        setLayoutRaw((cur) => {
-          if (!cur) return cur;
-          dirty.current = true;
-          const others = cur.panels.filter((p) => p.id !== panel.id);
-          const snapped = snapBox(
-            { ...from, x: from.x + dx, y: from.y + dy },
-            others,
-            view
-          );
-          setGuides({ v: snapped.vGuides, h: snapped.hGuides });
-          return patchPanel(cur, panel.id, {
-            x: Math.max(0, Math.min(view.w - 48, snapped.x)),
-            y: Math.max(0, Math.min(view.h - HEADER_PX, snapped.y)),
-          });
-        });
-      } else {
-        setLayout((cur) =>
-          patchPanel(cur, panel.id, {
-            w: Math.max(MIN_PANEL_W, Math.min(from.w + dx, view.w - from.x)),
-            h: Math.max(MIN_PANEL_H, Math.min(from.h + dy, view.h - from.y)),
-          })
-        );
+      if (
+        !dragging &&
+        Math.hypot(ev.clientX - startX, ev.clientY - startY) < DRAG_START_PX
+      ) {
+        return;
       }
+      dragging = true;
+      const rect = canvasRef.current?.getBoundingClientRect();
+      const cur = layoutRef.current;
+      if (!rect || !cur) return;
+      const point = { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
+      let t = dropTargetAt(
+        cur,
+        point,
+        { w: rect.width, h: rect.height },
+        HEADER_PX
+      );
+      // A drop that would land the window exactly where it already is
+      // gets no highlight — Premiere goes dark over "nothing would
+      // change" rather than promising a move it will not make.
+      const group = findGroup(cur.root, groupId);
+      const whole = tabIndex === null || !group || group.tabs.length === 1;
+      if (t && t.type !== "root" && t.group === groupId) {
+        if (t.type === "tabs" || whole) t = null;
+      }
+      if (t?.type === "root" && whole && cur.root?.type === "group") t = null;
+      target = t;
+      setDrop(t);
     };
-    const onUp = (ev: PointerEvent) => {
+    const onUp = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
-      setGuides({ v: [], h: [] });
-
-      if (mode === "move") {
-        // Dropped on another panel's header: stack into it as tabs.
-        const rect = canvasRef.current?.getBoundingClientRect();
-        if (rect) {
-          const point = { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
-          setLayout((cur) => {
-            const target = panelHeaderAt(cur, point, HEADER_PX, panel.id);
-            return target === null
-              ? cur
-              : mergePanels(cur, panel.id, target);
-          });
-        }
+      setDrop(null);
+      if (dragging && target) {
+        const commit = target;
+        setLayout((cur) =>
+          tabIndex === null
+            ? moveGroup(cur, groupId, commit)
+            : moveTab(cur, groupId, tabIndex, commit)
+        );
       }
     };
     window.addEventListener("pointermove", onMove);
@@ -271,49 +284,39 @@ function DmScreenBoard({ campaignId }: { campaignId: Id<"campaigns"> }) {
   };
 
   /**
-   * Dragging a TAB: within its strip it just activates; carried off
-   * the strip it tears out into its own window; dropped on another
-   * header it stacks there. Decided at release, from geometry alone.
+   * The bar between two windows, dragged: the pair re-divides the span
+   * they already share, from the drag's start — never incrementally —
+   * so a pull past the minimum and back lands under the hand.
    */
-  const beginTabDrag = (
-    panel: DmPanel,
-    tabIndex: number,
+  const beginDividerDrag = (
+    split: DmSplit,
+    index: number,
     e: React.PointerEvent
   ) => {
     e.preventDefault();
     e.stopPropagation();
-    setLayout((cur) =>
-      bringToFront(patchPanel(cur, panel.id, { active: tabIndex }), panel.id)
+    const container = (e.currentTarget as HTMLElement).parentElement;
+    const base = layoutRef.current;
+    if (!container || !base) return;
+    const r = container.getBoundingClientRect();
+    const row = split.dir === "row";
+    const avail = Math.max(
+      1,
+      (row ? r.width : r.height) - DIVIDER_PX * (split.children.length - 1)
     );
+    const start = row ? e.clientX : e.clientY;
+    const minFrac = MIN_TILE_PX / avail;
 
-    const onUp = (ev: PointerEvent) => {
-      window.removeEventListener("pointerup", onUp);
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const point = { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
-
-      setLayout((cur) => {
-        const here = cur.panels.find((p) => p.id === panel.id);
-        if (!here) return cur;
-        const inOwnHeader =
-          point.x >= here.x &&
-          point.x <= here.x + here.w &&
-          point.y >= here.y &&
-          point.y <= here.y + HEADER_PX;
-        if (inOwnHeader) return cur;
-
-        const target = panelHeaderAt(cur, point, HEADER_PX, panel.id);
-        if (target !== null && here.tabs.length >= 2) {
-          const torn = tearOffTab(cur, panel.id, tabIndex, point);
-          return mergePanels(torn, torn.nextId - 1, target);
-        }
-        if (target !== null) return mergePanels(cur, panel.id, target);
-        return tearOffTab(cur, panel.id, tabIndex, {
-          x: Math.max(0, point.x - 40),
-          y: Math.max(0, point.y - HEADER_PX / 2),
-        });
-      });
+    const onMove = (ev: PointerEvent) => {
+      const delta = ((row ? ev.clientX : ev.clientY) - start) / avail;
+      dirty.current = true;
+      setLayoutRaw(() => resizeSplit(base, split.id, index, delta, minFrac));
     };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
   };
 
@@ -325,19 +328,19 @@ function DmScreenBoard({ campaignId }: { campaignId: Id<"campaigns"> }) {
       try {
         const noteId = await addNote({ campaignId, title: "Note" });
         setLayout((cur) =>
-          addPanel(cur, { kind: "note", noteId: noteId as string }, viewSize())
+          addTab(cur, { kind: "note", noteId: noteId as string })
         );
       } catch (e) {
         setError(e instanceof Error ? e.message : "That didn't work.");
       }
       return;
     }
-    setLayout((cur) => addPanel(cur, { kind }, viewSize()));
+    setLayout((cur) => addTab(cur, { kind }));
   };
 
-  const closeTabAt = (panel: DmPanel, index: number) => {
-    const tab = panel.tabs[index];
-    setLayout((cur) => closeTab(cur, panel.id, index));
+  const closeTabAt = (group: DmGroup, index: number) => {
+    const tab = group.tabs[index];
+    setLayout((cur) => closeTab(cur, group.id, index));
     // Closing a note's window deletes the note: a note with no window
     // is unreachable, and unreachable prep is a leak, not a feature.
     if (tab?.kind === "note" && tab.noteId) {
@@ -347,6 +350,24 @@ function DmScreenBoard({ campaignId }: { campaignId: Id<"campaigns"> }) {
   };
 
   if (!layout) return <p className="centered-note">Loading…</p>;
+
+  const preview = drop
+    ? dropPreviewRect(layout, drop, viewSize(), HEADER_PX)
+    : null;
+
+  const tileCtx: TileCtx = {
+    campaignId,
+    noteById,
+    focused: layout.focused,
+    beginDrag,
+    beginDividerDrag,
+    closeTabAt,
+    onFocus: (groupId) => setLayout((cur) => focusGroup(cur, groupId)),
+    onRenameNote: (noteId, title) =>
+      void updateNote({ noteId: noteId as Id<"dmNotes">, title }).catch(
+        () => {}
+      ),
+  };
 
   /**
    * The screen's controls, handed INTO the customizable toolbar. They
@@ -379,8 +400,8 @@ function DmScreenBoard({ campaignId }: { campaignId: Id<"campaigns"> }) {
     );
 
   const extras = {
-    addWindow: menuButton("add", "\u229e", "Add Window"),
-    workspaces: menuButton("workspaces", "\u29c9", "Workspaces"),
+    addWindow: menuButton("add", "⊞", "Add Window"),
+    workspaces: menuButton("workspaces", "⧉", "Workspaces"),
     /* Acts on whichever note window holds the caret — the same
        one-bar-per-screen contract the session notes run on. */
     noteFormat: () => (
@@ -489,96 +510,140 @@ function DmScreenBoard({ campaignId }: { campaignId: Id<"campaigns"> }) {
       {error && <p className="form-error">{error}</p>}
 
       <div className="dm-canvas" ref={canvasRef}>
-        {layout.panels.map((panel) => (
-          <section
-            key={panel.id}
-            className="dm-panel"
-            style={{
-              left: panel.x,
-              top: panel.y,
-              width: panel.w,
-              height: panel.h,
-            }}
-            onPointerDown={() => setLayout((cur) => bringToFront(cur, panel.id))}
-          >
-            <header
-              className="dm-panel-head"
-              onPointerDown={(e) => {
-                // A press on a tab or its close is the tab's own drag;
-                // the bare strip moves the whole window.
-                if ((e.target as HTMLElement).closest("button")) return;
-                beginPanelDrag(panel, e, "move");
-              }}
-            >
-              {panel.tabs.map((tab, i) => (
-                <button
-                  type="button"
-                  key={`${tab.kind}:${tab.noteId ?? i}`}
-                  className={`dm-tab${i === panel.active ? " on" : ""}`}
-                  onPointerDown={(e) => {
-                    if ((e.target as HTMLElement).closest(".dm-tab-x")) return;
-                    beginTabDrag(panel, i, e);
-                  }}
-                >
-                  {tab.kind === "note"
-                    ? (noteById.get(tab.noteId ?? "")?.title ?? "Note")
-                    : DM_PANEL_TITLES[tab.kind]}
-                  <span
-                    className="dm-tab-x"
-                    title="Close"
-                    onPointerDown={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      closeTabAt(panel, i);
-                    }}
-                  >
-                    ×
-                  </span>
-                </button>
-              ))}
-            </header>
-
-            <div className="dm-panel-body">
-              <PanelContent
-                tab={panel.tabs[panel.active] ?? panel.tabs[0]}
-                campaignId={campaignId}
-                note={
-                  panel.tabs[panel.active]?.kind === "note"
-                    ? (noteById.get(panel.tabs[panel.active]?.noteId ?? "") ??
-                      null)
-                    : null
-                }
-                onRenameNote={(noteId, title) =>
-                  void updateNote({
-                    noteId: noteId as Id<"dmNotes">,
-                    title,
-                  }).catch(() => {})
-                }
-              />
-            </div>
-
-            <span
-              className="dm-panel-resize"
-              title="Drag to resize"
-              onPointerDown={(e) => beginPanelDrag(panel, e, "size")}
-            />
-          </section>
-        ))}
-
-        {guides.v.map((x) => (
-          <span key={`v${x}`} className="dm-guide-v" style={{ left: x }} />
-        ))}
-        {guides.h.map((y) => (
-          <span key={`h${y}`} className="dm-guide-h" style={{ top: y }} />
-        ))}
-
-        {layout.panels.length === 0 && (
+        {layout.root ? (
+          <TileNode node={layout.root} ctx={tileCtx} />
+        ) : (
           <p className="centered-note">
             An empty screen. Add a window from the toolbar above.
           </p>
         )}
+
+        {preview && (
+          <span
+            className="dm-drop"
+            style={{
+              left: preview.x,
+              top: preview.y,
+              width: preview.w,
+              height: preview.h,
+            }}
+          />
+        )}
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------
+// The tiling, rendered
+// ---------------------------------------------------------------------
+
+/** Everything a tile needs from the board, passed down the tree whole. */
+interface TileCtx {
+  campaignId: Id<"campaigns">;
+  noteById: Map<string, { _id: string; title: string; html: string }>;
+  focused: number | null;
+  beginDrag: (
+    groupId: number,
+    tabIndex: number | null,
+    e: React.PointerEvent
+  ) => void;
+  beginDividerDrag: (
+    split: DmSplit,
+    index: number,
+    e: React.PointerEvent
+  ) => void;
+  closeTabAt: (group: DmGroup, index: number) => void;
+  onFocus: (groupId: number) => void;
+  onRenameNote: (noteId: string, title: string) => void;
+}
+
+/**
+ * One node of the tree. A split is a flex run — each child's share is
+ * its flex-grow over a zero basis, so the browser's division and the
+ * model's layoutRects agree — with a draggable divider between every
+ * pair. A group is a window frame.
+ */
+function TileNode({ node, ctx }: { node: DmNode; ctx: TileCtx }) {
+  if (node.type === "group") return <GroupTile group={node} ctx={ctx} />;
+  return (
+    <div className={`dm-split dm-split-${node.dir}`}>
+      {node.children.map((child, i) => (
+        <Fragment key={child.id}>
+          {i > 0 && (
+            <span
+              className="dm-divider"
+              title="Drag to resize"
+              onPointerDown={(e) => ctx.beginDividerDrag(node, i - 1, e)}
+            />
+          )}
+          <div className="dm-cell" style={{ flexGrow: node.sizes[i] }}>
+            <TileNode node={child} ctx={ctx} />
+          </div>
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
+/** One window: the tab strip over whichever tab is active. */
+function GroupTile({ group, ctx }: { group: DmGroup; ctx: TileCtx }) {
+  const activeTab = group.tabs[group.active] ?? group.tabs[0];
+  return (
+    <section
+      className={`dm-panel${ctx.focused === group.id ? " focus" : ""}`}
+      onPointerDown={() => ctx.onFocus(group.id)}
+    >
+      <header
+        className="dm-panel-head"
+        onPointerDown={(e) => {
+          // A press on a tab or its close is the tab's own drag;
+          // the bare strip moves the whole window.
+          if ((e.target as HTMLElement).closest("button")) return;
+          ctx.beginDrag(group.id, null, e);
+        }}
+      >
+        {group.tabs.map((tab, i) => (
+          <button
+            type="button"
+            key={`${tab.kind}:${tab.noteId ?? i}`}
+            className={`dm-tab${i === group.active ? " on" : ""}`}
+            onPointerDown={(e) => {
+              if ((e.target as HTMLElement).closest(".dm-tab-x")) return;
+              ctx.beginDrag(group.id, i, e);
+            }}
+          >
+            {tab.kind === "note"
+              ? (ctx.noteById.get(tab.noteId ?? "")?.title ?? "Note")
+              : DM_PANEL_TITLES[tab.kind]}
+            <span
+              className="dm-tab-x"
+              title="Close"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                ctx.closeTabAt(group, i);
+              }}
+            >
+              ×
+            </span>
+          </button>
+        ))}
+      </header>
+
+      <div className="dm-panel-body">
+        <PanelContent
+          tab={activeTab}
+          campaignId={ctx.campaignId}
+          note={
+            activeTab?.kind === "note"
+              ? (ctx.noteById.get(activeTab.noteId ?? "") ?? null)
+              : null
+          }
+          onRenameNote={ctx.onRenameNote}
+        />
+      </div>
+    </section>
   );
 }
 

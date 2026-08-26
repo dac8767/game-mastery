@@ -14,8 +14,8 @@ import { sanitizeBoxHtml } from "../components/boxHtml";
  * than sitting in, or overwriting, the DM's.
  *
  * The layout is a JSON string the client's parseLayout distrusts
- * completely (see components/dmscreen.ts). The server's only opinions
- * about it are that it exists and is not absurdly large.
+ * completely (see components/dmScreenModel.ts). The server's only
+ * opinions about it are that it exists and is not absurdly large.
  */
 
 /** A layout blob past this size is a bug, not an arrangement. */

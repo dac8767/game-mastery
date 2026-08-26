@@ -3829,17 +3829,24 @@ body.col-resizing {
   flex: 1;
 }
 
-/* The window field. Every panel is positioned inside this, so it is
-   the coordinate space snapping, tearing off and drop-to-merge all
-   measure against — position: relative is load-bearing, not styling. */
+/* The window field: ONE TILING that fills it edge to edge — windows
+   never float here and never overlap. It is also the coordinate space
+   the drop zones are measured in: position: relative is load-bearing
+   for the landing highlight, not styling. */
 .dm-canvas {
   position: relative;
+  display: flex;
   flex: 1;
   min-height: 30rem;
   overflow: hidden;
   background: var(--bg-inset);
   border: 1px solid var(--border);
   border-radius: 12px;
+}
+
+.dm-canvas > .dm-split,
+.dm-canvas > .dm-panel {
+  flex: 1;
 }
 
 /* Injected ribbon content — the DM Screen's controls standing in the
@@ -3941,21 +3948,93 @@ body.col-resizing {
   border-top: 1px solid var(--border);
 }
 
-/* One window. The shadow separates it from whatever it overlaps —
-   z-order is the render order, so no z-index war. */
+/* One split: a flex run whose children carry their share as flex-grow
+   over a zero basis, so the browser divides space exactly as the
+   model's layoutRects computes it. */
+.dm-split {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.dm-split-row {
+  flex-direction: row;
+}
+
+.dm-split-col {
+  flex-direction: column;
+}
+
+.dm-cell {
+  display: flex;
+  flex-basis: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.dm-cell > .dm-panel,
+.dm-cell > .dm-split {
+  flex: 1;
+}
+
+/* The bar between two windows — dragging it resizes both at once.
+   Its 6px IS the model's DIVIDER_PX: the drop-zone arithmetic counts
+   these bars when it places every window, and a guard keeps the two
+   numbers equal. */
+.dm-divider {
+  flex: none;
+  touch-action: none;
+  border-radius: 3px;
+}
+
+.dm-split-row > .dm-divider {
+  width: 6px;
+  cursor: col-resize;
+}
+
+.dm-split-col > .dm-divider {
+  height: 6px;
+  cursor: row-resize;
+}
+
+.dm-divider:hover {
+  background: var(--accent-soft);
+}
+
+/* One window — a tile of the layout, never floating, never overlapped. */
 .dm-panel {
-  position: absolute;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  min-height: 0;
   background: var(--bg-raised);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  border-radius: 6px;
   overflow: hidden;
 }
 
-/* The header IS the tab strip — 34px, the number panelHeaderAt is
-   handed, and the drag handle for the whole window where no tab is. */
+/* Premiere's focus outline: the window new tabs will land in. */
+.dm-panel.focus {
+  border-color: var(--accent);
+}
+
+/* The landing, highlighted BEFORE the drop commits it: the strip a
+   tab would join, the half a window would give up, or the full run
+   of a canvas edge. */
+.dm-drop {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  background: var(--accent-soft);
+  border: 2px solid var(--accent);
+  border-radius: 6px;
+}
+
+/* The header IS the tab strip — 34px, the number the drop zones
+   measure with, and the drag handle for the whole window where no
+   tab is. */
 .dm-panel-head {
   flex: none;
   height: 34px;
@@ -4015,43 +4094,6 @@ body.col-resizing {
   padding: 0.6rem 0.75rem;
   display: flex;
   flex-direction: column;
-}
-
-.dm-panel-resize {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 1.1rem;
-  height: 1.1rem;
-  cursor: nwse-resize;
-  touch-action: none;
-  background: repeating-linear-gradient(
-    135deg,
-    transparent 0 3px,
-    var(--border) 3px 4px
-  );
-}
-
-/* The alignment guides: full-height and full-width hairlines at the
-   edge being snapped to, visible only during the drag. */
-.dm-guide-v,
-.dm-guide-h {
-  position: absolute;
-  pointer-events: none;
-  background: var(--accent);
-  opacity: 0.7;
-}
-
-.dm-guide-v {
-  top: 0;
-  bottom: 0;
-  width: 1px;
-}
-
-.dm-guide-h {
-  left: 0;
-  right: 0;
-  height: 1px;
 }
 
 .dm-note {

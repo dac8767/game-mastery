@@ -3956,11 +3956,10 @@ export const integrity = {
       }
 
       // The header height is stated twice — once as CSS, once as the
-      // number panelHeaderAt measures with — and a drop lands in the
-      // wrong window the day they disagree.
-      const cssHead = /\.dm-panel-head\s*\{[^}]*height:\s*(\d+)px/.exec(
-        read("app", "globals.css")
-      );
+      // number the drop zones measure with — and a drop lands in the
+      // wrong place the day they disagree.
+      const dmCss = read("app", "globals.css");
+      const cssHead = /\.dm-panel-head\s*\{[^}]*height:\s*(\d+)px/.exec(dmCss);
       const jsHead = /const HEADER_PX = (\d+)/.exec(screenSrc);
       if (!cssHead || !jsHead) {
         problems.push("could not read both copies of the panel header height");
@@ -3969,6 +3968,66 @@ export const integrity = {
           `the panel header is ${cssHead[1]}px in CSS and ${jsHead[1]}px in ` +
             "the drop hit-test — dropping a tab would miss the header it " +
             "is visibly over"
+        );
+      }
+
+      // The divider's thickness is stated twice the same way —
+      // DIVIDER_PX in the model, 6px twice in the CSS — and
+      // layoutRects counts dividers when it places every window, so a
+      // mismatch shifts every drop zone right or below one.
+      const jsDiv = /export const DIVIDER_PX = (\d+)/.exec(model);
+      const rowDiv =
+        /\.dm-split-row > \.dm-divider\s*\{[^}]*width:\s*(\d+)px/.exec(dmCss);
+      const colDiv =
+        /\.dm-split-col > \.dm-divider\s*\{[^}]*height:\s*(\d+)px/.exec(dmCss);
+      if (!jsDiv || !rowDiv || !colDiv) {
+        problems.push("could not read all three copies of the divider size");
+      } else if (rowDiv[1] !== jsDiv[1] || colDiv[1] !== jsDiv[1]) {
+        problems.push(
+          `the divider is ${jsDiv[1]}px in the model and ${rowDiv[1]}px/` +
+            `${colDiv[1]}px in CSS — every drop zone past a divider ` +
+            "shifts by the difference"
+        );
+      }
+
+      // The law of the screen: windows never float. The panel is a
+      // flex tile of the tree; position: absolute coming back on it
+      // IS the floating model coming back, overlap and all.
+      // Anchored to the line start: `.dm-canvas > .dm-panel` appears
+      // first in the file and would satisfy an unanchored match while
+      // the real frame rule floats unexamined — a mutation proved it.
+      const panelRule = /^\.dm-panel\s*\{([^}]*)\}/m.exec(dmCss);
+      if (!panelRule) {
+        problems.push("no .dm-panel rule — the window frame is unstyled");
+      } else if (/position:\s*absolute/.test(panelRule[1])) {
+        problems.push(
+          ".dm-panel is absolutely positioned again — that is the " +
+            "floating-window model back, overlap and background and all"
+        );
+      }
+
+      // The drop pipeline: zones read under the pointer, the landing
+      // highlighted before release, the move committed after, and the
+      // divider wired to resize. Every link fails silently alone —
+      // drops just stop landing, or land with no warning shown.
+      for (const call of [
+        "dropTargetAt(",
+        "dropPreviewRect(",
+        "moveTab(",
+        "moveGroup(",
+        "resizeSplit(",
+      ]) {
+        if (!screenSrc.includes(call)) {
+          problems.push(
+            `DmScreen never calls ${call}) — a piece of the Premiere ` +
+              "docking behaviour is unwired"
+          );
+        }
+      }
+      if (!screenSrc.includes('className="dm-drop"')) {
+        problems.push(
+          "the drop highlight is gone — a drag would commit with no " +
+            "preview of where the window will land"
         );
       }
 
