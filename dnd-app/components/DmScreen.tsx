@@ -616,11 +616,18 @@ function GroupTile({ group, ctx }: { group: DmGroup; ctx: TileCtx }) {
             {tab.kind === "note"
               ? (ctx.noteById.get(tab.noteId ?? "")?.title ?? "Note")
               : DM_PANEL_TITLES[tab.kind]}
+            {/* The press only STOPS things — the tab activating, a
+                drag starting. The close itself waits for the release,
+                like every standard button; a click that leaves the ×
+                before letting go closes nothing. */}
             <span
               className="dm-tab-x"
               title="Close"
               onPointerDown={(e) => {
                 e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
                 e.stopPropagation();
                 ctx.closeTabAt(group, i);
               }}

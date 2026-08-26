@@ -4041,6 +4041,34 @@ export const integrity = {
         );
       }
 
+      // The tab's × closes on RELEASE, like every standard button.
+      // Reported: it fired the moment the press landed. The press
+      // handler may only stop things — the close lives in onClick.
+      const xAt = screenSrc.indexOf('className="dm-tab-x"');
+      if (xAt === -1) {
+        problems.push("the tab close control is gone from the tab strip");
+      } else {
+        const xBlock = screenSrc.slice(xAt, xAt + 600);
+        const clickAt = xBlock.indexOf("onClick=");
+        if (clickAt === -1 || !/closeTabAt/.test(xBlock.slice(clickAt))) {
+          problems.push(
+            "the tab × does not close on click release — either the " +
+              "close is unwired or it fires somewhere other than onClick"
+          );
+        }
+        const downAt = xBlock.indexOf("onPointerDown=");
+        const downBlock = xBlock.slice(
+          downAt === -1 ? xBlock.length : downAt,
+          clickAt === -1 ? undefined : clickAt
+        );
+        if (/closeTabAt/.test(downBlock)) {
+          problems.push(
+            "the tab × closes on the press again — reported as tabs " +
+              "closing before the click is released"
+          );
+        }
+      }
+
       // The canvas is the MAXIMUM: the screen is pinned to the
       // viewport and every window scrolls its own content, so nothing
       // can grow past the fold. Reported broken once — a tall table
