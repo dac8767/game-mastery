@@ -1864,6 +1864,18 @@ body.col-resizing {
   .nav-collapse-toggle {
     display: none;
   }
+
+  /* The sidebar strip sits ABOVE the workspace here, so a full-dvh
+     DM Screen would start a viewport tall and end below one. Let it
+     size to content again, with a usable floor on the canvas. */
+  .dmscreen {
+    height: auto;
+    flex: 1;
+  }
+
+  .dm-canvas {
+    min-height: 24rem;
+  }
 }
 
 /* ---------- Themes ----------
@@ -3888,9 +3900,32 @@ body.col-resizing {
 .dmscreen {
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
+  gap: 0;
   min-height: 0;
-  flex: 1;
+  /*
+    Pinned to the viewport, not grown from content: the canvas is the
+    MAXIMUM a window can have, so a tool taller than its window must
+    scroll inside that window rather than push the whole tiling past
+    the fold. The 0.7rem is the workspace's trimmed padding around
+    this screen — the two numbers move together.
+  */
+  flex: none;
+  height: calc(100dvh - 0.7rem);
+}
+
+/*
+  The DM Screen runs nearly edge to edge: the padding every other
+  screen keeps is dead space here, where the windows ARE the screen.
+  Scoped to the workspace that contains this screen so the NPC table
+  and everything else keep their breathing room.
+*/
+.workspace:has(> .dmscreen) {
+  padding: 0.35rem 0.5rem;
+}
+
+/* The ribbon sits tight over the canvas for the same reason. */
+.dmscreen .rib-stack {
+  margin-bottom: 0.35rem;
 }
 
 /* The window field: ONE TILING that fills it edge to edge — windows
@@ -3901,11 +3936,14 @@ body.col-resizing {
   position: relative;
   display: flex;
   flex: 1;
-  min-height: 30rem;
+  /* Zero, not a floor: the screen's height is pinned above, and a
+     minimum here would be the one thing able to push windows past
+     the fold on a short viewport. */
+  min-height: 0;
   overflow: hidden;
   background: var(--bg-inset);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
 .dm-canvas > .dm-split,

@@ -4031,6 +4031,45 @@ export const integrity = {
         );
       }
 
+      // The canvas is the MAXIMUM: the screen is pinned to the
+      // viewport and every window scrolls its own content, so nothing
+      // can grow past the fold. Reported broken once — a tall table
+      // pushed the whole tiling off screen — and each of these four
+      // rules is individually able to bring that back.
+      if (!/\.dmscreen\s*\{[^}]*height:\s*calc\(100dvh/.test(dmCss)) {
+        problems.push(
+          "the DM Screen is not pinned to the viewport — a tall tool " +
+            "grows the tiling past the fold instead of scrolling"
+        );
+      }
+      if (!/\.dm-panel-body\s*\{[^}]*overflow:\s*auto/.test(dmCss)) {
+        problems.push(
+          "a window's body no longer scrolls — content bigger than " +
+            "the window has nowhere to go but out of it"
+        );
+      }
+      // Line-anchored: the phone layout's indented .dm-canvas rule MAY
+      // keep a floor — the pin is released there — so only the desktop
+      // rule at column 0 is held to zero.
+      const canvasRule = /^\.dm-canvas\s*\{([^}]*)\}/m.exec(dmCss);
+      if (!canvasRule) {
+        problems.push("no .dm-canvas rule — the window field is unstyled");
+      } else if (/min-height:\s*[1-9]/.test(canvasRule[1])) {
+        problems.push(
+          "the canvas has a minimum height again — on a short viewport " +
+            "it is the one thing able to push windows past the fold"
+        );
+      }
+      const dmMobile = /@media \(max-width: 900px\) \{([\s\S]*?)\n\}/.exec(
+        dmCss
+      );
+      if (!dmMobile || !/\.dmscreen\s*\{[^}]*height:\s*auto/.test(dmMobile[1])) {
+        problems.push(
+          "the viewport pin is not released on the phone layout — the " +
+            "sidebar strip above would push a full-dvh screen below one"
+        );
+      }
+
       // The live layout autosaves, and the saver saves what is on
       // screen rather than a stale closure.
       if (!/saveLayout\(\{ campaignId, layout: serializeLayout\(layout\) \}\)/.test(screenSrc)) {
