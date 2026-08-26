@@ -327,6 +327,23 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
     document.body.classList.add("col-resizing");
   }
 
+  function startExpandResize(event: React.PointerEvent<HTMLElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = prefs.expandWidth ?? EXPAND_COL;
+    const onMove = (e: PointerEvent) =>
+      prefs.setExpandWidth(startWidth + (e.clientX - startX));
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.classList.remove("col-resizing");
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    document.body.classList.add("col-resizing");
+  }
+
   function toggleColumn(key: string) {
     prefs.setColumns((cur) =>
       cur.map((c) => (c.key === key ? { ...c, visible: !c.visible } : c))
@@ -809,7 +826,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
         <div className="npc-table-wrap">
           <table
             className="npc-table"
-            style={{ width: `${totalWidth + EXPAND_COL}px` }}
+            style={{ width: `${totalWidth + (prefs.expandWidth ?? EXPAND_COL)}px` }}
           >
           {/* The expand column, ahead of everything the layout
               arranges. It is not a COLUMN in the useViewPrefs sense —
@@ -818,7 +835,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
               and a layout that could hide it would hide the only
               visible way to open one. */}
           <colgroup>
-            <col style={{ width: `${EXPAND_COL}px` }} />
+            <col style={{ width: `${prefs.expandWidth ?? EXPAND_COL}px` }} />
             {shown.map(({ state }) => (
               <col key={state.key} style={{ width: `${state.width}px` }} />
             ))}
@@ -826,7 +843,17 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
 
           <thead>
             <tr>
-              <th className="expand-th" aria-label="Open" />
+                            <th className="expand-th" aria-label="Open">
+                {/* The divider Derek asked for: the button's own track
+                    can be widened to space the fields away from it.
+                    Persisted with the rest of the layout. */}
+                <span
+                  className="col-resize"
+                  title="Drag to move the first column"
+                  onPointerDown={(e) => startExpandResize(e)}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </th>
               {shown.map(({ state, def }) => (
                 <th
                   key={state.key}

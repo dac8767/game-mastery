@@ -184,6 +184,12 @@ export function FeedbackForm({ onClose }: { onClose: () => void }) {
         onClose={onClose}
         windowRef={windowRef}
         title={state === "sent" ? "Feedback sent" : "Send feedback"}
+        /* The thank-you is one sentence, and it inherited the size of
+           the form somebody may have grown to write a long report —
+           reported as a huge window of blank space. Shrunk to its
+           content, in place, and back to full size if another report
+           is started from the same window. */
+        shrink={state === "sent"}
       >
         {/* One heading, one sentence, one way out. It had a "Thanks"
             heading over a "Thank you!" sentence and a Close in the
@@ -408,11 +414,21 @@ function FeedbackShell({
   children,
   onClose,
   windowRef,
+  shrink = false,
 }: {
   title: string;
   children: React.ReactNode;
   onClose: () => void;
   windowRef: React.RefObject<HTMLDivElement | null>;
+  /**
+   * Fit the window to its content instead of the dragged size.
+   *
+   * The POSITION is kept — the window stays where it was put, only the
+   * box tightens around what is left in it. The dragged size is kept
+   * too, untouched underneath, so this is not a resize the person has
+   * to undo afterwards.
+   */
+  shrink?: boolean;
 }) {
   const [box, setBox] = useState<WinBox>(() =>
     typeof window === "undefined"
@@ -468,7 +484,11 @@ function FeedbackShell({
       role="dialog"
       aria-label={title}
       ref={windowRef}
-      style={{ left: box.x, top: box.y, width: box.w, height: box.h }}
+      style={
+        shrink
+          ? { left: box.x, top: box.y, width: "22rem", height: "auto" }
+          : { left: box.x, top: box.y, width: box.w, height: box.h }
+      }
     >
       <header
         className="drawer-header feedback-grip"
@@ -485,14 +505,19 @@ function FeedbackShell({
 
       <div className="feedback-body">{children}</div>
 
-      <span
-        className="feedback-resize"
-        title="Drag to resize"
-        onPointerDown={begin("size")}
-        onPointerMove={onMove}
-        onPointerUp={end}
-        onPointerCancel={end}
-      />
+      {/* No corner grip on the shrunk window: it is sized to one
+          sentence, and a handle would resize a box that snaps back
+          the moment the form returns. */}
+      {!shrink && (
+        <span
+          className="feedback-resize"
+          title="Drag to resize"
+          onPointerDown={begin("size")}
+          onPointerMove={onMove}
+          onPointerUp={end}
+          onPointerCancel={end}
+        />
+      )}
     </div>
   );
 }

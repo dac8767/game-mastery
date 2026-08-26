@@ -81,6 +81,16 @@ export default defineSchema({
     ),
 
     /**
+     * How this table levels: by XP totals, or by milestone.
+     *
+     * Decides which field a session's facts row shows — XP Awarded, or
+     * "Leveled up to" with the levels not yet reached. Absent reads as
+     * "xp", which is what every session row written before this
+     * existed was using.
+     */
+    leveling: v.optional(v.union(v.literal("xp"), v.literal("milestone"))),
+
+    /**
      * The picture on the campaign card, held the same two ways NPC
      * portraits are: `imageId` is an upload in Convex file storage and
      * wins when set; `imagePath` is the map-server route, e.g.
@@ -310,6 +320,14 @@ export default defineSchema({
     date: v.optional(v.string()),
     players: v.array(v.string()),
     xp: v.optional(v.number()),
+    /**
+     * The level the party reached THIS session, in a milestone
+     * campaign. Its own field beside `xp` rather than a reuse of it:
+     * a campaign switched between the two modes keeps both histories,
+     * and "Level 5" stored in a field called xp is a trap for every
+     * future reader.
+     */
+    milestone: v.optional(v.number()),
     description: v.optional(v.string()),
   }).index("by_campaign", ["campaignId"]),
 

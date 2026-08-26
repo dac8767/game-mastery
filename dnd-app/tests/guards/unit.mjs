@@ -5666,6 +5666,98 @@ export const unit = {
       );
     }
 
+    // ---- how a campaign levels -------------------------------------
+    // XP and milestone are one slot with two fields, and the milestone
+    // dropdown's options depend on every other session — the two rules
+    // where a wrong answer writes a level history that cannot have
+    // happened.
+    {
+      const sc = await import(
+        pathToFileURL(
+          join(compile("components/sessionColumns.ts"), "sessionColumns.js")
+        ).href
+      );
+
+      const keys = (mode) => sc.sessionColumnsFor(mode).map((c) => c.key);
+      check(
+        "an xp campaign has XP Awarded and no milestone column",
+        keys("xp").includes("xp") && !keys("xp").includes("milestone")
+      );
+      check(
+        "a milestone campaign has it the other way round",
+        keys("milestone").includes("milestone") &&
+          !keys("milestone").includes("xp")
+      );
+      check(
+        "the two modes otherwise show the same fields",
+        JSON.stringify(keys("xp").filter((k) => k !== "xp")) ===
+          JSON.stringify(keys("milestone").filter((k) => k !== "milestone"))
+      );
+
+      // Derek's own example, verbatim: session 5 reached level 5, so
+      // every later session offers 6 through 20.
+      const S = (number, milestone) => ({ number, milestone });
+      const after5 = sc.milestoneOptions([S(5, 5)], 6);
+      check(
+        "after a session reaches 5, later sessions offer 6 through 20",
+        after5[0] === 6 &&
+          after5[after5.length - 1] === 20 &&
+          after5.length === 15
+      );
+      check(
+        "a level another session recorded is not on offer",
+        !sc.milestoneOptions([S(3, 4), S(5, 7)], 8).includes(7) &&
+          !sc.milestoneOptions([S(3, 4), S(5, 7)], 8).includes(4)
+      );
+      // A LATER session's level, specifically: for an earlier session
+      // the floor says nothing, so the used-set is the only thing
+      // stopping two sessions from both being the night the party hit
+      // 8. The first version of this block only ever tested levels the
+      // floor already excluded, and deleting the used-set passed.
+      check(
+        "a level a later session recorded is not on offer either",
+        !sc.milestoneOptions([S(10, 8)], 4).includes(8)
+      );
+      check(
+        "levels do not go back down",
+        sc
+          .milestoneOptions([S(5, 5)], 6)
+          .every((l) => l > 5)
+      );
+      // An EARLIER session is not fenced by a later one's level: the
+      // floor only looks backwards, so back-filling old sessions works.
+      check(
+        "an earlier session may still record a lower level",
+        sc.milestoneOptions([S(10, 8)], 4).includes(3)
+      );
+      // The own-value rule earns its keep only when the value would
+      // OTHERWISE be excluded — a back-filled session whose level sits
+      // under a later-numbered session's floor. The first fixture's
+      // value was offered anyway, and deleting the rule passed.
+      check(
+        "a session's own value stays pickable even under the floor",
+        sc.milestoneOptions([S(5, 7)], 6, 6).includes(6)
+      );
+      check(
+        "level 1 is never on offer — campaigns start there",
+        !sc.milestoneOptions([], 1).includes(1) &&
+          sc.milestoneOptions([], 1)[0] === 2
+      );
+      check(
+        "a fresh campaign offers all of 2 through 20",
+        sc.milestoneOptions([], 1).length === 19
+      );
+
+      check(
+        "a picked level patches as a number",
+        sc.sessionPatch("milestone", "7").milestone === 7
+      );
+      check(
+        "clearing the pick clears the field",
+        sc.sessionPatch("milestone", "").milestone === null
+      );
+    }
+
     // ---- a book, written out ---------------------------------------
     // A Foundry export stores the abbreviation, which is what a
     // compendium key looks like rather than what a book is called.

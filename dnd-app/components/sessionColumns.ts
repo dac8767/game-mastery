@@ -67,6 +67,26 @@ export const SESSION_COLUMNS: ColumnDef[] = [
     editable: true,
   },
   {
+    /**
+     * The milestone campaign's answer to XP Awarded: the level the
+     * party reached this session, or nothing for a night nobody
+     * leveled. Declared here beside every other column, but only ever
+     * OFFERED by sessionColumnsFor — a table shows this or xp, never
+     * both, because the campaign levels one way or the other.
+     *
+     * Not list-editable: the value is picked from a dropdown whose
+     * options depend on every OTHER session, and the record's facts
+     * row is where that context lives.
+     */
+    key: "milestone",
+    label: "Leveled Up To",
+    kind: "level",
+    format: (raw) => `Level ${String(raw)}`,
+    defaultWidth: 140,
+    defaultVisible: true,
+    editable: false,
+  },
+  {
     key: "description",
     // Stored as `description`, called Summary. The word is what a
     // session has — a line about the night — and the field name is
@@ -83,6 +103,77 @@ export const SESSION_COLUMNS: ColumnDef[] = [
 export const SESSION_COLUMN_BY_KEY = new Map(
   SESSION_COLUMNS.map((c) => [c.key, c])
 );
+
+/** How a campaign levels. Mirrors campaigns.leveling; absent is xp. */
+export type Leveling = "xp" | "milestone";
+
+/** What each mode is called where the DM has to choose one. */
+export const LEVELING_MODES: { value: Leveling; label: string; note: string }[] =
+  [
+    {
+      value: "xp",
+      label: "XP",
+      note: "Sessions carry an XP Awarded field.",
+    },
+    {
+      value: "milestone",
+      label: "Milestone",
+      note: "Sessions carry a \u201cLeveled up to\u201d field instead.",
+    },
+  ];
+
+/**
+ * The columns a campaign's session list actually shows: everything,
+ * minus whichever leveling field this campaign does not use. One
+ * function rather than two lists, so a column added later cannot be
+ * added to one mode and forgotten in the other.
+ */
+export function sessionColumnsFor(leveling: Leveling): ColumnDef[] {
+  const drop = leveling === "milestone" ? "xp" : "milestone";
+  return SESSION_COLUMNS.filter((c) => c.key !== drop);
+}
+
+/**
+ * The levels this session may claim: 2 through 20, minus what the
+ * campaign has already reached.
+ *
+ * Two subtractions, and they are different rules:
+ *
+ *   - a level any OTHER session records is taken. Two sessions cannot
+ *     both be the night the party hit 7.
+ *   - a level at or below the highest that an EARLIER session records
+ *     is gone too — Derek's example: session 5 reached level 5, so
+ *     every later session offers 6 through 20. Levels only go up.
+ *
+ * The session's OWN current value is always offered, or opening the
+ * dropdown would hide the very thing it is set to.
+ */
+export function milestoneOptions(
+  sessions: { number: number; milestone?: number | null }[],
+  forNumber: number,
+  current?: number | null
+): number[] {
+  const used = new Set<number>();
+  let floor = 1;
+  for (const s of sessions) {
+    const m = s.milestone;
+    if (typeof m !== "number") continue;
+    if (s.number === forNumber) continue;
+    used.add(m);
+    if (s.number < forNumber) floor = Math.max(floor, m);
+  }
+
+  const out: number[] = [];
+  for (let level = 2; level <= 20; level++) {
+    if (level === current) {
+      out.push(level);
+      continue;
+    }
+    if (used.has(level) || level <= floor) continue;
+    out.push(level);
+  }
+  return out;
+}
 
 /**
  * Fields offered as filters and as "group by" options.
@@ -141,8 +232,8 @@ export function sessionPatch(
     };
   }
 
-  if (key === "number" || key === "xp") {
-    if (value === "") return key === "number" ? {} : { xp: null };
+  if (key === "number" || key === "xp" || key === "milestone") {
+    if (value === "") return key === "number" ? {} : { [key]: null };
     const n = Number(value);
     if (!Number.isFinite(n)) return {};
     return { [key]: n };

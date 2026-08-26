@@ -1282,6 +1282,19 @@ export function columnTemplate(
       : c.width;
   });
 
+  /**
+   * The caret's own track can be widened — "expand" is a pseudo-key in
+   * the same widths record the real columns use, so it persists the
+   * same way. Asked for as a way to space the fields away from the
+   * caret. Never narrower than the default: the button still has to
+   * fit, and a zero-width track would hide the way into every row.
+   */
+  const ex = widths?.expand;
+  const lead =
+    typeof ex === "number" && Number.isFinite(ex)
+      ? `${Math.max(Number.parseInt(EXPAND_TRACK, 10), Math.round(ex))}px`
+      : EXPAND_TRACK;
+
   // The expand button LEADS the row, in the same fixed track the NPC
   // list uses, so a row opens from the place your eye already is
   // rather than from the far side of the screen.
@@ -1297,7 +1310,7 @@ export function columnTemplate(
   // from under its heading at the width where it changed.
   const filler = tracks.some((t) => t.includes("fr")) ? "0" : "minmax(0, 1fr)";
 
-  return `${EXPAND_TRACK} ${tracks.join(" ")} ${filler}`;
+  return `${lead} ${tracks.join(" ")} ${filler}`;
 }
 
 /**

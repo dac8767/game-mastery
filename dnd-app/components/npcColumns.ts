@@ -14,6 +14,7 @@ export type FieldKind =
   | "text" // short free text
   | "longtext" // prose — edited in a textarea
   | "number"
+  | "level" // a number picked from a dropdown, not typed — see milestoneOptions
   | "chips" // string array, entered comma-separated
   | "boolean"
   | "picture";

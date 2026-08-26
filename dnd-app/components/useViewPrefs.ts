@@ -71,6 +71,18 @@ export function useViewPrefs(
     useState<Conjunction>("and");
   const [viewMode, setViewModeRaw] = useState<"grid" | "tiles">("grid");
   const [tilesPerRow, setTilesPerRowRaw] = useState(4);
+  /**
+   * The expand column's width, when somebody has dragged it. Null is
+   * "the default", which each table supplies (they share EXPAND_COL).
+   *
+   * Persisted as a pseudo-column "_expand" INSIDE the saved columns
+   * array — the validator already accepts any {key, width, visible},
+   * so the divider needed no schema change. reconcileColumns drops
+   * unknown keys, which is right for real columns and would silently
+   * eat this one; it is pulled out before reconcile runs and appended
+   * back on save.
+   */
+  const [expandWidth, setExpandWidthRaw] = useState<number | null>(null);
 
   const hydrated = useRef(false);
   const dirty = useRef(false);
@@ -80,6 +92,10 @@ export function useViewPrefs(
   useEffect(() => {
     if (saved === undefined || hydrated.current) return;
 
+    const savedExpand = saved?.columns?.find((c) => c.key === "_expand");
+    if (savedExpand && Number.isFinite(savedExpand.width)) {
+      setExpandWidthRaw(Math.max(34, Math.round(savedExpand.width)));
+    }
     setColumnsRaw(reconcileColumns(saved?.columns ?? null, isDm, columns));
     if (saved) {
       setSortKeyRaw(saved.sortKey ?? defaultSort.key);
@@ -116,7 +132,13 @@ export function useViewPrefs(
       void save({
         campaignId,
         view,
-        columns: columnState,
+        columns:
+          expandWidth === null
+            ? columnState
+            : [
+                ...columnState,
+                { key: "_expand", width: expandWidth, visible: true },
+              ],
         sortKey,
         sortAsc,
         groupBy: groupBy || undefined,
@@ -129,6 +151,7 @@ export function useViewPrefs(
     return () => clearTimeout(t);
   }, [
     columnState,
+    expandWidth,
     sortKey,
     sortAsc,
     groupBy,
@@ -192,9 +215,18 @@ export function useViewPrefs(
     setTilesPerRowRaw(n);
   }, []);
 
+  const setExpandWidth = useCallback((w: number) => {
+    touch();
+    // Floor at the shared default (34px): narrower would clip the
+    // button whose track this is, and the way back to the default is
+    // dragging back down to it, not through it.
+    setExpandWidthRaw(Math.max(34, Math.round(w)));
+  }, []);
+
   const resetLayout = useCallback(() => {
     touch();
     setColumnsRaw(reconcileColumns(null, isDm, columns));
+    setExpandWidthRaw(null);
   }, [isDm, columns]);
 
   return {
@@ -218,6 +250,8 @@ export function useViewPrefs(
     setViewMode,
     tilesPerRow,
     setTilesPerRow,
+    expandWidth,
+    setExpandWidth,
     resetLayout,
   };
 }

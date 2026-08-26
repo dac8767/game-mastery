@@ -273,12 +273,23 @@ export const integrity = {
       // state the record was reported in, showing three chips of five
       // fields and a line telling you to go and edit them elsewhere.
       const detailSrc = stripComments(read("components", "SessionDetail.tsx"));
-      if (!/SESSION_COLUMNS\.map\(/.test(detailSrc)) {
-        problems.push(
-          "SessionDetail does not build its fields from SESSION_COLUMNS — " +
-            "the record and the list would drift into offering different " +
-            "fields for the same session"
-        );
+      // Both screens build their fields from sessionColumnsFor — the
+      // one function that knows which leveling field this campaign
+      // uses — so the record and the list cannot drift into offering
+      // different fields, and neither can show XP Awarded to a
+      // milestone table.
+      const tableSrc2 = stripComments(read("components", "SessionTable.tsx"));
+      for (const [file, src] of [
+        ["SessionDetail.tsx", detailSrc],
+        ["SessionTable.tsx", tableSrc2],
+      ]) {
+        if (!/sessionColumnsFor\(leveling\)/.test(src)) {
+          problems.push(
+            `${file} does not build its fields from sessionColumnsFor — ` +
+              "it would show the same leveling field to every campaign, " +
+              "whichever way the campaign levels"
+          );
+        }
       }
 
       // Tabs, DM first — which is the way round it was asked for and is
@@ -3822,6 +3833,148 @@ export const integrity = {
           );
         }
         drawn.set(bars, kind);
+      }
+    }
+
+    // ---- the second morning's reports -------------------------------
+    {
+      const css = read("app", "globals.css");
+      const shell = stripComments(read("components", "AppShell.tsx"));
+      const fb = stripComments(read("components", "FeedbackForm.tsx"));
+      const detail2 = stripComments(read("components", "SessionDetail.tsx"));
+      const panel2 = stripComments(read("components", "SettingsPanel.tsx"));
+      const campaignsSrc2 = read("convex", "campaigns.ts");
+      const sessionsSrc2 = read("convex", "sessions.ts");
+
+      // One panel: no grid gap between the session tabs, the format
+      // bar and the page, and the joins are square.
+      const notesRule = css.slice(
+        css.indexOf(".session-notes {"),
+        css.indexOf("}", css.indexOf(".session-notes {"))
+      );
+      if (!/gap:\s*0[;\s]/.test(notesRule)) {
+        problems.push(
+          "the session notes grid has a gap again — the tabs, the bar " +
+            "and the page were asked to act as one panel"
+        );
+      }
+      // The property, not the selector: ".session-notes .nb-canvas"
+      // also names the height rule, so a deleted join passed while its
+      // selector lived on in an unrelated block. Mutation-tested.
+      for (const [pattern, what] of [
+        [/\.session-notes \.nb-fmtbar\s*\{[^}]*margin-bottom:\s*0/, "the bar keeps its gap below"],
+        [/\.session-notes \.nb-canvas\s*\{[^}]*border-top-left-radius:\s*0/, "the page keeps its rounded top"],
+        [/\.session-notes \.session-tabs\s*\{[^}]*border-bottom:\s*none/, "the tab strip keeps its own rule"],
+      ]) {
+        if (!pattern.test(css)) {
+          problems.push(
+            `the session panel is not joined — ${what}, so the three ` +
+              "pieces read as separate windows again"
+          );
+        }
+      }
+
+      // The sidebar's DM pill is gone; the section itself still only
+      // renders for the DM, which is what made the pill redundant.
+      const titleAt = shell.indexOf("nav-group-title");
+      const titleEnd = shell.indexOf("</button>", titleAt);
+      if (/className="badge"/.test(shell.slice(titleAt, titleEnd))) {
+        problems.push(
+          "the sidebar section heading wears the DM badge again — " +
+            "reported off, because the section only renders for the DM"
+        );
+      }
+
+      // The thank-you fits its sentence: the shell must shrink when
+      // sent, and the shrunk window must not keep the dragged height.
+      if (!/shrink=\{state === "sent"\}/.test(fb)) {
+        problems.push(
+          "the feedback shell does not shrink on the sent state — the " +
+            "one-line thank-you inherits the size of the form again"
+        );
+      }
+      if (!/height: "auto"/.test(fb)) {
+        problems.push(
+          "the shrunk feedback window keeps a fixed height — auto is " +
+            "what fits it to its sentence"
+        );
+      }
+
+      // The expand track is adjustable and REMEMBERED: the pseudo-key
+      // has to survive both stores' load paths, or the divider works
+      // until the page is refreshed.
+      if (!/known\.add\("expand"\)/.test(read("components", "useLookupLayout.ts"))) {
+        problems.push(
+          "useLookupLayout drops the \"expand\" pseudo-key on load — the " +
+            "Lookup divider would save and then vanish on refresh"
+        );
+      }
+      // BOTH halves of the round trip, because "_expand" appearing
+      // anywhere satisfies neither: a mutation renamed only the save
+      // key and the file still contained the string, in the load path
+      // that would now never find anything.
+      const prefsSrc = stripComments(read("components", "useViewPrefs.ts"));
+      if (!/\{ key: "_expand", width: expandWidth/.test(prefsSrc)) {
+        problems.push(
+          "useViewPrefs does not save the _expand pseudo-column — the " +
+            "table dividers would not survive a reload"
+        );
+      }
+      if (!/c\.key === "_expand"/.test(prefsSrc)) {
+        problems.push(
+          "useViewPrefs never reads the _expand pseudo-column back — " +
+            "saved dividers would load as nothing"
+        );
+      }
+      for (const file of ["NpcTable.tsx", "SessionTable.tsx", "GroupTable.tsx"]) {
+        const src = stripComments(read("components", file));
+        // The CALL SITE, not the function: a handle whose onPointerDown
+        // was emptied still defines startExpandResize a page up.
+        if (
+          !/onPointerDown=\{\(e\) => startExpandResize\(e\)\}/.test(src) ||
+          !/prefs\.expandWidth \?\? EXPAND_COL/.test(src)
+        ) {
+          problems.push(
+            `${file} has no adjustable expand column — asked for on ` +
+              "every table in the app"
+          );
+        }
+      }
+
+      // Leveling: the schema stores it, the DM can set it, the session
+      // validates the level, and the settings tab offers the choice.
+      if (!/leveling: v\.optional\(v\.union\(v\.literal\("xp"\), v\.literal\("milestone"\)\)\)/.test(read("convex", "schema.ts"))) {
+        problems.push("campaigns.leveling is not in the schema");
+      }
+      if (!/export const setLeveling = mutation/.test(campaignsSrc2)) {
+        problems.push("campaigns.setLeveling is gone — nobody can switch modes");
+      }
+      const setLevelingBody = campaignsSrc2.slice(
+        campaignsSrc2.indexOf("export const setLeveling"),
+        campaignsSrc2.indexOf("export const", campaignsSrc2.indexOf("export const setLeveling") + 10)
+      );
+      if (!/requireDm\(/.test(setLevelingBody)) {
+        problems.push("setLeveling is not gated on requireDm");
+      }
+      if (!/A milestone is a level from 2 to 20/.test(sessionsSrc2)) {
+        problems.push(
+          "updateSession no longer validates the milestone — a typo " +
+            "level 200 would store and sort"
+        );
+      }
+      if (!/setLeveling\(\{ campaignId, leveling: m\.value \}\)/.test(panel2)) {
+        problems.push(
+          "the Campaign settings tab has no leveling choice — the mode " +
+            "exists and nobody can reach it"
+        );
+      }
+      // The dropdown gets its options from the one function that knows
+      // the rule, fed with every session.
+      if (!/milestoneOptions\(/.test(detail2)) {
+        problems.push(
+          "SessionDetail does not compute the milestone options — the " +
+            "dropdown would offer levels the campaign already reached"
+        );
       }
     }
 

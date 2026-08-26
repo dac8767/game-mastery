@@ -280,7 +280,9 @@ export function AppShell({
                     {folded ? "▸" : "▾"}
                   </span>
                   {section.title}
-                  {section.dmOnly && <span className="badge">DM</span>}
+                  {/* No DM badge. Reported off: the section is only
+                      RENDERED for the DM, so the pill told its one
+                      possible reader something they already are. */}
                 </button>
               )}
               {!folded && (

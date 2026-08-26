@@ -32,6 +32,15 @@ import {
 
 const SAVE_DEBOUNCE_MS = 800;
 
+/**
+ * The narrowest a track may be dragged.
+ *
+ * The expand track's floor is its DEFAULT, not the column minimum: 56px
+ * would mean the first drag jumps the caret column wider and it can
+ * never be put back where it started.
+ */
+const minFor = (key: string) => (key === "expand" ? 34 : MIN_LOOKUP_COL);
+
 export interface LookupLayout {
   widths: Record<string, number>;
   resize: (key: string, width: number) => void;
@@ -66,6 +75,10 @@ export function useLookupLayout(
     }
 
     const known = new Set(LOOKUP_COLUMNS[kind].map((c) => c.key));
+    // The caret track's width rides in the same row under a pseudo-key.
+    // Without this line it would save and then be dropped on every
+    // load — a divider that works until you refresh.
+    known.add("expand");
     const next: Record<string, number> = {};
     for (const c of saved?.columns ?? []) {
       // A key that is no longer a column is dropped rather than carried
@@ -73,7 +86,7 @@ export function useLookupLayout(
       // exists and shift every column after it.
       if (!known.has(c.key)) continue;
       if (!Number.isFinite(c.width) || c.width <= 0) continue;
-      next[c.key] = Math.max(MIN_LOOKUP_COL, Math.round(c.width));
+      next[c.key] = Math.max(minFor(c.key), Math.round(c.width));
     }
 
     setWidths(next);
@@ -103,7 +116,7 @@ export function useLookupLayout(
     dirty.current = true;
     setWidths((cur) => ({
       ...cur,
-      [key]: Math.max(MIN_LOOKUP_COL, Math.round(width)),
+      [key]: Math.max(minFor(key), Math.round(width)),
     }));
   }, []);
 

@@ -28,8 +28,9 @@ import { ExpandIcon } from "@/components/ExpandIcon";
 import { SessionDetail, SessionRow } from "@/components/SessionDetail";
 import { ColumnDef, ColumnState } from "@/components/npcColumns";
 import {
-  SESSION_COLUMNS,
+  Leveling,
   SESSION_COLUMN_BY_KEY,
+  sessionColumnsFor,
   SESSION_DEFAULT_SORT,
   SESSION_EXTRA_SORTS,
   SESSION_FACET_KEYS,
@@ -64,11 +65,19 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const result = useQuery(api.sessions.listForCampaign, { campaignId });
   const isDm = result?.isDm ?? false;
 
+  /* Which leveling field this campaign's sessions carry. myCampaigns
+     is already subscribed by AppShell, so this is that subscription
+     rather than a second one. */
+  const campaigns = useQuery(api.campaigns.myCampaigns);
+  const leveling: Leveling =
+    campaigns?.find((c) => c._id === campaignId)?.leveling ?? "xp";
+  const columns = useMemo(() => sessionColumnsFor(leveling), [leveling]);
+
   const prefs = useViewPrefs(
     campaignId,
     "sessions",
     isDm,
-    SESSION_COLUMNS,
+    columns,
     SESSION_DEFAULT_SORT
   );
   const createSession = useMutation(api.sessions.createSession);
@@ -98,7 +107,7 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
 
   const haystacks = useMemo(() => {
     const m = new Map<string, string>();
-    for (const s of all) m.set(s._id, searchText(s, SESSION_COLUMNS));
+    for (const s of all) m.set(s._id, searchText(s, columns));
     return m;
   }, [all]);
 
@@ -147,7 +156,7 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   /** Known values per field, so conditions can offer options. */
   const valueOptions = useMemo(() => {
     const m = new Map<string, string[]>();
-    for (const col of SESSION_COLUMNS) {
+    for (const col of columns) {
       const seen = new Set<string>();
       for (const s of all) {
         const raw = cell(s, col.key);
@@ -195,7 +204,7 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
 
   const sortableFields = useMemo(
     () => [
-      ...SESSION_COLUMNS.filter((c) => c.sortable !== false),
+      ...columns.filter((c) => c.sortable !== false),
       ...SESSION_EXTRA_SORTS,
     ],
     []
@@ -226,6 +235,23 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
         cur.map((c) => (c.key === key ? { ...c, width: next } : c))
       );
     };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.classList.remove("col-resizing");
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    document.body.classList.add("col-resizing");
+  }
+
+  function startExpandResize(event: React.PointerEvent<HTMLElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = prefs.expandWidth ?? EXPAND_COL;
+    const onMove = (e: PointerEvent) =>
+      prefs.setExpandWidth(startWidth + (e.clientX - startX));
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
@@ -338,7 +364,7 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
               <FilterPanel
                 conditions={prefs.filters}
                 conjunction={prefs.filterConjunction}
-                fields={SESSION_COLUMNS}
+                fields={columns}
                 valueOptions={valueOptions}
                 onChange={prefs.setFilters}
                 onConjunctionChange={prefs.setFilterConjunction}
@@ -619,10 +645,10 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
         <div className="npc-table-wrap">
           <table
             className="npc-table session-table"
-            style={{ width: `${totalWidth + EXPAND_COL}px` }}
+            style={{ width: `${totalWidth + (prefs.expandWidth ?? EXPAND_COL)}px` }}
           >
             <colgroup>
-              <col style={{ width: `${EXPAND_COL}px` }} />
+              <col style={{ width: `${prefs.expandWidth ?? EXPAND_COL}px` }} />
               {shown.map(({ state }) => (
                 <col key={state.key} style={{ width: `${state.width}px` }} />
               ))}
@@ -630,7 +656,17 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
 
             <thead>
               <tr>
-                <th className="expand-th" aria-label="Open" />
+                              <th className="expand-th" aria-label="Open">
+                {/* The divider Derek asked for: the button's own track
+                    can be widened to space the fields away from it.
+                    Persisted with the rest of the layout. */}
+                <span
+                  className="col-resize"
+                  title="Drag to move the first column"
+                  onPointerDown={(e) => startExpandResize(e)}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </th>
                 {shown.map(({ state, def }) => (
                   <th
                     key={state.key}

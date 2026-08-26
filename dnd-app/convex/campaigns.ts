@@ -149,6 +149,7 @@ export const campaignCards = query({
           startDate: c.startDate ?? null,
           nextSessionDate: c.nextSessionDate ?? null,
           rulesVersion: c.rulesVersion ?? null,
+          leveling: c.leveling ?? "xp",
           isDm: c.dmId === userId,
           viaAdmin: admin && c.dmId !== userId,
           imageUrl: c.imageId ? await ctx.storage.getUrl(c.imageId) : null,
@@ -277,6 +278,22 @@ export const deleteCampaign = mutation({
  * game everyone at the table is in, not of one person's browser — so it
  * goes through requireDm like every other game-state change.
  */
+/**
+ * DM: choose how this table levels. Campaign-wide for the same reason
+ * the edition is — it changes what everyone sees on a session, and it
+ * goes through requireDm like every other game-state change.
+ */
+export const setLeveling = mutation({
+  args: {
+    campaignId: v.id("campaigns"),
+    leveling: v.union(v.literal("xp"), v.literal("milestone")),
+  },
+  handler: async (ctx, args) => {
+    await requireDm(ctx, args.campaignId);
+    await ctx.db.patch(args.campaignId, { leveling: args.leveling });
+  },
+});
+
 export const setRulesVersion = mutation({
   args: {
     campaignId: v.id("campaigns"),

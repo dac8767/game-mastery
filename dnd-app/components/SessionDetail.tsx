@@ -12,8 +12,10 @@ import { linkTargets } from "@/components/noteLinks";
 import { NoteSide, pageBoxId, pageSide } from "@/components/notePage";
 import { ColumnDef } from "@/components/npcColumns";
 import {
-  SESSION_COLUMNS,
+  Leveling,
   campaignPlayers,
+  milestoneOptions,
+  sessionColumnsFor,
   sessionPatch,
   toggleChip,
 } from "@/components/sessionColumns";
@@ -64,6 +66,7 @@ export type SessionRow = {
   date: string | null;
   players: string[];
   xp: number | null;
+  milestone: number | null;
   description: string | null;
 };
 
@@ -105,6 +108,27 @@ export function SessionDetail({
   const players = useMemo(
     () => campaignPlayers(members, characters),
     [members, characters]
+  );
+
+  /* Which leveling field the facts row shows — XP Awarded, or the
+     milestone dropdown. myCampaigns is AppShell's subscription. */
+  const campaigns = useQuery(api.campaigns.myCampaigns);
+  const leveling: Leveling =
+    campaigns?.find((c) => c._id === campaignId)?.leveling ?? "xp";
+  const columns = useMemo(() => sessionColumnsFor(leveling), [leveling]);
+
+  /* Every session, for the milestone dropdown's options: a level one
+     night reached is not on offer to another. The same query the list
+     screen holds, so this is not a second subscription in practice. */
+  const allSessions = useQuery(api.sessions.listForCampaign, { campaignId });
+  const levelOptions = useMemo(
+    () =>
+      milestoneOptions(
+        allSessions?.sessions ?? [],
+        session.number,
+        session.milestone
+      ),
+    [allSessions, session.number, session.milestone]
   );
 
   const updateSession = useMutation(api.sessions.updateSession);
@@ -287,13 +311,14 @@ export function SessionDetail({
             SESSION_COLUMNS, so the two places cannot end up offering
             different fields. */}
         <section className="session-facts">
-          {SESSION_COLUMNS.map((col) => (
+          {columns.map((col) => (
             <SessionField
               key={col.key}
               col={col}
               value={toInput(session, col.key)}
               editable={isDm}
               options={col.key === "players" ? players : undefined}
+              levels={col.kind === "level" ? levelOptions : undefined}
               onCommit={(text) => {
                 const patch = sessionPatch(col.key, text);
                 // Nothing to write is a normal outcome — a blank
@@ -421,6 +446,7 @@ function SessionField({
   value,
   editable,
   options,
+  levels,
   onCommit,
 }: {
   col: ColumnDef;
@@ -428,6 +454,8 @@ function SessionField({
   editable: boolean;
   /** Values to offer as one-click chips, above the free-text line. */
   options?: string[];
+  /** For a `level` field: the levels still available to pick. */
+  levels?: number[];
   onCommit: (text: string) => void;
 }) {
   const [draft, setDraft] = useState(value);
@@ -449,7 +477,29 @@ function SessionField({
     <label className={`detail-field session-field sf-${col.key}`}>
       <div className="detail-label">{col.label}</div>
       {!editable ? (
-        <div className="detail-value">{value || "—"}</div>
+        <div className="detail-value">
+          {value ? (col.format ? col.format(value) : value) : "—"}
+        </div>
+      ) : col.kind === "level" ? (
+        /* A dropdown, not a number box: the milestone is one of the
+           levels the campaign has not reached yet, and the empty row
+           is a real answer — most sessions level nobody. Committed on
+           change; there is no draft to hold, a select IS its value. */
+        <select
+          className="detail-input"
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            onCommit(e.target.value);
+          }}
+        >
+          <option value="">—</option>
+          {(levels ?? []).map((l) => (
+            <option key={l} value={l}>
+              Level {l}
+            </option>
+          ))}
+        </select>
       ) : col.kind === "longtext" ? (
         <textarea
           className="detail-input"

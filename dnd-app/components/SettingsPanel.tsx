@@ -6,6 +6,7 @@ import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { THEMES } from "@/components/themes";
 import { RULES_VERSIONS } from "@/components/lookupFilters";
+import { LEVELING_MODES } from "@/components/sessionColumns";
 import { DATE_FORMATS, formatCardDate } from "@/components/campaignCard";
 import { SidebarDesigner } from "@/components/SidebarDesigner";
 import { EditModeSwitch, UiText } from "@/components/UiEditor";
@@ -43,6 +44,7 @@ export function SettingsPanel({
   const campaigns = useQuery(api.campaigns.myCampaigns);
   const save = useMutation(api.settings.saveMySettings);
   const setRulesVersion = useMutation(api.campaigns.setRulesVersion);
+  const setLeveling = useMutation(api.campaigns.setLeveling);
   const [selected, setSelected] = useState<string>("general");
 
   if (settings === undefined || campaigns === undefined) {
@@ -271,6 +273,33 @@ export function SettingsPanel({
                 >
                   <span className="theme-name">{r.label}</span>
                   <span className="settings-note">{r.note}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="settings-block">
+            <h2>Leveling</h2>
+            <p className="settings-note">
+              How this table levels up. XP puts an &ldquo;XP Awarded&rdquo;
+              field on every session; milestone replaces it with
+              &ldquo;Leveled up to&rdquo; and a pick of the levels the
+              campaign has not reached yet.
+            </p>
+            <div className="theme-options">
+              {LEVELING_MODES.map((m) => (
+                <button
+                  type="button"
+                  key={m.value}
+                  className={`theme-option${
+                    (current?.leveling ?? "xp") === m.value ? " on" : ""
+                  }`}
+                  onClick={() =>
+                    void setLeveling({ campaignId, leveling: m.value })
+                  }
+                >
+                  <span className="theme-name">{m.label}</span>
+                  <span className="settings-note">{m.note}</span>
                 </button>
               ))}
             </div>

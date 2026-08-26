@@ -25,6 +25,7 @@ import {
   itemFacts,
   itemSubtitle,
   monsterSubtitle,
+  EXPAND_TRACK,
   monsterTraitLines,
   nameTrackPx,
   sortByColumn,
@@ -412,12 +413,33 @@ export function LookupTool({
               className="lk-head"
               style={{ ["--lk-cols" as string]: template }}
             >
-              {/* The expand button's track, and the filler track at the
-                  far end. Both are empty here, and both have to be
-                  present: the header is a separate grid from the rows
-                  and lines up with them only by holding a cell per
-                  track. */}
-              <span />
+              {/* The expand track's header cell — no label, but no
+                  longer empty: its right edge is a drag handle, asked
+                  for as a way to space the fields away from the caret.
+                  The width rides in the same layout row the columns
+                  use, under the pseudo-key "expand". */}
+              <span className="lk-exp-head">
+                <span
+                  className="col-resize"
+                  title="Drag to move the first column"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    const startX = e.clientX;
+                    const startW =
+                      layout.widths.expand ?? Number.parseInt(EXPAND_TRACK, 10);
+                    const onMove = (ev: PointerEvent) =>
+                      layout.resize("expand", startW + (ev.clientX - startX));
+                    const onUp = () => {
+                      window.removeEventListener("pointermove", onMove);
+                      window.removeEventListener("pointerup", onUp);
+                      document.body.classList.remove("col-resizing");
+                    };
+                    window.addEventListener("pointermove", onMove);
+                    window.addEventListener("pointerup", onUp);
+                    document.body.classList.add("col-resizing");
+                  }}
+                />
+              </span>
               {columns.map((c) => (
                 <span key={c.key} className="lk-th-cell">
                   <button

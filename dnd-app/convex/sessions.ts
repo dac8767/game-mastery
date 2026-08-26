@@ -103,6 +103,7 @@ export const listForCampaign = query({
         date: s.date ?? null,
         players: s.players,
         xp: s.xp ?? null,
+        milestone: s.milestone ?? null,
         description: s.description ?? null,
       })),
     };
@@ -218,6 +219,7 @@ export const updateSession = mutation({
     date: v.optional(v.union(v.string(), v.null())),
     players: v.optional(v.array(v.string())),
     xp: v.optional(v.union(v.number(), v.null())),
+    milestone: v.optional(v.union(v.number(), v.null())),
     description: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
@@ -236,6 +238,16 @@ export const updateSession = mutation({
 
     if (typeof patch.number === "number" && !Number.isFinite(patch.number)) {
       throw new Error("A session number has to be a number.");
+    }
+
+    // A milestone is a LEVEL: a whole number a character sheet can
+    // say. 2 through 20, because level 1 is where a campaign starts
+    // rather than somewhere it arrives.
+    if (patch.milestone !== undefined) {
+      const m = patch.milestone;
+      if (typeof m !== "number" || !Number.isInteger(m) || m < 2 || m > 20) {
+        throw new Error("A milestone is a level from 2 to 20.");
+      }
     }
 
     await ctx.db.patch(sessionId, patch as Partial<Doc<"sessions">>);

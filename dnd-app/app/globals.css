@@ -1156,6 +1156,17 @@ body.col-resizing {
 .expand-th {
   cursor: default;
   padding: 0.55rem 0.3rem;
+  /* The divider on its right edge is absolutely positioned, like every
+     other column's. Without this it anchors to the table instead and
+     lands wherever the last positioned ancestor happens to be. */
+  position: relative;
+}
+
+/* The Lookup header's version of the same cell. */
+.lk-exp-head {
+  position: relative;
+  min-width: 0;
+  align-self: stretch;
 }
 
 .expand-cell {
@@ -1167,8 +1178,11 @@ body.col-resizing {
 .expand-btn {
   display: inline-grid;
   place-items: center;
-  width: 1.5rem;
-  height: 1.5rem;
+  /* The BUTTON is bigger than the drawing. Reported: a 13px icon in a
+     24px button is a target you aim at. The icon stays its size — the
+     rows did not get taller — and the padding-box takes the clicks. */
+  width: 2rem;
+  height: 2rem;
   padding: 0;
   border: none;
   border-radius: 6px;
@@ -7853,9 +7867,35 @@ button.cal-day:hover {
    the flex-fill the Notebook's single canvas takes. Tall enough to
    arrange things on, and it scrolls inside itself so the two sections
    do not push each other off the screen. */
+/* One panel, not three stacked cards. Reported: the tabs, the format
+   bar and the page had gaps and their own frames, which read as three
+   windows. The strip's own rule is gone — the format bar's top border
+   is the line the open tab attaches to — the gap is zero, and the
+   corners where the pieces meet are square so the joins read as joins. */
 .session-notes {
   display: grid;
-  gap: 0.6rem;
+  gap: 0;
+}
+
+.session-notes .session-tabs {
+  border-bottom: none;
+}
+
+.session-notes .nb-fmtbar {
+  margin-bottom: 0;
+  border-radius: 0 9px 0 0;
+  border-bottom: none;
+}
+
+.session-notes .nb-canvas {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+/* The player-only view has a plain heading instead of tabs; without
+   the grid gap it needs its own breathing room. */
+.session-notes > .group-h {
+  margin-bottom: 0.5rem;
 }
 
 /* Every field the list shows, across the top of the record. A row that
@@ -7957,6 +7997,10 @@ button.cal-day:hover {
   background: var(--bg-raised);
   border-color: var(--border);
   border-bottom-color: var(--bg-raised);
+  /* Over the format bar's top border, so the tab and the bar are one
+     surface rather than a tab floating above a line. */
+  position: relative;
+  z-index: 1;
 }
 
 .session-notes .nb-canvas {
