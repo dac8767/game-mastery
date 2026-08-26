@@ -516,13 +516,14 @@ button {
   gap: 0.35rem;
   width: 100%;
   padding: 0 0.6rem 0.4rem;
-  /* The SIZE of the items under it, and bold. It was set smaller and
-     lighter than its own contents, which reads as a caption on the row
-     above rather than as the top of a group; bigger than them was the
-     first correction and overshot — a heading does not have to shout
-     to outrank a list, it just must not be quieter than one. Weight,
-     capitals and the caret carry it at the same size. */
-  font-size: 0.88rem;
+  /* The SIZE of the items under it, and bold — the rule that survived
+     three rounds of tuning is the RELATIONSHIP, not the number. It was
+     set smaller and lighter than its own contents once, which reads as
+     a caption on the row above rather than as the top of a group.
+     0.75rem is Derek's 12px, moved together with the items' 12px;
+     weight, capitals and the caret still carry the heading at the
+     same size. */
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -594,8 +595,9 @@ button {
   min-width: 0;
   padding: 0.1rem 0.25rem;
   /* Larger, now that it is the top of the sidebar rather than the
-     second thing under a wordmark. */
-  font-size: 1.15rem;
+     second thing under a wordmark. 1.25rem is Derek's 20px, stated in
+     rem like every other size here so a browser zoom scales it too. */
+  font-size: 1.25rem;
   font-weight: 600;
   border-radius: 8px;
 }
@@ -678,7 +680,7 @@ button {
   width: 100%;
   padding: 0.42rem 0.6rem;
   border-radius: 8px;
-  font-size: 0.88rem;
+  font-size: 0.75rem;
   color: var(--text-dim);
   text-align: left;
   background: none;
@@ -708,7 +710,10 @@ button {
 
 .nav-item.as-button {
   font: inherit;
-  font-size: 0.88rem;
+  /* Restated because `font: inherit` resets it — and restated as the
+     SAME number as .nav-item, or Send Feedback and Sign out drift from
+     the links they sit among the moment one rule changes. */
+  font-size: 0.75rem;
   cursor: pointer;
 }
 
