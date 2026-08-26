@@ -558,6 +558,62 @@ export const dmVisibility = {
       );
     }
 
+    // ---- convex/dmscreen.ts ----------------------------------------
+    // The DM Screen's storage. Everything in it is the DM's own — the
+    // arrangement, the workspaces, the prep notes — so every function
+    // goes through requireDm, and the row-addressed mutations authorise
+    // against the ROW's campaign rather than an argument a caller
+    // could aim at somebody else's campaign.
+    {
+      const dmscreen = read("convex", "dmscreen.ts");
+      const fnBody = (name) => {
+        const at = dmscreen.indexOf(`export const ${name} = `);
+        if (at === -1) throw new Error(`no ${name} in convex/dmscreen.ts`);
+        const next = dmscreen.indexOf("\nexport const ", at + 1);
+        return dmscreen.slice(at, next === -1 ? undefined : next);
+      };
+
+      for (const fn of ["getScreen", "saveLayout", "saveWorkspace", "addNote"]) {
+        if (!/await requireDm\(ctx, args\.campaignId\)/.test(fnBody(fn))) {
+          problems.push(`dmscreen.${fn} is not gated on requireDm`);
+        }
+      }
+      // The row-addressed ones go through the owned helpers, which
+      // authorise the row's own campaign AND its user.
+      for (const [fn, helper] of [
+        ["updateWorkspace", "ownedWorkspace"],
+        ["deleteWorkspace", "ownedWorkspace"],
+        ["updateNote", "ownedNote"],
+        ["deleteNote", "ownedNote"],
+      ]) {
+        if (!new RegExp(`await ${helper}\\(ctx, args\\.`).test(fnBody(fn))) {
+          problems.push(
+            `dmscreen.${fn} does not authorise through ${helper} — a row id ` +
+              "is all a caller needs to name another campaign's row"
+          );
+        }
+      }
+      // And the helpers check the USER too: two DMs of two campaigns
+      // must not reach each other's rows through the shared table.
+      for (const helper of ["ownedWorkspace", "ownedNote"]) {
+        const at = dmscreen.indexOf(`async function ${helper}`);
+        const body = dmscreen.slice(at, dmscreen.indexOf("\n}", at));
+        if (!/row\.userId !== userId/.test(body)) {
+          problems.push(
+            `${helper} does not compare the row's userId — an admin or ` +
+              "co-DM would reach rows that are not theirs"
+          );
+        }
+      }
+      // Note HTML is rebuilt like every other stored HTML.
+      if (!/patch\.html = sanitizeBoxHtml\(args\.html\)/.test(fnBody("updateNote"))) {
+        problems.push(
+          "dmscreen.updateNote stores html unsanitised — pasted rich text " +
+            "goes straight to the DM's own browser"
+        );
+      }
+    }
+
     return problems;
   },
 };

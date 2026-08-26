@@ -503,6 +503,27 @@ export const purgeCampaign = internalMutation({
       return await more();
     }
 
+    /* The DM Screen's rows. Their index is by_campaign_user, which a
+       campaign-only prefix query still walks — every user's screens,
+       workspaces and notes for this campaign go. */
+    const dmScreens = await ctx.db
+      .query("dmScreens")
+      .withIndex("by_campaign_user", (q) => q.eq("campaignId", campaignId))
+      .take(left);
+    if (await sweep(dmScreens)) return await more();
+
+    const dmWorkspaces = await ctx.db
+      .query("dmWorkspaces")
+      .withIndex("by_campaign_user", (q) => q.eq("campaignId", campaignId))
+      .take(left);
+    if (await sweep(dmWorkspaces)) return await more();
+
+    const dmNotes = await ctx.db
+      .query("dmNotes")
+      .withIndex("by_campaign_user", (q) => q.eq("campaignId", campaignId))
+      .take(left);
+    if (await sweep(dmNotes)) return await more();
+
     const npcTemplates = await ctx.db
       .query("npcTemplates")
       .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))

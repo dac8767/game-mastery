@@ -444,6 +444,48 @@ export default defineSchema({
    * them as a player so they can see exactly what the table gives away.
    * It only ever removes access, so it is fine to let the caller set it.
    */
+  /**
+   * The DM Screen's live arrangement: one row per person per campaign.
+   *
+   * `layout` is JSON, deliberately unvalidated here — the window model
+   * keeps changing shape, and a validator would turn every tweak into
+   * a migration of a personal preference blob. components/dmscreen.ts
+   * owns the shape and its parseLayout trusts nothing on the way in.
+   * Per person rather than per campaign, so an admin opening a broken
+   * campaign does not sit in — or overwrite — the DM's arrangement.
+   */
+  dmScreens: defineTable({
+    campaignId: v.id("campaigns"),
+    userId: v.id("users"),
+    layout: v.string(),
+  }).index("by_campaign_user", ["campaignId", "userId"]),
+
+  /**
+   * Named copies of a DM Screen arrangement — Premiere's workspaces.
+   * Saving one snapshots the live layout; loading one copies it back.
+   */
+  dmWorkspaces: defineTable({
+    campaignId: v.id("campaigns"),
+    userId: v.id("users"),
+    name: v.string(),
+    layout: v.string(),
+  }).index("by_campaign_user", ["campaignId", "userId"]),
+
+  /**
+   * The rich text behind a note window.
+   *
+   * Documents of their own rather than text inside the layout, because
+   * workspaces snapshot the LAYOUT: prep written into a note must
+   * survive switching workspaces, and a note inlined in the snapshot
+   * would quietly fork into as many copies as there are workspaces.
+   */
+  dmNotes: defineTable({
+    campaignId: v.id("campaigns"),
+    userId: v.id("users"),
+    title: v.string(),
+    html: v.string(),
+  }).index("by_campaign_user", ["campaignId", "userId"]),
+
   userSettings: defineTable({
     userId: v.id("users"),
     theme: v.union(

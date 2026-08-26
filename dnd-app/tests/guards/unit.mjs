@@ -6361,6 +6361,232 @@ export const unit = {
       );
     }
 
+    // ---- the DM Screen's windows -----------------------------------
+    // Panels, tabs, snapping, tearing off, and the parser every stored
+    // layout comes through. The failures here are all invisible in a
+    // demo: a snap one pixel off, a merge that loses a tab, a saved
+    // layout from last month that crashes the screen open.
+    {
+      const dm = await import(
+        pathToFileURL(
+          join(compile("components/dmScreenModel.ts"), "dmScreenModel.js")
+        ).href
+      );
+      const VIEW = { w: 1200, h: 800 };
+      const NOTES = new Set(["n1"]);
+
+      // Round trip: what serialize writes, parse reads back whole.
+      const start = dm.defaultLayout(VIEW);
+      check(
+        "a layout survives the round trip through storage",
+        JSON.stringify(dm.parseLayout(dm.serializeLayout(start), NOTES)) ===
+          JSON.stringify(start)
+      );
+      check(
+        "garbage parses to null rather than a crash or a screen",
+        dm.parseLayout("{not json", NOTES) === null &&
+          dm.parseLayout('{"panels": 7}', NOTES) === null &&
+          dm.parseLayout(null, NOTES) === null
+      );
+      // The reason parseLayout exists: stored kinds the app no longer
+      // has, and notes deleted elsewhere, are dropped rather than
+      // rendered as broken windows.
+      check(
+        "an unknown kind and a dead note are dropped, their panel with them",
+        (() => {
+          const raw = JSON.stringify({
+            panels: [
+              { id: 1, x: 0, y: 0, w: 300, h: 200, tabs: [{ kind: "widget" }], active: 0 },
+              { id: 2, x: 0, y: 0, w: 300, h: 200, tabs: [{ kind: "note", noteId: "gone" }], active: 0 },
+              { id: 3, x: 0, y: 0, w: 300, h: 200, tabs: [{ kind: "monsters" }, { kind: "widget" }], active: 1 },
+            ],
+            nextId: 4,
+          });
+          const out = dm.parseLayout(raw, NOTES);
+          return (
+            out !== null &&
+            out.panels.length === 1 &&
+            out.panels[0].tabs.length === 1 &&
+            out.panels[0].active === 0
+          );
+        })()
+      );
+      check(
+        "a layout with nothing left in it is null, so the default steps in",
+        dm.parseLayout(
+          JSON.stringify({ panels: [{ id: 1, x: 0, y: 0, w: 300, h: 200, tabs: [{ kind: "widget" }], active: 0 }], nextId: 2 }),
+          NOTES
+        ) === null
+      );
+      check(
+        "ids stay unique after a reload — nextId clears every survivor",
+        (() => {
+          const out = dm.parseLayout(
+            JSON.stringify({ panels: [{ id: 9, x: 0, y: 0, w: 300, h: 200, tabs: [{ kind: "chat" }], active: 0 }], nextId: 2 }),
+            NOTES
+          );
+          return out !== null && out.nextId > 9;
+        })()
+      );
+
+      // Stacking: dropping a window on another header merges its tabs
+      // at the end, activates the first arrival, and closes the source.
+      {
+        const two = dm.defaultLayout(VIEW);
+        const merged = dm.mergePanels(two, 1, 2);
+        const target = merged.panels.find((p) => p.id === 2);
+        check(
+          "a merge keeps every tab from both windows",
+          merged.panels.length === 1 && target.tabs.length === 3
+        );
+        check(
+          "the dropped window's first tab is the active one",
+          target.tabs[target.active].kind === "reference"
+        );
+        check(
+          "merging a window into itself changes nothing",
+          dm.mergePanels(two, 1, 1) === two
+        );
+      }
+
+      // Tearing off: a tab dragged out is a window of its own, at the
+      // pointer, at its old window's size.
+      {
+        const two = dm.defaultLayout(VIEW);
+        const torn = dm.tearOffTab(two, 2, 1, { x: 300, y: 200 });
+        const born = torn.panels[torn.panels.length - 1];
+        check(
+          "a torn-off tab becomes its own window where it was dropped",
+          torn.panels.length === 3 &&
+            born.tabs.length === 1 &&
+            born.tabs[0].kind === "spells" &&
+            born.x === 300 &&
+            born.y === 200
+        );
+        check(
+          "it keeps the size it was being read at",
+          born.w === two.panels[1].w && born.h === two.panels[1].h
+        );
+        check(
+          "the last tab cannot be torn off — that is a move",
+          dm.tearOffTab(two, 1, 0, { x: 10, y: 10 }) === two
+        );
+      }
+
+      // Closing: the last tab takes its window with it.
+      {
+        const two = dm.defaultLayout(VIEW);
+        const one = dm.closeTab(two, 1, 0);
+        check(
+          "closing a window's last tab closes the window",
+          one.panels.length === 1 && one.panels[0].id === 2
+        );
+        const partial = dm.closeTab(two, 2, 0);
+        check(
+          "closing one tab of a stack keeps the stack",
+          partial.panels.length === 2 &&
+            partial.panels.find((p) => p.id === 2).tabs.length === 1
+        );
+      }
+
+      // The z-order is the array order, and clicking brings to front.
+      check(
+        "a raised window draws last",
+        (() => {
+          const two = dm.defaultLayout(VIEW);
+          const raised = dm.bringToFront(two, 1);
+          return raised.panels[raised.panels.length - 1].id === 1;
+        })()
+      );
+
+      // Snapping — the arithmetic of "align them".
+      {
+        const others = [{ x: 400, y: 300, w: 200, h: 100 }];
+        const snapped = dm.snapBox(
+          { x: 605, y: 150, w: 100, h: 80 },
+          others,
+          VIEW
+        );
+        check(
+          "an edge within reach snaps flush to its neighbour",
+          snapped.x === 600 && snapped.vGuides.includes(600)
+        );
+        check(
+          "an edge out of reach is left where the hand put it",
+          dm.snapBox({ x: 620, y: 150, w: 100, h: 80 }, others, VIEW).x === 620
+        );
+        check(
+          "the canvas edge snaps too",
+          dm.snapBox({ x: 5, y: 5, w: 100, h: 80 }, [], VIEW).x === 0 &&
+            dm.snapBox({ x: 5, y: 5, w: 100, h: 80 }, [], VIEW).y === 0
+        );
+        check(
+          "the RIGHT edge of the box is a candidate, not just the left",
+          dm.snapBox({ x: 295, y: 150, w: 100, h: 80 }, others, VIEW).x === 300
+        );
+      }
+
+      // Drop-to-merge hit testing: front-most header wins.
+      {
+        const two = dm.defaultLayout(VIEW);
+        const p2 = two.panels[1];
+        check(
+          "the pointer finds the header under it",
+          dm.panelHeaderAt(two, { x: p2.x + 10, y: p2.y + 10 }, 34) === 2
+        );
+        check(
+          "a point below the header strip finds nothing",
+          dm.panelHeaderAt(two, { x: p2.x + 10, y: p2.y + 60 }, 34) === null
+        );
+        check(
+          "the dragged window does not catch its own drop",
+          dm.panelHeaderAt(two, { x: p2.x + 10, y: p2.y + 10 }, 34, 2) === null
+        );
+        // Overlapping headers: the FRONT one takes the drop, because it
+        // is the one the eye sees the tab land on. The default layout's
+        // panels do not overlap, so this needs its own fixture — the
+        // mutation that walked the array forwards passed everything
+        // else.
+        const stacked = {
+          panels: [
+            { id: 1, x: 100, y: 100, w: 300, h: 200, tabs: [{ kind: "chat" }], active: 0 },
+            { id: 2, x: 150, y: 100, w: 300, h: 200, tabs: [{ kind: "rules" }], active: 0 },
+          ],
+          nextId: 3,
+        };
+        check(
+          "where headers overlap, the front-most window takes the drop",
+          dm.panelHeaderAt(stacked, { x: 200, y: 110 }, 34) === 2
+        );
+      }
+
+      // Adding cascades rather than piling.
+      {
+        let l = dm.defaultLayout(VIEW);
+        l = dm.addPanel(l, { kind: "chat" }, VIEW);
+        l = dm.addPanel(l, { kind: "rules" }, VIEW);
+        const a = l.panels[l.panels.length - 2];
+        const b = l.panels[l.panels.length - 1];
+        check(
+          "two added windows do not land in one pile",
+          a.x !== b.x || a.y !== b.y
+        );
+        check(
+          "every added window gets a fresh id",
+          new Set(l.panels.map((p) => p.id)).size === l.panels.length
+        );
+      }
+
+      // Every kind in the menu has a name to show on its tab.
+      check(
+        "every panel kind has a title",
+        dm.DM_PANEL_KINDS.every(
+          (k) => typeof dm.DM_PANEL_TITLES[k] === "string" && dm.DM_PANEL_TITLES[k]
+        )
+      );
+    }
+
+
     // ---- a group is matched by name, not by spelling ---------------
     // The field is free text typed into Airtable and nobody typed it
     // twice the same way. Matching on the raw string files one guild

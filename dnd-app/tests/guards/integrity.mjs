@@ -3836,6 +3836,93 @@ export const integrity = {
       }
     }
 
+    // ---- the DM Screen's windows ------------------------------------
+    // The registry, the geometry constants, and the two rules that keep
+    // an arrangement from quietly losing pieces.
+    {
+      const model = read("components", "dmScreenModel.ts");
+      const screenSrc = stripComments(read("components", "DmScreen.tsx"));
+
+      // Every kind the Add menu offers must render SOMETHING: the menu
+      // maps over DM_PANEL_KINDS and the content switch is hand-written,
+      // so a kind added to one and forgotten in the other opens an
+      // empty window with no error anywhere.
+      const kinds = constArrayStrings(model, "DM_PANEL_KINDS", "dmScreenModel");
+      const contentAt = screenSrc.indexOf("function PanelContent");
+      if (contentAt === -1) {
+        problems.push("DmScreen lost its PanelContent registry");
+      } else {
+        const body = screenSrc.slice(contentAt, screenSrc.indexOf("function DmNotePane"));
+        for (const kind of kinds) {
+          if (!body.includes(`case "${kind}"`)) {
+            problems.push(
+              `panel kind "${kind}" is in the Add menu but PanelContent ` +
+                "has no case for it — it would open an empty window"
+            );
+          }
+        }
+        // The label alone is not the content: a deleted return leaves
+        // `case "rules":` falling through into the next case, which
+        // renders the WRONG window with every label present. So every
+        // component the registry exists to serve must actually be
+        // rendered in it. (The seven lookup kinds share LookupTool by
+        // design — that is one entry here, not seven.)
+        for (const el of [
+          "<LookupTool",
+          "<NpcTable",
+          "<SessionTable",
+          "<LocationsTool",
+          "<GroupTable",
+          "<ChatTool",
+          "<CalendarTool",
+          "<RulesLawyerTool",
+          "<ReferencePanel",
+          "<DmNotePane",
+        ]) {
+          if (!body.includes(el)) {
+            problems.push(
+              `PanelContent no longer renders ${el} — its kind's case ` +
+                "falls through into a neighbour and opens the wrong window"
+            );
+          }
+        }
+      }
+
+      // The header height is stated twice — once as CSS, once as the
+      // number panelHeaderAt measures with — and a drop lands in the
+      // wrong window the day they disagree.
+      const cssHead = /\.dm-panel-head\s*\{[^}]*height:\s*(\d+)px/.exec(
+        read("app", "globals.css")
+      );
+      const jsHead = /const HEADER_PX = (\d+)/.exec(screenSrc);
+      if (!cssHead || !jsHead) {
+        problems.push("could not read both copies of the panel header height");
+      } else if (cssHead[1] !== jsHead[1]) {
+        problems.push(
+          `the panel header is ${cssHead[1]}px in CSS and ${jsHead[1]}px in ` +
+            "the drop hit-test — dropping a tab would miss the header it " +
+            "is visibly over"
+        );
+      }
+
+      // The live layout autosaves, and the saver saves what is on
+      // screen rather than a stale closure.
+      if (!/saveLayout\(\{ campaignId, layout: serializeLayout\(layout\) \}\)/.test(screenSrc)) {
+        problems.push(
+          "DmScreen does not autosave the live layout — every arrangement " +
+            "would be lost on reload"
+        );
+      }
+      // A workspace LOADS through the parser, never straight into
+      // state: a stored blob is exactly what parseLayout exists for.
+      if (!/parseLayout\(ws\.layout, noteIds\)/.test(screenSrc)) {
+        problems.push(
+          "loading a workspace bypasses parseLayout — a stale snapshot " +
+            "would be trusted straight into the screen"
+        );
+      }
+    }
+
     // ---- the expand cell must never ellipsise, and the thank-you
     // ---- closes itself ----------------------------------------------
     {

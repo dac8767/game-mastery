@@ -3826,6 +3826,282 @@ body.col-resizing {
   flex-direction: column;
   gap: 0.9rem;
   min-height: 0;
+  flex: 1;
+}
+
+/* The window field. Every panel is positioned inside this, so it is
+   the coordinate space snapping, tearing off and drop-to-merge all
+   measure against — position: relative is load-bearing, not styling. */
+.dm-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 30rem;
+  overflow: hidden;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.dm-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.dm-fmt {
+  margin-left: auto;
+}
+
+.dm-fmt .nb-fmtbar {
+  margin-bottom: 0;
+}
+
+.dm-menu-host {
+  position: relative;
+}
+
+.dm-menu {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  z-index: 41;
+  min-width: 13rem;
+  max-height: min(60vh, 26rem);
+  overflow-y: auto;
+  padding: 0.35rem;
+  display: grid;
+  gap: 1px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.dm-menu > button {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font-size: 0.84rem;
+}
+
+.dm-menu > button:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.dm-menu-note {
+  margin: 0.3rem 0.45rem;
+  font-size: 0.8rem;
+  max-width: 18rem;
+}
+
+.dm-workspaces {
+  min-width: 21rem;
+}
+
+.dm-ws-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0.2rem;
+}
+
+.dm-ws-load {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  padding: 0.25rem 0.4rem;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.dm-ws-load:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.dm-ws-row .text-button {
+  font-size: 0.72rem;
+}
+
+.dm-ws-foot {
+  margin-top: 0.3rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--border);
+}
+
+/* One window. The shadow separates it from whatever it overlaps —
+   z-order is the render order, so no z-index war. */
+.dm-panel {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+/* The header IS the tab strip — 34px, the number panelHeaderAt is
+   handed, and the drag handle for the whole window where no tab is. */
+.dm-panel-head {
+  flex: none;
+  height: 34px;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 4px 6px 0;
+  background: var(--bg-inset);
+  border-bottom: 1px solid var(--border);
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+  overflow: hidden;
+}
+
+.dm-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 12rem;
+  padding: 0 0.6rem;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 7px 7px 0 0;
+  background: none;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: grab;
+}
+
+.dm-tab.on {
+  background: var(--bg-raised);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.dm-tab-x {
+  display: inline-grid;
+  place-items: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 4px;
+  color: var(--text-dim);
+}
+
+.dm-tab-x:hover {
+  background: var(--bloodied);
+  color: #fff;
+}
+
+.dm-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.6rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.dm-panel-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 1.1rem;
+  height: 1.1rem;
+  cursor: nwse-resize;
+  touch-action: none;
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 3px,
+    var(--border) 3px 4px
+  );
+}
+
+/* The alignment guides: full-height and full-width hairlines at the
+   edge being snapped to, visible only during the drag. */
+.dm-guide-v,
+.dm-guide-h {
+  position: absolute;
+  pointer-events: none;
+  background: var(--accent);
+  opacity: 0.7;
+}
+
+.dm-guide-v {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.dm-guide-h {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.dm-note {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 0.4rem;
+}
+
+/* The retitle field looks like a title until it is clicked, which is
+   the whole of what makes a note a "custom info panel". */
+.dm-note-title {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.15rem 0.35rem;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.dm-note-title:hover,
+.dm-note-title:focus {
+  border-color: var(--border);
+  background: var(--bg-inset);
+  outline: none;
+}
+
+.dm-note-page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-inset);
+}
+
+.dm-reference h2 {
+  margin: 0 0 0.6rem;
+  font-size: 0.95rem;
+  color: var(--accent);
+  font-variant: small-caps;
+  letter-spacing: 0.06em;
+}
+
+.dm-reference h2 + .dmscreen-ref + h2,
+.dm-reference .dmscreen-ref + h2 {
+  margin-top: 1rem;
 }
 
 .dmscreen-panel {
