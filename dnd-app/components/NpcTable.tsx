@@ -7,6 +7,8 @@ import { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useViewPrefs } from "@/components/useViewPrefs";
+import { Pager } from "@/components/Pager";
+import { clampPageSize, pageSlice } from "@/components/pagerModel";
 import { NpcDetail, fromInput } from "@/components/NpcDetail";
 import { FilterPanel } from "@/components/FilterPanel";
 import { matchesAll } from "@/components/npcFilters";
@@ -107,6 +109,9 @@ function chipClass(columnKey: string, value: string): string {
 export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const result = useQuery(api.npcs.listForCampaign, { campaignId });
   const isDm = result?.isDm ?? false;
+  // The page size. AppShell already holds this subscription, so this
+  // is the same one rather than a second server call.
+  const settings = useQuery(api.settings.mySettings);
 
   const prefs = useViewPrefs(campaignId, "npcs", isDm);
   const updateNpc = useMutation(api.npcs.updateNpc);
@@ -236,9 +241,20 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
     return m;
   }, [all]);
 
+  /* One page of the list, cut BEFORE grouping: "N rows at a time"
+     counts rows, and the groups on screen are rebuilt from the page.
+     The page is clamped against the list rather than reset by it, so
+     a filter that shrinks the list lands on the new last page. */
+  const [page, setPage] = useState(0);
+  const pageSize = clampPageSize(settings?.tableRows);
+  const paged = useMemo(
+    () => pageSlice(sorted, page, pageSize),
+    [sorted, page, pageSize]
+  );
+
   const groups = useMemo(
-    () => (prefs.groupBy ? groupRows(sorted, prefs.groupBy) : null),
-    [sorted, prefs.groupBy]
+    () => (prefs.groupBy ? groupRows(paged, prefs.groupBy) : null),
+    [paged, prefs.groupBy]
   );
 
   const selectedNpc = useMemo(
@@ -810,7 +826,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
       ) : prefs.viewMode === "tiles" ? (
         <TileGrid
           groups={groups}
-          rows={sorted}
+          rows={paged}
           shown={shown}
           perRow={prefs.tilesPerRow}
           collapsed={collapsed}
@@ -919,7 +935,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
             ))
           ) : (
             <tbody>
-              {sorted.map((n) => (
+              {paged.map((n) => (
                 <Row
                   key={n._id}
                   npc={n}
@@ -953,6 +969,15 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
         </div>
       )}
 
+      {/* Under both views, never under an open record. */}
+      {!selectedNpc && (
+        <Pager
+          total={sorted.length}
+          page={page}
+          size={pageSize}
+          onPage={setPage}
+        />
+      )}
     </div>
   );
 }

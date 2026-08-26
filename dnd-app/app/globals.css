@@ -5163,6 +5163,53 @@ button.cal-day:hover {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
 }
 
+/* ---------- The page row under every table ---------- */
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0 0.2rem;
+}
+
+.pager-step,
+.pager-num {
+  min-width: 1.9rem;
+  height: 1.75rem;
+  padding: 0 0.5rem;
+  font: inherit;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.pager-step:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pager-step:not(:disabled):hover,
+.pager-num:hover {
+  color: var(--text);
+}
+
+/* The page you are on, in the accent the app uses for "current". */
+.pager-num.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.pager-gap {
+  padding: 0 0.15rem;
+  color: var(--text-dim);
+}
+
 /* The category row scrolls rather than wrapping to three lines on a
    narrow window — fourteen creature types is a lot of chips. */
 .lf-chips {

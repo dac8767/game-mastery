@@ -8,6 +8,7 @@ import { THEMES } from "@/components/themes";
 import { RULES_VERSIONS } from "@/components/lookupFilters";
 import { LEVELING_MODES } from "@/components/sessionColumns";
 import { DATE_FORMATS, formatCardDate } from "@/components/campaignCard";
+import { PAGE_SIZES, clampPageSize } from "@/components/pagerModel";
 import { SidebarDesigner } from "@/components/SidebarDesigner";
 import { EditModeSwitch, UiText } from "@/components/UiEditor";
 import { NameField } from "@/components/NameField";
@@ -105,6 +106,28 @@ export function SettingsPanel({
                   <span className="settings-note">
                     {formatCardDate("2026-09-05", f.value)}
                   </span>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="settings-block">
+            <h2>Tables</h2>
+            <p className="settings-note">
+              How many rows every table loads at a time. The rest waits
+              behind the page numbers under the table.
+            </p>
+            <div className="theme-options">
+              {PAGE_SIZES.map((n) => (
+                <button
+                  type="button"
+                  key={n}
+                  className={`theme-option${
+                    clampPageSize(settings.tableRows) === n ? " on" : ""
+                  }`}
+                  onClick={() => void save({ tableRows: n })}
+                >
+                  <span className="theme-name">{n} rows</span>
                 </button>
               ))}
             </div>

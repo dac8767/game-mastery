@@ -40,6 +40,8 @@ const DEFAULTS = {
   excludedSources: [] as string[],
   // Open, the way the app has always started.
   sidebarCollapsed: false,
+  // Mirrors DEFAULT_PAGE_SIZE in components/pagerModel.ts.
+  tableRows: 20,
 };
 
 /** Shared reader so queries can honour viewAsPlayer without duplication. */
@@ -66,6 +68,7 @@ export async function getSettings(ctx: QueryCtx, userId: Id<"users">) {
         // layout that happens to match the shipped grouping.
         sidebar: doc.sidebar ?? null,
         sidebarCollapsed: doc.sidebarCollapsed ?? DEFAULTS.sidebarCollapsed,
+        tableRows: doc.tableRows ?? DEFAULTS.tableRows,
       }
     : { ...DEFAULTS, sidebar: null };
 }
@@ -126,6 +129,17 @@ export const saveMySettings = mutation({
     excludedSources: v.optional(v.array(v.string())),
     sidebar: v.optional(v.union(sidebarValidator, v.null())),
     sidebarCollapsed: v.optional(v.boolean()),
+    // The exact offered set, not any number: a validator that took 7
+    // or 7000 would let one bad write outlast every clamp after it.
+    tableRows: v.optional(
+      v.union(
+        v.literal(10),
+        v.literal(20),
+        v.literal(30),
+        v.literal(40),
+        v.literal(50)
+      )
+    ),
   },
   handler: async (ctx, args) => {
     const userId = await requireUser(ctx);
@@ -162,6 +176,7 @@ export const saveMySettings = mutation({
             ? undefined
             : (args.sidebar ?? existing.sidebar),
         sidebarCollapsed: args.sidebarCollapsed ?? existing.sidebarCollapsed,
+        tableRows: args.tableRows ?? existing.tableRows,
       });
       return;
     }
@@ -177,6 +192,7 @@ export const saveMySettings = mutation({
       excludedSources: args.excludedSources,
       sidebar: args.sidebar ?? undefined,
       sidebarCollapsed: args.sidebarCollapsed,
+      tableRows: args.tableRows,
     });
   },
 });

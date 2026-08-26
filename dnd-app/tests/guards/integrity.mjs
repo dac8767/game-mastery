@@ -4098,6 +4098,64 @@ export const integrity = {
       }
     }
 
+    // ---- every table pages by the one setting -----------------------
+    // Asked for: a fixed number of rows at a time, page numbers with
+    // Previous and Next, and the amount as a General setting. Each
+    // link fails silently on its own — a table that quietly maps the
+    // full list again just renders everything with a page row that
+    // lies about it.
+    {
+      const tables = [
+        "LookupTool.tsx",
+        "NpcTable.tsx",
+        "SessionTable.tsx",
+        "GroupTable.tsx",
+      ];
+      for (const file of tables) {
+        const src = stripComments(read("components", file));
+        if (!src.includes("<Pager")) {
+          problems.push(
+            `${file} lost its page row — one page shows with no way ` +
+              "to the rest"
+          );
+        }
+        if (!src.includes("pageSlice(")) {
+          problems.push(
+            `${file} no longer slices by the page — every row renders ` +
+              "at once again"
+          );
+        }
+        if (!src.includes("clampPageSize(settings?.tableRows)")) {
+          problems.push(
+            `${file} does not read the page size from settings — the ` +
+              "General option would change nothing here"
+          );
+        }
+      }
+      // The grouped tables group the PAGE. Grouping the full list and
+      // slicing after would page by groups, and "N rows at a time"
+      // would quietly stop being true the day someone groups.
+      for (const file of ["NpcTable.tsx", "SessionTable.tsx", "GroupTable.tsx"]) {
+        const src = stripComments(read("components", file));
+        if (!/groupRows\(paged,/.test(src)) {
+          problems.push(
+            `${file} groups something other than the current page — ` +
+              "grouped views stop honouring the page size"
+          );
+        }
+      }
+      const settingsSrc = stripComments(read("components", "SettingsPanel.tsx"));
+      if (
+        !/PAGE_SIZES\.map/.test(settingsSrc) ||
+        !/save\(\{ tableRows: n \}\)/.test(settingsSrc)
+      ) {
+        problems.push(
+          "Settings no longer offers the page-size options — the " +
+            "setting exists with no way to set it"
+        );
+      }
+    }
+
     // ---- the DM Screen's windows condense their filter bars ---------
     // Asked for by report: inside a window the search/filter section
     // is ONE row of dropdowns, and minor filters (species Size, by

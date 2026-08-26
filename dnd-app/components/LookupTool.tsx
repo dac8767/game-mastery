@@ -45,6 +45,8 @@ import {
   applyFilters,
 } from "@/components/lookupFilters";
 import { LookupFilterBar } from "@/components/LookupFilterBar";
+import { Pager } from "@/components/Pager";
+import { clampPageSize, pageSlice } from "@/components/pagerModel";
 import { CaretIcon } from "@/components/ExpandIcon";
 import { useLookupLayout } from "@/components/useLookupLayout";
 
@@ -79,8 +81,8 @@ import { useLookupLayout } from "@/components/useLookupLayout";
  * actually opened.
  */
 
-/** How many rows the table draws before asking you to narrow down. */
-const MAX_ROWS = 300;
+// The 300-row draw cap this replaced asked you to narrow the filters;
+// the pager shows everything, a fixed page at a time.
 
 export function LookupTool({
   kind,
@@ -249,7 +251,12 @@ export function LookupTool({
     // on the classes tab the two are different arrays.
     [kind, listed, filters, sort]
   );
-  const shown = matched.slice(0, MAX_ROWS);
+  /* One page of the matches. The page is CLAMPED against the current
+     list rather than reset by it, so a filter that shrinks the list
+     lands on the new last page instead of page 1. */
+  const [page, setPage] = useState(0);
+  const pageSize = clampPageSize(settings?.tableRows);
+  const shown = pageSlice(matched, page, pageSize);
 
   /* Opened ONCE, when the row it names is actually there.
      `all` is empty until the query resolves, so this cannot act on
@@ -605,15 +612,14 @@ export function LookupTool({
                 );
               })}
 
-              {/* Never truncate silently: a table that stops at 300 with
-                  no explanation reads as missing data. */}
-              {matched.length > shown.length && (
-                <p className="muted lookup-hint">
-                  Showing {shown.length} of {matched.length}. Narrow the filters
-                  to see the rest.
-                </p>
-              )}
             </div>
+
+            <Pager
+              total={matched.length}
+              page={page}
+              size={pageSize}
+              onPage={setPage}
+            />
           </div>
         </>
       )}

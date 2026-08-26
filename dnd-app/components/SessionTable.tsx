@@ -5,6 +5,8 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useViewPrefs } from "@/components/useViewPrefs";
+import { Pager } from "@/components/Pager";
+import { clampPageSize, pageSlice } from "@/components/pagerModel";
 import { FilterPanel } from "@/components/FilterPanel";
 import { matchesAll } from "@/components/npcFilters";
 import { UiText } from "@/components/UiEditor";
@@ -173,9 +175,20 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
     return m;
   }, [all]);
 
+  /* One page of the list, cut BEFORE grouping — "N rows at a time"
+     counts rows, and the groups on screen are rebuilt from the page.
+     Clamped rather than reset when the list shrinks under it. */
+  const [page, setPage] = useState(0);
+  const settings = useQuery(api.settings.mySettings);
+  const pageSize = clampPageSize(settings?.tableRows);
+  const paged = useMemo(
+    () => pageSlice(sorted, page, pageSize),
+    [sorted, page, pageSize]
+  );
+
   const groups = useMemo(
-    () => (prefs.groupBy ? groupRows(sorted, prefs.groupBy) : null),
-    [sorted, prefs.groupBy]
+    () => (prefs.groupBy ? groupRows(paged, prefs.groupBy) : null),
+    [paged, prefs.groupBy]
   );
 
   const selectedSession = useMemo(
@@ -629,7 +642,7 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
       ) : prefs.viewMode === "tiles" ? (
         <SessionTiles
           groups={groups}
-          rows={sorted}
+          rows={paged}
           shown={shown}
           perRow={prefs.tilesPerRow}
           collapsed={collapsed}
@@ -731,7 +744,7 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
               ))
             ) : (
               <tbody>
-                {sorted.map((s) => (
+                {paged.map((s) => (
                   <SessionRowCells
                     key={s._id}
                     row={s}
@@ -762,6 +775,16 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
             </p>
           )}
         </div>
+      )}
+
+      {/* Under both views, never under an open record. */}
+      {!selectedSession && (
+        <Pager
+          total={sorted.length}
+          page={page}
+          size={pageSize}
+          onPage={setPage}
+        />
       )}
     </div>
   );

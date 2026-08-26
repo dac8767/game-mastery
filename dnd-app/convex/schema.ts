@@ -582,6 +582,13 @@ export default defineSchema({
      * in component state would spring open on every navigation.
      */
     sidebarCollapsed: v.optional(v.boolean()),
+    /**
+     * How many rows every table shows per page. One of 10/20/30/40/50
+     * — the mutation holds it to that set, and the client clamps it
+     * again on the way out (components/pagerModel.ts), so a stray write can
+     * never make a table load everything or nothing.
+     */
+    tableRows: v.optional(v.number()),
   }).index("by_user", ["userId"]),
 
   /**

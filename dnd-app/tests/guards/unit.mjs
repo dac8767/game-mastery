@@ -6828,6 +6828,55 @@ export const unit = {
     }
 
 
+    // ---- table paging ----------------------------------------------
+    // Every table pages by one setting. The edges here all fail as
+    // quiet nonsense on screen: a stored size the options never
+    // offered, an empty table with zero pages, a filter that shrinks
+    // the list under the page you were reading.
+    {
+      const pg = await import(
+        pathToFileURL(join(compile("components/pagerModel.ts"), "pagerModel.js")).href
+      );
+      check(
+        "a stored size outside the offered set becomes the default",
+        pg.clampPageSize(30) === 30 &&
+          pg.clampPageSize(25) === pg.DEFAULT_PAGE_SIZE &&
+          pg.clampPageSize(undefined) === pg.DEFAULT_PAGE_SIZE &&
+          pg.clampPageSize("20") === pg.DEFAULT_PAGE_SIZE
+      );
+      check(
+        "an empty table is one page, never zero",
+        pg.pageCount(0, 20) === 1 &&
+          pg.pageCount(100, 20) === 5 &&
+          pg.pageCount(101, 20) === 6
+      );
+      check(
+        "a page beyond the list lands on the last page, not the first",
+        (() => {
+          const rows = Array.from({ length: 90 }, (_, i) => i);
+          const s = pg.pageSlice(rows, 99, 20);
+          return (
+            s.length === 10 &&
+            s[0] === 80 &&
+            pg.pageSlice(rows, 2, 20)[0] === 40 &&
+            pg.pageSlice([], 0, 20).length === 0
+          );
+        })()
+      );
+      check(
+        "the page row keeps first, last, and the current neighbourhood",
+        (() => {
+          const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+          return (
+            eq(pg.pageNumbers(0, 5), [0, 1, 2, 3, 4]) &&
+            eq(pg.pageNumbers(0, 20), [0, 1, 2, 3, "gap", 19]) &&
+            eq(pg.pageNumbers(9, 20), [0, "gap", 8, 9, 10, "gap", 19]) &&
+            eq(pg.pageNumbers(19, 20), [0, "gap", 16, 17, 18, 19])
+          );
+        })()
+      );
+    }
+
     // ---- a group is matched by name, not by spelling ---------------
     // The field is free text typed into Airtable and nobody typed it
     // twice the same way. Matching on the raw string files one guild
