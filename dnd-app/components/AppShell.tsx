@@ -352,16 +352,18 @@ export function AppShell({
           </button>
           {/* Airtable's arrow, asked for by screenshot: one press folds
               the sidebar to a thin rail of icons, the arrow flips, and
-              the same press brings it back. */}
+              the same press brings it back. Just the icon, larger — a
+              "Collapse" label made it read as another nav row, and the
+              name lives in the tooltip. */}
           <button
             type="button"
             className="nav-item subtle as-button nav-collapse-toggle"
             title={collapsed ? "Expand the sidebar" : "Collapse the sidebar"}
+            aria-label={collapsed ? "Expand the sidebar" : "Collapse the sidebar"}
             aria-expanded={!collapsed}
             onClick={() => void saveSettings({ sidebarCollapsed: !collapsed })}
           >
             <span className="nav-icon">{collapsed ? "»" : "«"}</span>
-            <span className="nav-label">Collapse</span>
           </button>
         </div>
       </nav>

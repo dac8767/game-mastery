@@ -788,6 +788,14 @@ button {
   padding: 0.25rem 0 0.5rem;
 }
 
+/* The arrow alone, and larger — a "Collapse" label made it read as
+   another nav row. Its name lives in the tooltip and aria-label. */
+.nav-collapse-toggle .nav-icon {
+  width: auto;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
 .workspace {
   min-width: 0;
   display: flex;
