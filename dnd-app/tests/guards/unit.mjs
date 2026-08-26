@@ -3837,11 +3837,19 @@ export const unit = {
         look.LOOKUP_COLUMNS[k].some((c) => c.key === "source")
       )
     );
+    // The fixture is real — "Agent of the Ninth Quill (DMLS)" is a row
+    // in the library with an empty source field and the book in its
+    // name. It used to expect "DMLS" back, because DMLS was a code the
+    // map had never heard of; it has one now, so the expectation is the
+    // book. The thing being proved is unchanged: the column reads the
+    // source OUT OF THE NAME rather than off the empty field, and an
+    // implementation that read the field would return "" either way.
     check(
       "the Source column reads the extracted source, not the raw field",
       look.LOOKUP_COLUMNS.classes
         .find((c) => c.key === "source")
-        .get({ name: "Agent of the Ninth Quill (DMLS)", source: "" }) === "DMLS"
+        .get({ name: "Agent of the Ninth Quill (DMLS)", source: "" }) ===
+        "Dungeon Masters: Living Spells"
     );
 
     // ---- feats, backgrounds, classes and species -------------------
@@ -5660,6 +5668,15 @@ export const unit = {
         ["SACoC", "Strixhaven: A Curriculum of Chaos"],
         ["EE", "Elemental Evil Player's Companion"],
         ["EFotA", "Eberron: Forge of the Artificer"],
+        ["PAitM", "Planescape: Adventures in the Multiverse"],
+        ["DMLS", "Dungeon Masters: Living Spells"],
+        ["BGDiA", "Baldur's Gate: Descent into Avernus"],
+        ["GotG", "Bigby Presents: Glory of the Giants"],
+        ["CoSCO", "Curse of Strahd: Character Options"],
+        ["LFL", "Lorwyn: First Light"],
+        ["MOoT", "Mythic Odysseys of Theros"],
+        ["SotDQ", "Dragonlance: Shadow of the Dragon Queen"],
+        ["TWBtW", "The Wild Beyond the Witchlight"],
       ]) {
         check(`${code} is written out as ${name}`, src.expandSource(code) === name);
       }
@@ -5807,25 +5824,63 @@ export const unit = {
       );
 
       // Where one book has two codes, both have to say the same thing.
-      // A typo in the second is invisible: the column shows the right
-      // name for most rows and a slightly different one for the rest,
-      // which reads as two books rather than as a mistake.
-      for (const [a, b] of [
-        ["EEPC", "EE"],
-        ["BMT", "TBoMT"],
-        ["MPMM", "MotM"],
-        ["TCoE", "TCE"],
-        ["VGtM", "VGM"],
-        ["FTD", "FToD"],
-        ["GGtR", "GGR"],
-        ["ERLW", "ERftLW"],
-        ["EGtW", "EGW"],
-        ["VRGtR", "VRGR"],
-      ]) {
+      // A typo in the second is INVISIBLE to a list grouped by name,
+      // because it makes two rows rather than one: "The Book of Many
+      // Things" beside "Book of Many Things" reads as two books, and
+      // switching off the one you can see hides half the rows.
+      //
+      // Checked by normalising every name rather than by listing the
+      // pairs. The list was ten pairs and became eighteen in a single
+      // message — a check somebody has to extend is a check that will
+      // one day not be extended.
+      {
+        const norm = (n) =>
+          n.toLowerCase().replace(/^the\s+/, "").replace(/[^a-z0-9]/g, "");
+        const twinsIn = (names) => {
+          const first = new Map();
+          const twins = [];
+          for (const name of names) {
+            const key = norm(name);
+            const already = first.get(key);
+            if (already) twins.push(`"${already}" / "${name}"`);
+            else first.set(key, name);
+          }
+          return twins;
+        };
+
+        const twins = twinsIn(src.sourceBooks().map((b) => b.name));
         check(
-          `${a} and ${b} name the same book`,
-          src.expandSource(a) === src.expandSource(b) &&
-            src.expandSource(a) !== a
+          twins.length === 0
+            ? "no two books are one book spelt two ways"
+            : `these are the same book under two spellings, which is a typo ` +
+                `in an alias: ${twins.join("; ")}`,
+          twins.length === 0
+        );
+
+        // The detector, tested on its own. Everything this check is
+        // worth is in that normalisation, and a mutation that simply
+        // deleted half of it left the whole thing passing — a weakened
+        // heuristic looks exactly like a heuristic finding nothing.
+        check(
+          "a dropped article is caught",
+          twinsIn(["The Book of Many Things", "Book of Many Things"]).length === 1
+        );
+        check(
+          "so is a dropped colon",
+          twinsIn([
+            "Bigby Presents: Glory of the Giants",
+            "Bigby Presents Glory of the Giants",
+          ]).length === 1
+        );
+        // And the direction that matters just as much: a detector that
+        // flagged a book beside its own supplement would fire on every
+        // real map, and a check that always fails gets deleted.
+        check(
+          "a book and its supplement are two books",
+          twinsIn([
+            "Curse of Strahd",
+            "Curse of Strahd: Character Options",
+          ]).length === 0
         );
       }
 

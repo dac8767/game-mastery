@@ -55,6 +55,7 @@ export const SOURCE_NAMES: Record<string, string> = {
   EEPC: "Elemental Evil Player's Companion",
   EE: "Elemental Evil Player's Companion",
   BGG: "Bigby Presents: Glory of the Giants",
+  GotG: "Bigby Presents: Glory of the Giants",
   BMT: "The Book of Many Things",
   TBoMT: "The Book of Many Things",
   SatO: "Sigil and the Outlands",
@@ -68,6 +69,8 @@ export const SOURCE_NAMES: Record<string, string> = {
   EGtW: "Explorer's Guide to Wildemount",
   EGW: "Explorer's Guide to Wildemount",
   MOT: "Mythic Odysseys of Theros",
+  MOoT: "Mythic Odysseys of Theros",
+  LFL: "Lorwyn: First Light",
   SACoC: "Strixhaven: A Curriculum of Chaos",
   FRHoF: "Forgotten Realms: Heroes of Faerûn",
   VRGtR: "Van Richten's Guide to Ravenloft",
@@ -78,6 +81,7 @@ export const SOURCE_NAMES: Record<string, string> = {
 
   // Adventures
   CoS: "Curse of Strahd",
+  CoSCO: "Curse of Strahd: Character Options",
   ToA: "Tomb of Annihilation",
   SKT: "Storm King's Thunder",
   OotA: "Out of the Abyss",
@@ -87,15 +91,18 @@ export const SOURCE_NAMES: Record<string, string> = {
   TftYP: "Tales from the Yawning Portal",
   GoS: "Ghosts of Saltmarsh",
   BGDIA: "Baldur's Gate: Descent into Avernus",
+  BGDiA: "Baldur's Gate: Descent into Avernus",
   DIP: "Dragon of Icespire Peak",
   WDH: "Waterdeep: Dragon Heist",
   WDMM: "Waterdeep: Dungeon of the Mad Mage",
   IDRotF: "Icewind Dale: Rime of the Frostmaiden",
   CM: "Candlekeep Mysteries",
   WBtW: "The Wild Beyond the Witchlight",
+  TWBtW: "The Wild Beyond the Witchlight",
   CRCotN: "Critical Role: Call of the Netherdeep",
   JTtRC: "Journeys through the Radiant Citadel",
   DSotDQ: "Dragonlance: Shadow of the Dragon Queen",
+  SotDQ: "Dragonlance: Shadow of the Dragon Queen",
   KftGV: "Keys from the Golden Vault",
   PaBTSO: "Phandelver and Below: The Shattered Obelisk",
   VEoR: "Vecna: Eve of Ruin",
@@ -103,6 +110,7 @@ export const SOURCE_NAMES: Record<string, string> = {
   LLK: "Lost Laboratory of Kwalish",
   LR: "Locathah Rising",
   TTP: "The Tortle Package",
+  DMLS: "Dungeon Masters: Living Spells",
 };
 
 /**
@@ -169,11 +177,12 @@ export interface SourceBook {
 /**
  * The books, one row each.
  *
- * BY NAME, not by code. Eight books in the map have two abbreviations
- * apiece — EEPC and EE, MPMM and MotM — and a settings list built
- * straight off the keys would offer Elemental Evil twice, where turning
- * off one of them would hide half the rows and look like a bug in the
- * filter rather than a second entry you had not noticed.
+ * BY NAME, not by code. A good many books in the map answer to two
+ * abbreviations — EEPC and EE, MPMM and MotM, WBtW and TWBtW — and a
+ * settings list built straight off the keys would offer Elemental Evil
+ * twice, where turning off one of them would hide half the rows and
+ * look like a bug in the filter rather than a second entry you had not
+ * noticed. No number here on purpose: it was "eight" for about a day.
  *
  * It is also why the stored value is the NAME. Add a third code for a
  * book somebody has already switched off and it is off, rather than
