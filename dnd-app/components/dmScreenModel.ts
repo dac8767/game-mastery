@@ -131,6 +131,16 @@ export const MIN_TILE_PX = 120;
 export const DOCK_FRAC = 0.25;
 
 /**
+ * The highlight strips. The highlight says WHERE the window will
+ * attach, never how much it will take: a side drop lights a small
+ * band in from the near edge, a canvas-edge drop a thin line along
+ * that edge. Matched to Premiere's screenshots — a highlight covering
+ * the landing area reads as "this window gets replaced".
+ */
+export const EDGE_HINT_PX = 72;
+export const ROOT_HINT_PX = 20;
+
+/**
  * How far inside a window its edge drop zones reach, as a fraction of
  * its size. Inside the middle box is a tab drop, Premiere-style.
  */
@@ -465,10 +475,13 @@ export function dropTargetAt(
 }
 
 /**
- * The highlight for a proposed drop — the space the window WILL take,
- * drawn before it does. A tab drop lights the strip it would join; an
- * edge drop lights the half being given up; a canvas-edge drop lights
- * the full length of that side at the share it will get.
+ * The highlight for a proposed drop — where the window will ATTACH,
+ * drawn before it lands, and deliberately not the area it will take.
+ * A tab drop lights the small strip at the top it would join; a side
+ * drop lights a narrow band in from the near edge of that window; a
+ * canvas-edge drop lights a thin line the full run of that side.
+ * Never a whole window: a highlight that swallows one reads as "this
+ * window gets replaced", which no drop here ever does.
  */
 export function dropPreviewRect(
   layout: DmLayout,
@@ -477,31 +490,34 @@ export function dropPreviewRect(
   headerPx: number
 ): DmRect | null {
   if (target.type === "root") {
-    const dw = Math.round(view.w * DOCK_FRAC);
-    const dh = Math.round(view.h * DOCK_FRAC);
+    const t = ROOT_HINT_PX;
     switch (target.edge) {
       case "left":
-        return { x: 0, y: 0, w: dw, h: view.h };
+        return { x: 0, y: 0, w: t, h: view.h };
       case "right":
-        return { x: view.w - dw, y: 0, w: dw, h: view.h };
+        return { x: view.w - t, y: 0, w: t, h: view.h };
       case "top":
-        return { x: 0, y: 0, w: view.w, h: dh };
+        return { x: 0, y: 0, w: view.w, h: t };
       case "bottom":
-        return { x: 0, y: view.h - dh, w: view.w, h: dh };
+        return { x: 0, y: view.h - t, w: view.w, h: t };
     }
   }
   const r = layoutRects(layout, view).get(target.group);
   if (!r) return null;
   if (target.type === "tabs") return { x: r.x, y: r.y, w: r.w, h: headerPx };
+  // Capped at a quarter so a narrow window still shows a BAND, not
+  // its whole self.
+  const bw = Math.min(EDGE_HINT_PX, r.w / 4);
+  const bh = Math.min(EDGE_HINT_PX, r.h / 4);
   switch (target.edge) {
     case "left":
-      return { x: r.x, y: r.y, w: r.w / 2, h: r.h };
+      return { x: r.x, y: r.y, w: bw, h: r.h };
     case "right":
-      return { x: r.x + r.w / 2, y: r.y, w: r.w / 2, h: r.h };
+      return { x: r.x + r.w - bw, y: r.y, w: bw, h: r.h };
     case "top":
-      return { x: r.x, y: r.y, w: r.w, h: r.h / 2 };
+      return { x: r.x, y: r.y, w: r.w, h: bh };
     case "bottom":
-      return { x: r.x, y: r.y + r.h / 2, w: r.w, h: r.h / 2 };
+      return { x: r.x, y: r.y + r.h - bh, w: r.w, h: bh };
   }
 }
 

@@ -6543,8 +6543,13 @@ export const unit = {
             );
           })()
         );
+        // Matched to Premiere's screenshots by request: a side drop
+        // lights a NARROW BAND in from the near edge, a tab drop the
+        // strip at the top, a canvas-edge drop a thin line down that
+        // side — never the window or the landing area, which reads as
+        // "this window gets replaced".
         check(
-          "the highlight shows the half being given up, before the drop",
+          "the highlight is a band at the near edge, never the window",
           (() => {
             const r = dm.dropPreviewRect(
               start,
@@ -6565,11 +6570,24 @@ export const unit = {
               34
             );
             return (
-              r.x === 300 && r.w === 300 && r.h === 800 &&
+              r.w === dm.EDGE_HINT_PX && r.h === 800 &&
+              r.x === 600 - dm.EDGE_HINT_PX &&
               strip.x === 606 && strip.h === 34 && strip.w === 600 &&
-              dock.x === 0 && dock.h === 800 &&
-              dock.w === Math.round(VIEW.w * dm.DOCK_FRAC)
+              dock.x === 0 && dock.h === 800 && dock.w === dm.ROOT_HINT_PX
             );
+          })()
+        );
+        check(
+          "a narrow window still shows a band, not its whole self",
+          (() => {
+            const tiny = dm.dropPreviewRect(
+              start,
+              { type: "edge", group: 1, edge: "bottom" },
+              { w: 240, h: 160 },
+              34
+            );
+            const r1 = dm.layoutRects(start, { w: 240, h: 160 }).get(1);
+            return tiny.h <= r1.h / 4 && tiny.y === r1.y + r1.h - tiny.h;
           })()
         );
       }
