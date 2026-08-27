@@ -6924,6 +6924,75 @@ export const unit = {
       );
     }
 
+    // ---- the Moonbrook session import holds to its sources ----------
+    // The records in scripts/import-moonbrook-sessions.mjs were merged
+    // from the OneNote session pages and the Discord scheduling
+    // channel. What can drift silently: an XP figure off the
+    // documented ledger, a duplicate session number (the import keys
+    // on numbers), a player outside the known cast, or notes HTML the
+    // sanitizer would quietly eat on its way into the database.
+    {
+      const { MOONBROOK_SESSIONS: R } = await import(
+        pathToFileURL(
+          join(process.cwd(), "scripts/import-moonbrook-sessions.mjs")
+        ).href
+      );
+      check(
+        "every session in the merge is a record, each number once",
+        R.length === 53 && new Set(R.map((r) => r.number)).size === 53
+      );
+      // The one figure both sources agree on: XP tracking ran to
+      // session 23 and stood at 36,200 there.
+      check(
+        "the XP awarded through session 23 lands on the documented 36,200",
+        R.filter((r) => r.number <= 23 && r.xp !== undefined).reduce(
+          (a, r) => a + r.xp,
+          0
+        ) === 36200
+      );
+      check(
+        "dates are ISO and run in session order",
+        (() => {
+          let last = "";
+          for (const r of [...R].sort((a, b) => a.number - b.number)) {
+            if (r.date === undefined) continue;
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(r.date)) return false;
+            if (r.date < last) return false;
+            last = r.date;
+          }
+          return true;
+        })()
+      );
+      check(
+        "every listed player is someone who actually sat at this table",
+        (() => {
+          const cast = new Set([
+            "Alex", "Andrew", "Caprica", "Drew", "Gaige",
+            "Hank", "Julie", "Max", "Scott", "Steph",
+          ]);
+          return R.every((r) => r.players.every((p) => cast.has(p)));
+        })()
+      );
+      // The DM notes are inserted through sanitizeBoxHtml. Canonical
+      // HTML passes through IDENTICALLY — so any drift here means the
+      // sanitizer would silently rewrite or drop note content the
+      // moment it was imported.
+      {
+        const bx = await import(
+          pathToFileURL(
+            join(compile("components/boxHtml.ts"), "boxHtml.js")
+          ).href
+        );
+        const changed = R.filter(
+          (r) => r.dmNotes && bx.sanitizeBoxHtml(r.dmNotes) !== r.dmNotes
+        );
+        check(
+          "every session's DM notes survive the sanitizer untouched",
+          R.filter((r) => r.dmNotes).length === 34 && changed.length === 0
+        );
+      }
+    }
+
     // ---- a group is matched by name, not by spelling ---------------
     // The field is free text typed into Airtable and nobody typed it
     // twice the same way. Matching on the raw string files one guild

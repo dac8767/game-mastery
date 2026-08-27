@@ -4142,6 +4142,38 @@ export const integrity = {
       }
     }
 
+    // ---- the session import never overwrites, and sanitizes ---------
+    // convex/sessions.ts importRecords backfills a campaign's history.
+    // Three rules keep it safe to run twice and safe to run at all:
+    // existing numbers are skipped (hand-typed records outrank the
+    // merge), notes go through the same sanitizer every stored page
+    // does, and the function is INTERNAL — public, it would let anyone
+    // write into any campaign with no signed-in caller.
+    {
+      const src = stripComments(read("convex", "sessions.ts"));
+      if (!/importRecords = internalMutation/.test(src)) {
+        problems.push(
+          "importRecords is not an internalMutation — a public function " +
+            "that writes into any campaign with nobody signed in"
+        );
+      }
+      const at = src.indexOf("importRecords");
+      const body = at === -1 ? "" : src.slice(at, at + 2600);
+      if (!/taken\.has\(r\.number\)/.test(body)) {
+        problems.push(
+          "importRecords no longer skips existing session numbers — " +
+            "rerunning the import would duplicate every session"
+        );
+      }
+      if (!/sanitizeBoxHtml\(r\.dmNotes\)/.test(body)) {
+        problems.push(
+          "importRecords writes DM notes without the sanitizer — " +
+            "imported HTML would bypass the allowlist every stored " +
+            "page goes through"
+        );
+      }
+    }
+
     // ---- every table pages by the one setting -----------------------
     // Asked for: a fixed number of rows at a time, page numbers with
     // Previous and Next, and the amount as a General setting. Each

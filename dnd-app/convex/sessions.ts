@@ -1,5 +1,10 @@
 import { v } from "convex/values";
-import { MutationCtx, mutation, query } from "./_generated/server";
+import {
+  MutationCtx,
+  internalMutation,
+  mutation,
+  query,
+} from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { requireDm, requireMember } from "./auth";
 import { getSettings } from "./settings";
@@ -209,6 +214,75 @@ export const createSession = mutation({
       xp: undefined,
       description: undefined,
     });
+  },
+});
+
+/**
+ * A campaign's session history, imported in one sweep — see
+ * scripts/import-moonbrook-sessions.mjs, which carries the records and
+ * invokes this through `npx convex run` in batches.
+ *
+ * INTERNAL, not public: it writes into a campaign with no signed-in
+ * caller, which only the deployment's own tooling may do. Existing
+ * session NUMBERS are skipped, never overwritten — a record typed by
+ * hand outranks anything a merge document says — so running it twice
+ * is safe: the second run reports every record as skipped.
+ *
+ * `dmNotes` lands as the session's DM page, through the same
+ * sanitizer every stored page goes through. The DM side stays behind
+ * getNotes' gate like any other; importing does not change who may
+ * read it.
+ */
+export const importRecords = internalMutation({
+  args: {
+    campaignId: v.id("campaigns"),
+    records: v.array(
+      v.object({
+        number: v.number(),
+        date: v.optional(v.string()),
+        players: v.array(v.string()),
+        xp: v.optional(v.number()),
+        description: v.optional(v.string()),
+        dmNotes: v.optional(v.string()),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const campaign = await ctx.db.get(args.campaignId);
+    if (!campaign) throw new Error("No such campaign");
+
+    const existing = await ctx.db
+      .query("sessions")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
+      .take(MAX_SESSIONS);
+    const taken = new Set(existing.map((s) => s.number));
+
+    let created = 0;
+    let skipped = 0;
+    for (const r of args.records) {
+      if (taken.has(r.number)) {
+        skipped++;
+        continue;
+      }
+      taken.add(r.number);
+      const sessionId = await ctx.db.insert("sessions", {
+        campaignId: args.campaignId,
+        number: r.number,
+        date: r.date,
+        players: r.players,
+        xp: r.xp,
+        description: r.description,
+      });
+      if (r.dmNotes) {
+        await ctx.db.insert("sessionPages", {
+          sessionId,
+          side: "dm",
+          html: sanitizeBoxHtml(r.dmNotes),
+        });
+      }
+      created++;
+    }
+    return { campaign: campaign.name, created, skipped };
   },
 });
 
