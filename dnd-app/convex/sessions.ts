@@ -286,6 +286,51 @@ export const importRecords = internalMutation({
   },
 });
 
+/**
+ * The summaries, written onto sessions that already exist.
+ *
+ * A second pass beside importRecords, because the two answer
+ * different questions: that one asks "does this session exist yet",
+ * this one asks "does it say what happened". Rewriting the summaries
+ * has to reach records imported by an earlier run, which the
+ * skip-if-present rule there deliberately will not do.
+ *
+ * Only `description` is touched, and only on numbers it is handed —
+ * date, players and XP are left exactly as they are.
+ */
+export const setDescriptions = internalMutation({
+  args: {
+    campaignId: v.id("campaigns"),
+    entries: v.array(
+      v.object({ number: v.number(), description: v.string() })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const campaign = await ctx.db.get(args.campaignId);
+    if (!campaign) throw new Error("No such campaign");
+
+    const existing = await ctx.db
+      .query("sessions")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
+      .take(MAX_SESSIONS);
+    const byNumber = new Map(existing.map((s) => [s.number, s]));
+
+    let written = 0;
+    let missing = 0;
+    for (const e of args.entries) {
+      const row = byNumber.get(e.number);
+      if (!row) {
+        missing++;
+        continue;
+      }
+      if (row.description === e.description) continue;
+      await ctx.db.patch(row._id, { description: e.description });
+      written++;
+    }
+    return { campaign: campaign.name, written, missing };
+  },
+});
+
 export const updateSession = mutation({
   args: {
     sessionId: v.id("sessions"),

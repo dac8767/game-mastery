@@ -4172,6 +4172,34 @@ export const integrity = {
             "page goes through"
         );
       }
+
+      // The summaries land through a SECOND pass, because the first
+      // one deliberately will not touch a session that already exists
+      // — so a rewritten summary would never reach a campaign that
+      // ran the import once already.
+      if (!/setDescriptions = internalMutation/.test(src)) {
+        problems.push(
+          "setDescriptions is not an internalMutation — a public " +
+            "function that rewrites session summaries in any campaign"
+        );
+      }
+      const descAt = src.indexOf("setDescriptions");
+      const descBody = descAt === -1 ? "" : src.slice(descAt, descAt + 1400);
+      if (!/patch\(row\._id, \{ description: e\.description \}\)/.test(descBody)) {
+        problems.push(
+          "setDescriptions patches something other than the summary — " +
+            "it must leave date, players and XP exactly as they are"
+        );
+      }
+      const script = read("scripts", "import-moonbrook-sessions.mjs");
+      for (const fn of ["sessions:importRecords", "sessions:setDescriptions"]) {
+        if (!script.includes(fn)) {
+          problems.push(
+            `the Moonbrook import never calls ${fn} — one of its two ` +
+              "passes would not run"
+          );
+        }
+      }
     }
 
     // ---- every table pages by the one setting -----------------------

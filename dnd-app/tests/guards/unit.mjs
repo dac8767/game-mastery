@@ -6988,9 +6988,41 @@ export const unit = {
         );
         check(
           "every session's DM notes survive the sanitizer untouched",
-          R.filter((r) => r.dmNotes).length === 34 && changed.length === 0
+          R.filter((r) => r.dmNotes).length === 39 && changed.length === 0
         );
       }
+
+      // A description says what happened IN THE GAME. Attendance,
+      // start times and where a date came from are facts about the
+      // evening, not about Moonbrook — the columns beside it carry the
+      // ones worth keeping, and the DM notes carry the provenance. The
+      // giveaway is a PLAYER's name: these summaries name characters.
+      check(
+        "no summary carries attendance, a clock time, or source trivia",
+        (() => {
+          const players =
+            /\b(Derek|Alex|Andrew|Julie|Max|Scott|Steph|Gaige|Caprica|Drew|Hank)\b/;
+          const clock = /\b\d{1,2}(:\d{2})?\s?(am|pm)\b/i;
+          const meta = /\b(OneNote|Discord|session|attendance|XP)\b/i;
+          return R.every(
+            (r) =>
+              r.description === undefined ||
+              (!players.test(r.description) &&
+                !clock.test(r.description) &&
+                !meta.test(r.description))
+          );
+        })()
+      );
+      // Nineteen sessions left no account of their events in either
+      // source. They carry NO description rather than an invented one,
+      // and that silence is deliberate enough to pin.
+      check(
+        "sessions with no recorded events stay empty rather than invented",
+        R.filter((r) => r.description === undefined).length === 19 &&
+          R.filter((r) => r.description !== undefined).every(
+            (r) => r.description.trim().length > 20
+          )
+      );
     }
 
     // ---- a group is matched by name, not by spelling ---------------
