@@ -31,6 +31,46 @@ import type { DieRoll } from "@/components/diceModel";
  * turns dddice on should not pay for it.
  */
 
+/**
+ * A theme id, from the account's dice box or from the public list.
+ *
+ * The dice box is tried first because it is what the account actually
+ * owns, and a fresh guest's box can be empty — which is exactly the
+ * case that sent themeless dice and got them refused. The public
+ * catalogue is the backstop.
+ *
+ * Nothing here is hard-coded: a theme slug copied out of a docs
+ * example is a slug that stops existing without warning, and its
+ * failure looks identical to having no theme at all.
+ */
+async function firstTheme(
+  api: { diceBox: { list: () => Promise<unknown> } },
+  key: string
+): Promise<string | null> {
+  const idOf = (payload: unknown): string | null => {
+    const list = (payload as { data?: { id?: string }[] } | undefined)?.data;
+    const id = Array.isArray(list) ? list[0]?.id : undefined;
+    return typeof id === "string" && id ? id : null;
+  };
+
+  try {
+    const mine = idOf(await api.diceBox.list());
+    if (mine) return mine;
+  } catch {
+    // Fall through to the catalogue.
+  }
+
+  try {
+    const res = await fetch("https://dddice.com/api/1.0/theme", {
+      headers: { Authorization: `Bearer ${key}`, Accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    return idOf(await res.json());
+  } catch {
+    return null;
+  }
+}
+
 /** Where a browser keeps the guest account it made for itself. */
 const GUEST_KEY = "gm.dddice.guest";
 
@@ -204,15 +244,17 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
           if (!cancelled) setBackground(null);
         }
 
-        // Best-effort: no theme is a worse throw, not a broken one, so
-        // this must not be able to fail the whole connection.
-        step = "reading the dice box";
-        try {
-          const box = await engine.api.diceBox.list();
-          const themes = (box as { data?: { id?: string }[] }).data;
-          fallbackThemeRef.current = themes?.[0]?.id ?? null;
-        } catch {
-          fallbackThemeRef.current = null;
+        // A theme, from wherever one can be had.
+        //
+        // Every die needs one — it carries the mesh and the faces — and
+        // a themeless die is refused with a 422, so "best effort" here
+        // means trying more than one place. A fresh guest account can
+        // have an EMPTY dice box, which is what made the first fallback
+        // find nothing and send nothing.
+        step = "finding a dice theme";
+        fallbackThemeRef.current = await firstTheme(engine.api, key);
+        if (!fallbackThemeRef.current) {
+          console.warn("[dice] no dddice theme found; rolls will be refused");
         }
         if (cancelled) {
           engine.stop();
@@ -297,7 +339,11 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
       // Same rule as the connection: the console gets everything, the
       // screen gets dddice's own words. A bare "didn't take that roll"
       // is a dead end for whoever has to fix it.
-      console.warn("[dice] dddice rejected the roll", { dice, error: e });
+      console.warn("[dice] dddice rejected the roll", {
+        theme: useTheme ?? "(none)",
+        dice,
+        error: e,
+      });
       setNote(`3D dice off — dddice rejected the roll: ${reason(e)}`);
     });
   }, [roll, status, theme]);

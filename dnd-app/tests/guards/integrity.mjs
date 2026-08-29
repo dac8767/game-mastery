@@ -5308,10 +5308,30 @@ export const integrity = {
               "flies the camera past the dice instead of scrolling the page"
           );
         }
+        // Two sources, not one. Every die needs a theme or the roll is
+        // refused with a 422, and a fresh guest account's dice box can
+        // be EMPTY — which is how the first fallback found nothing and
+        // sent themeless dice.
         if (!/diceBox\.list\(\)/.test(canvasSrc)) {
           problems.push(
             "DiceCanvas no longer reads the dice box — the fallback theme " +
               "would have to be a hard-coded slug, which stops existing"
+          );
+        }
+        if (!/api\/1\.0\/theme/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas has no theme catalogue fallback — a guest with an " +
+              "empty dice box then sends themeless dice, which are refused"
+          );
+        }
+        // A slug from a docs example is a slug that stops existing, and
+        // its failure is indistinguishable from having no theme at all.
+        // The package name is not a theme slug: "dddice-js" is the
+        // import, and matching it made this fail on correct code.
+        if (/["'`]dddice-(?!js["'`])[a-z]/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas hard-codes a dddice theme slug — themes are read " +
+              "from the account and the catalogue, never guessed"
           );
         }
         // The screen gets dddice's own words, not a house sentence
