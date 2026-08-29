@@ -38,12 +38,19 @@ import type { DieRoll } from "@/components/diceModel";
  * of those is "[object Object]", which is how a diagnosable failure
  * turns into an unactionable one.
  */
+function statusOf(e: unknown): number | null {
+  if (!e || typeof e !== "object") return null;
+  const any = e as Record<string, unknown>;
+  if (typeof any.status === "number") return any.status;
+  const response = any.response as { status?: number } | undefined;
+  return typeof response?.status === "number" ? response.status : null;
+}
+
 function reason(e: unknown): string {
   if (typeof e === "string") return e;
   if (e && typeof e === "object") {
     const any = e as Record<string, unknown>;
-    const response = any.response as { status?: number } | undefined;
-    const status = typeof any.status === "number" ? any.status : response?.status;
+    const status = statusOf(e);
     const message =
       typeof any.message === "string" && any.message ? any.message : null;
     if (status && message) return `${message} (HTTP ${status})`;
@@ -172,8 +179,19 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
 
         // Joining comes BEFORE connecting: the SDK throws when asked to
         // listen to a room the user is not a participant of.
+        //
+        // 409 means ALREADY a participant, which is the state this call
+        // exists to reach. The guest account is kept in localStorage, so
+        // every visit after the first one gets it — treating it as a
+        // failure meant the integration worked exactly once and then
+        // refused to start again, which is a worse bug than never
+        // working, because it looks intermittent.
         step = `joining room ${slug}`;
-        await engine.api.room.join(slug, passcode ?? undefined);
+        try {
+          await engine.api.room.join(slug, passcode ?? undefined);
+        } catch (e) {
+          if (statusOf(e) !== 409) throw e;
+        }
         if (cancelled) return;
 
         step = "connecting to the room";

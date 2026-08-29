@@ -5278,6 +5278,16 @@ export const integrity = {
               "a die with no theme has no mesh, and dddice refuses the roll"
           );
         }
+        // Already a participant is the state the join exists to
+        // reach. Treating 409 as a failure made the integration work
+        // exactly once per browser and then refuse to start — a worse
+        // bug than never working, because it reads as intermittent.
+        if (!/statusOf\(e\) !== 409/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas treats a 409 from room.join as a failure — it means " +
+              "the guest is already a participant, which is success"
+          );
+        }
         if (!/diceBox\.list\(\)/.test(canvasSrc)) {
           problems.push(
             "DiceCanvas no longer reads the dice box — the fallback theme " +
