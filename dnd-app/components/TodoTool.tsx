@@ -12,6 +12,7 @@ import {
   PRIORITY_MIN,
   colorOf,
   dueState,
+  relativeDue,
   reorderTo,
   showsPriority,
   sortTodos,
@@ -56,12 +57,6 @@ import { NAV_ITEM_BY_ID } from "@/components/navItems";
  * that; a player who reaches this screen sees the error the server
  * gave, which is the honest thing for a screen that is not theirs.
  */
-
-const DUE_LABEL: Record<string, string> = {
-  overdue: "Overdue",
-  today: "Today",
-  soon: "This week",
-};
 
 /**
  * A link inside the To-Do tool, from the campaign root.
@@ -135,6 +130,7 @@ export function QuickAddField({
   const quickAdd = useMutation(api.todo.quickAdd);
   const { error, run } = useRunner();
   const [draft, setDraft] = useState("");
+  const [helpOpen, setHelpOpen] = useState(false);
 
   // Read once per render, not per keystroke: a field left open across
   // midnight would otherwise resolve "tomorrow" against yesterday.
@@ -164,24 +160,44 @@ export function QuickAddField({
           run(() => quickAdd({ campaignId, text, today, projectId }));
         }}
       >
-        <input
-          className="todo-input"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder={
-            placeholder ?? "Task, then tomorrow *label !3 +'Project'"
-          }
-          maxLength={MAX_TEXT}
-          aria-label="New item"
-        />
+        {/* Plain words, not the syntax. The syntax used to BE the
+            placeholder, which meant the one thing on an empty screen
+            was a line of punctuation — it read as something you had to
+            learn before you could type anything at all. It is behind
+            the ? now, where Vikunja keeps it. */}
+        <span className="todo-input-wrap">
+          <span className="todo-input-icon" aria-hidden="true">
+            ☑
+          </span>
+          <input
+            className="todo-input"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder={placeholder ?? "Add a task…"}
+            maxLength={MAX_TEXT}
+            aria-label="New item"
+          />
+          <button
+            type="button"
+            className="todo-help-btn"
+            aria-expanded={helpOpen}
+            aria-label="What can I type here?"
+            title="What can I type here?"
+            onClick={() => setHelpOpen(!helpOpen)}
+          >
+            ?
+          </button>
+        </span>
         <button
           type="submit"
-          className="npc-btn primary"
+          className="npc-btn primary todo-add-btn"
           disabled={!draft.trim()}
         >
-          Add
+          + Add
         </button>
       </form>
+
+      {helpOpen && <QuickAddHelp />}
 
       {parsed && parsed.matched.length > 0 && (
         <p className="todo-parse" aria-live="polite">
@@ -208,6 +224,54 @@ export function QuickAddField({
       )}
 
       {error && <p className="form-error nb-error">{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * What the field understands, spelled out.
+ *
+ * Behind a ? rather than in the placeholder, because a screen whose
+ * only content is a syntax reference reads as homework. Anyone can type
+ * a sentence into this field and get a task; everything here is a
+ * shortcut for people who want one.
+ */
+function QuickAddHelp() {
+  return (
+    <div className="todo-help">
+      <p className="todo-help-lead">
+        Type the task. Anything below can go in the same line, in any
+        order, and comes back out as a property.
+      </p>
+      <dl className="todo-help-grid">
+        <dt>
+          <code>tomorrow</code>
+        </dt>
+        <dd>
+          a due date, in words — also <code>next friday</code>,{" "}
+          <code>in 2 weeks</code>, <code>sep 3</code>,{" "}
+          <code>end of month</code>, <code>2026-09-01</code>
+        </dd>
+        <dt>
+          <code>*combat</code>
+        </dt>
+        <dd>
+          a label, made if you have not got one. <code>*&apos;two words&apos;</code>{" "}
+          for a name with a space in it
+        </dd>
+        <dt>
+          <code>+&apos;Session prep&apos;</code>
+        </dt>
+        <dd>the project to file it under, matched against ones you have</dd>
+        <dt>
+          <code>!4</code>
+        </dt>
+        <dd>priority, 1 to 5 — only 3 and up show on the row</dd>
+      </dl>
+      <p className="settings-note">
+        Whatever it understood appears under the field before you press
+        Add, so nothing is taken out of your sentence without saying so.
+      </p>
     </div>
   );
 }
@@ -325,6 +389,37 @@ export function TodoList({
                 />
 
                 <div className="todo-body">
+                  {/* The project, as a quiet prefix rather than a chip
+                      at the far end. It is context for the title, so it
+                      reads BEFORE it — "Session prep · statblock for
+                      the lich" — and at the end of the row it was a
+                      label you had to go looking for. */}
+                  {project && (
+                    <Link
+                      /* Absolute, not "./project/…". This list renders
+                         on four screens at three different depths, and
+                         a relative href resolves against whichever one
+                         you are standing on — right from the Overview
+                         and a 404 from Upcoming. */
+                      href={todoHref(campaignId, `project/${project._id}`)}
+                      className="todo-proj"
+                      style={{ color: colorOf(project.color) }}
+                    >
+                      {project.title}
+                    </Link>
+                  )}
+
+                  {/* Only High and above. Vikunja's rule, and what makes
+                      a five-point scale usable: a list where every row
+                      wears a badge has told you nothing. Before the
+                      title, where it changes how you read it. */}
+                  {showsPriority(item.priority) && (
+                    <span className={`todo-pri p${item.priority}`}>
+                      <span className="todo-pri-mark" aria-hidden="true">!</span>
+                      {PRIORITY_LABELS[item.priority as number]}
+                    </span>
+                  )}
+
                   {editing === item._id ? (
                     <input
                       className="todo-edit"
@@ -361,17 +456,7 @@ export function TodoList({
                     </button>
                   )}
 
-                  {item.notes && <p className="todo-notes">{item.notes}</p>}
                 </div>
-
-                {/* Only High and above. Vikunja's rule, and the reason a
-                    five-point scale is usable: a list where every row
-                    wears a badge has told you nothing. */}
-                {showsPriority(item.priority) && (
-                  <span className={`todo-pri p${item.priority}`}>
-                    {PRIORITY_LABELS[item.priority as number]}
-                  </span>
-                )}
 
                 {item.labelIds.map((id) => {
                   const label = labelById.get(String(id));
@@ -386,22 +471,6 @@ export function TodoList({
                     </span>
                   );
                 })}
-
-                {project && (
-                  <Link
-                    /* Absolute, not "./project/…". This same list is
-                       rendered on four screens at three different
-                       depths, and a relative href resolves against
-                       whichever one you are standing on — the chip
-                       would work on the Overview and land on
-                       /todo/upcoming/project/… from Upcoming. */
-                    href={todoHref(campaignId, `project/${project._id}`)}
-                    className="todo-proj"
-                    style={{ borderColor: colorOf(project.color) }}
-                  >
-                    {project.title}
-                  </Link>
-                )}
 
                 {/* Where this came from. Eventually most of these are
                     written by other tools — tag a line in a session's
@@ -427,8 +496,11 @@ export function TodoList({
                 )}
 
                 {item.due && (
-                  <span className={`todo-due${state ? ` ${state}` : ""}`}>
-                    {DUE_LABEL[state ?? ""] ?? item.due}
+                  <span
+                    className={`todo-due${state === "overdue" ? " overdue" : ""}`}
+                    title={item.due}
+                  >
+                    {relativeDue(item.due, today)}
                   </span>
                 )}
 
@@ -475,6 +547,8 @@ export function TodoList({
                   ✕
                 </button>
               </div>
+
+              {item.notes && <p className="todo-notes">{item.notes}</p>}
 
               {open === item._id && (
                 <TodoDetail
@@ -641,6 +715,7 @@ type Filter = "all" | "starred" | "overdue";
 
 export function TodoTool({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const board = useTodoBoard(campaignId);
+  const me = useQuery(api.settings.me);
   const clearDone = useMutation(api.todo.clearDone);
   const { error, run } = useRunner();
   const [filter, setFilter] = useState<Filter>("all");
@@ -659,6 +734,16 @@ export function TodoTool({ campaignId }: { campaignId: Id<"campaigns"> }) {
     return sorted;
   }, [sorted, filter, today]);
 
+  const counts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const item of board?.items ?? []) {
+      if (item.done) continue;
+      const key = item.projectId ? String(item.projectId) : "";
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return map;
+  }, [board]);
+
   if (board === undefined) {
     return <p className="centered-note">Opening the list…</p>;
   }
@@ -670,64 +755,178 @@ export function TodoTool({ campaignId }: { campaignId: Id<"campaigns"> }) {
     (i) => !i.done && dueState(i.due, today) === "overdue"
   ).length;
 
+  /* Vikunja's greeting, which is the one piece of its Overview that is
+     pure warmth: the screen opens by naming the person rather than by
+     naming itself. The name comes from the profile; without one it is
+     the line on its own, which still reads. */
+  const greeting = me?.name ? `Let's focus, ${me.name}` : "Let's focus";
+
+  const live = [...board.projects]
+    .filter((p) => !p.archived)
+    .sort((a, b) => a.order - b.order)
+    .slice(0, PROJECT_CARDS);
+
   return (
     <div className="todo">
+      <h1 className="todo-greeting">{greeting}</h1>
+
       <QuickAddField campaignId={campaignId} projects={board.projects} />
 
       {error && <p className="form-error nb-error">{error}</p>}
 
-      {/* The count row is hidden on an empty list. It used to say
-          "Nothing outstanding." directly above "Nothing here yet.",
-          which is one fact told twice in two voices. */}
-      {sorted.length > 0 && (
-        <div className="todo-count">
-          <span className="todo-filters" role="group" aria-label="Show">
-            <FilterChip on={filter} set={setFilter} value="all" label={`All ${openCount}`} />
-            {starred > 0 && (
-              <FilterChip on={filter} set={setFilter} value="starred" label={`★ ${starred}`} />
-            )}
-            {overdue > 0 && (
-              <FilterChip
-                on={filter}
-                set={setFilter}
-                value="overdue"
-                label={`Overdue ${overdue}`}
-              />
-            )}
-          </span>
-          {doneCount > 0 && (
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => {
-                if (window.confirm(`Delete ${doneCount} finished item(s)?`)) {
-                  run(() => clearDone({ campaignId }));
-                }
-              }}
+      {/* The projects, as somewhere to go rather than a list to read.
+          Vikunja calls this row "Last viewed" and fills it from a views
+          table; this app has not got one, and the projects themselves
+          are the same jump with nothing extra to store. */}
+      <section className="todo-section">
+        <h2 className="todo-section-head">Projects</h2>
+        <div className="proj-cards">
+          <Link href={todoHref(campaignId, "projects")} className="proj-card inbox">
+            <span className="proj-card-name">Inbox</span>
+            <span className="proj-card-count">
+              {counts.get("") ?? 0} open
+            </span>
+          </Link>
+          {live.map((p) => (
+            <Link
+              key={String(p._id)}
+              href={todoHref(campaignId, `project/${p._id}`)}
+              className="proj-card"
+              style={{ borderTopColor: colorOf(p.color) }}
             >
-              Clear finished
-            </button>
+              <span className="proj-card-name">{p.title}</span>
+              <span className="proj-card-count">
+                {counts.get(String(p._id)) ?? 0} open
+              </span>
+            </Link>
+          ))}
+          <Link href={todoHref(campaignId, "projects")} className="proj-card new">
+            <span className="proj-card-name">
+              {live.length === 0 ? "Make a project" : "All projects"}
+            </span>
+            <span className="proj-card-count">
+              {live.length === 0 ? "when one list is not enough" : "manage them"}
+            </span>
+          </Link>
+        </div>
+      </section>
+
+      <section className="todo-section">
+        <div className="todo-section-bar">
+          <h2 className="todo-section-head">Current Tasks</h2>
+          {sorted.length > 0 && (
+            <span className="todo-count">
+              <span className="todo-filters" role="group" aria-label="Show">
+                <FilterChip on={filter} set={setFilter} value="all" label={`All ${openCount}`} />
+                {starred > 0 && (
+                  <FilterChip on={filter} set={setFilter} value="starred" label={`★ ${starred}`} />
+                )}
+                {overdue > 0 && (
+                  <FilterChip
+                    on={filter}
+                    set={setFilter}
+                    value="overdue"
+                    label={`Overdue ${overdue}`}
+                  />
+                )}
+              </span>
+              {doneCount > 0 && (
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => {
+                    if (window.confirm(`Delete ${doneCount} finished item(s)?`)) {
+                      run(() => clearDone({ campaignId }));
+                    }
+                  }}
+                >
+                  Clear finished
+                </button>
+              )}
+            </span>
           )}
         </div>
-      )}
 
-      <TodoList
-        campaignId={campaignId}
-        board={board}
-        items={shown}
-        /* Dragging only means anything on the unfiltered list: on a
-           filtered one the neighbours you drop between are not the
-           neighbours the order is made of. */
-        reorderable={filter === "all"}
-        emptyNote={
-          filter === "all"
-            ? "Nothing here yet."
-            : "Nothing matches that filter."
-        }
-      />
+        {/* One panel around the whole list, as Vikunja has it. Rows
+            inside a single surface read as a list; rows that are each
+            their own card read as a stack of unrelated things. */}
+        <div className="todo-panel">
+          {sorted.length === 0 ? (
+            <EmptyList campaignId={campaignId} />
+          ) : (
+            <TodoList
+              campaignId={campaignId}
+              board={board}
+              items={shown}
+              /* Dragging only means anything on the unfiltered list: on
+                 a filtered one the neighbours you drop between are not
+                 the neighbours the order is made of. */
+              reorderable={filter === "all"}
+              emptyNote="Nothing matches that filter."
+            />
+          )}
+        </div>
+      </section>
     </div>
   );
 }
+
+/** How many project cards the Overview shows before "All projects". */
+const PROJECT_CARDS = 5;
+
+/**
+ * The empty list, which is the screen most people see first.
+ *
+ * "Nothing here yet." on its own was the whole of it, and a to-do tool
+ * whose first screen is one sentence and a text box does not tell you
+ * what it is for. These are real DM prep tasks, and clicking one adds
+ * it — which teaches the syntax by showing what it produces rather
+ * than by explaining it.
+ */
+function EmptyList({ campaignId }: { campaignId: Id<"campaigns"> }) {
+  const quickAdd = useMutation(api.todo.quickAdd);
+  const { error, run } = useRunner();
+  const today = useMemo(() => todayISO(), []);
+
+  return (
+    <div className="todo-empty">
+      <p className="todo-empty-lead">Nothing on the list.</p>
+      <p className="settings-note">
+        Type above, or start with one of these:
+      </p>
+      <div className="todo-seeds">
+        {STARTERS.map((text) => (
+          <button
+            type="button"
+            key={text}
+            className="todo-seed"
+            onClick={() => run(() => quickAdd({ campaignId, text, today }))}
+          >
+            <span className="todo-seed-plus" aria-hidden="true">
+              +
+            </span>
+            {text}
+          </button>
+        ))}
+      </div>
+      {error && <p className="form-error nb-error">{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * The starter tasks. Written in the syntax on purpose.
+ *
+ * Each one adds a real task AND demonstrates one piece of the field —
+ * a label, a date, a priority — so the first list somebody has is
+ * already labelled and dated rather than four bare lines.
+ */
+const STARTERS = [
+  "Statblock for the next boss *combat !4",
+  "Print the handouts *handout next friday",
+  "Write up last session's recap tomorrow",
+  "Order minis for the new character *buy",
+];
 
 function FilterChip({
   on,

@@ -9019,15 +9019,106 @@ button.cal-day:hover {
   gap: 0.4rem;
 }
 
-.todo-input {
+/* The field is a box with things inside it, as Vikunja's is: a mark on
+   the left, the input taking the room, and the ? on the right. The
+   border lives on the WRAPPER so all three sit inside one outline
+   rather than the ? floating beside it. */
+.todo-input-wrap {
   flex: 1;
   min-width: 0;
-  padding: 0.55rem 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.7rem;
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: 9px;
+}
+
+.todo-input-wrap:focus-within {
+  border-color: var(--accent);
+}
+
+.todo-input-icon {
+  flex: none;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.todo-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.55rem 0;
+  background: none;
+  border: none;
   color: var(--text);
   font-size: 0.95rem;
+}
+
+.todo-input:focus {
+  outline: none;
+}
+
+.todo-help-btn {
+  flex: none;
+  width: 1.35rem;
+  height: 1.35rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.todo-help-btn:hover,
+.todo-help-btn[aria-expanded="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.todo-add-btn {
+  flex: none;
+}
+
+/* The syntax, behind the ?. It used to be the placeholder, which made
+   the one thing on an empty screen a line of punctuation. */
+.todo-help {
+  padding: 0.7rem 0.9rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 0.8rem;
+}
+
+.todo-help-lead {
+  margin: 0 0 0.5rem;
+  color: var(--text);
+}
+
+.todo-help-grid {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.3rem 0.7rem;
+  margin: 0 0 0.5rem;
+  color: var(--text-dim);
+}
+
+.todo-help-grid dt,
+.todo-help-grid dd {
+  margin: 0;
+}
+
+.todo-help code {
+  padding: 0.05rem 0.3rem;
+  border-radius: 5px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  font-size: 0.75rem;
 }
 
 .todo-input:focus,
@@ -9101,9 +9192,9 @@ button.cal-day:hover {
 }
 
 .todo-check {
-  margin-top: 0.15rem;
-  width: 1.05rem;
-  height: 1.05rem;
+  align-self: center;
+  width: 0.95rem;
+  height: 0.95rem;
   flex: none;
   /* The browser default is a bright system blue, which on this palette
      is the loudest thing on the screen — and it is loudest on the rows
@@ -9111,17 +9202,27 @@ button.cal-day:hover {
   accent-color: var(--accent);
 }
 
+/* One line, read left to right: project, priority, title, labels.
+   It was a column with the notes under it; the notes are a row of
+   their own now so the sentence can stay a sentence. */
 .todo-body {
   flex: 1;
   min-width: 0;
+  align-self: center;
+  /* Not a flex container: the pieces are words in a sentence, and a
+     flex row makes each of them an item that can be pushed onto its
+     own line. Inline flow wraps the way prose does. */
+  line-height: 1.5;
 }
 
 /* A button so it is reachable by keyboard, styled as the text it is —
    the whole line is the edit affordance, and a pencil icon on each row
    would be twenty pencils. */
 .todo-text {
-  display: block;
-  width: 100%;
+  /* Inline, not a block filling the row. As a block it forced every
+     label and every due date onto a line of its own — the row read as
+     a little card instead of the sentence Vikunja's rows are. */
+  display: inline;
   padding: 0;
   background: none;
   border: none;
@@ -9145,8 +9246,11 @@ button.cal-day:hover {
   font-size: 0.92rem;
 }
 
+/* Indented to where the title starts — the checkbox's width plus the
+   row's gap — so it reads as belonging to the task above it rather
+   than as a second row of the list. */
 .todo-notes {
-  margin: 0.2rem 0 0;
+  margin: 0.1rem 0 0.2rem 1.5rem;
   color: var(--text-dim);
   font-size: 0.8rem;
 }
@@ -9154,7 +9258,9 @@ button.cal-day:hover {
 /* Where the item came from. Sits between the text and the due pill:
    the text says what to do, this says why, and the date says when. */
 .todo-links {
-  display: flex;
+  display: inline-flex;
+  vertical-align: baseline;
+  margin-left: 0.3rem;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 0.25rem;
@@ -9193,11 +9299,12 @@ button.cal-day:hover {
 
 .todo-due {
   flex: none;
-  padding: 0.1rem 0.4rem;
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  align-self: center;
+  margin-left: auto;
+  padding-left: 0.5rem;
   color: var(--text-dim);
-  font-size: 0.72rem;
+  font-size: 0.82rem;
+  font-style: italic;
   white-space: nowrap;
 }
 
@@ -9205,17 +9312,12 @@ button.cal-day:hover {
    coloured, and a list where every row shouts is one you stop
    reading. */
 .todo-due.overdue {
-  border-color: var(--bloodied);
   color: var(--bloodied);
-}
-
-.todo-due.today {
-  border-color: var(--accent);
-  color: var(--accent);
 }
 
 .todo-del {
   flex: none;
+  align-self: center;
   padding: 0 0.25rem;
   background: none;
   border: none;
@@ -9225,6 +9327,156 @@ button.cal-day:hover {
 
 .todo-del:hover {
   color: var(--bloodied);
+}
+
+/* ---------- To-Do: the Overview ---------- */
+
+/* The screen opens by naming the person rather than by naming itself.
+   Centred and large, which is Vikunja's, and the one piece of its
+   Overview that is pure warmth. */
+.todo-greeting {
+  margin: 0.5rem 0 0.2rem;
+  text-align: center;
+  font-size: 1.6rem;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+
+.todo-section {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.todo-section-bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.todo-section-head {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 400;
+  color: var(--text);
+}
+
+/* Somewhere to go, not a list to read. */
+.proj-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.55rem;
+}
+
+.proj-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 0.15rem;
+  min-height: 4.6rem;
+  padding: 0.7rem 0.75rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  /* The project's colour along the top edge — enough to tell four
+     cards apart at a glance without painting the whole tile. */
+  border-top: 3px solid var(--border);
+  border-radius: 10px;
+}
+
+.proj-card:hover {
+  border-color: var(--accent);
+}
+
+.proj-card-name {
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.proj-card-count {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}
+
+.proj-card.new {
+  background: none;
+  border-style: dashed;
+}
+
+/* One surface around the whole list. Rows inside a single panel read
+   as a list; rows that are each their own card read as a stack of
+   unrelated things. */
+.todo-panel {
+  padding: 0.4rem 0.5rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.todo-panel .todo-item {
+  background: none;
+  border: none;
+  border-radius: 8px;
+  padding: 0.4rem 0.5rem;
+}
+
+.todo-panel .todo-item:hover {
+  background: var(--bg-inset);
+}
+
+/* The screen most people see first. One sentence and a text box does
+   not say what a tool is for; these are real prep tasks, and clicking
+   one adds it — which shows what the syntax produces rather than
+   explaining it. */
+.todo-empty {
+  display: grid;
+  gap: 0.4rem;
+  padding: 1.4rem 1rem 1.6rem;
+  justify-items: center;
+  text-align: center;
+}
+
+.todo-empty-lead {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.todo-seeds {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+  width: 100%;
+  max-width: 26rem;
+}
+
+.todo-seed {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  background: var(--bg-inset);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.todo-seed:hover {
+  border-style: solid;
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.todo-seed-plus {
+  flex: none;
+  color: var(--accent);
+  font-weight: 700;
 }
 
 /* ---------- To-Do: the Vikunja shape ----------
@@ -9283,29 +9535,46 @@ button.cal-day:hover {
 
 /* Only High and above wears one, which is what makes a five-point
    scale usable — a list where every row has a badge has told you
-   nothing. */
+   nothing. Vikunja's treatment: coloured WORDS with a mark, sitting in
+   the sentence before the title, rather than a pill parked at the end
+   of the row. It changes how you read the title, so it reads first. */
 .todo-pri {
-  flex: none;
-  align-self: center;
-  padding: 0.05rem 0.4rem;
-  border-radius: 5px;
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  background: var(--accent-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-right: 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 600;
   color: var(--accent);
+  white-space: nowrap;
+}
+
+/* An outlined circle, NOT a filled one. `background: currentColor`
+   with `color` set on the same element resolves both to the same
+   value — the mark came out a solid dark blob with an invisible "!"
+   inside it. A ring takes its colour from the priority and needs no
+   second colour at all. */
+.todo-pri-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 0.95rem;
+  height: 0.95rem;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .todo-pri.p4,
 .todo-pri.p5 {
-  background: rgba(217, 95, 59, 0.16);
   color: var(--bloodied);
 }
 
 .todo-label {
-  flex: none;
-  align-self: center;
+  display: inline-block;
+  vertical-align: baseline;
+  margin-left: 0.3rem;
   padding: 0.05rem 0.45rem;
   border: 1px solid transparent;
   border-radius: 999px;
@@ -9328,20 +9597,19 @@ button.cal-day:hover {
   color: #171310;
 }
 
+/* The project as a quiet prefix, not a chip at the end of the row.
+   It is context for the title — "Session prep · statblock for the
+   lich" — and context reads before the thing it frames. */
 .todo-proj {
-  flex: none;
-  align-self: center;
-  padding: 0.05rem 0.45rem;
-  border: 1px solid var(--border);
-  border-left-width: 3px;
-  border-radius: 5px;
-  color: var(--text-dim);
-  font-size: 0.7rem;
+  margin-right: 0.4rem;
+  font-size: 0.82rem;
+  opacity: 0.75;
   white-space: nowrap;
 }
 
 .todo-proj:hover {
-  color: var(--text);
+  opacity: 1;
+  text-decoration: underline;
 }
 
 .todo-star,

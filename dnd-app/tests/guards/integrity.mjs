@@ -5559,10 +5559,69 @@ export const integrity = {
       // One empty state, not two. The count row said "Nothing
       // outstanding." directly above "Nothing here yet." — one fact
       // told twice, in two voices.
-      if (!/\{sorted\.length > 0 && \(\s*<div className="todo-count">/.test(todoSrc)) {
+      if (!/\{sorted\.length > 0 && \(\s*<span className="todo-count">/.test(todoSrc)) {
         problems.push(
           "the count row is not hidden on an empty list — it repeats the " +
             "empty-state line directly above it"
+        );
+      }
+
+      /* ---- the Overview, as Vikunja lays it out ------------------ */
+
+      // The due date reads as a distance — "Due in 2 days", "Due 4 days
+      // ago" — not as a pill saying Overdue. "Overdue" is the same word
+      // for yesterday and for March, and the second wants noticing.
+      if (!/relativeDue\(item\.due, today\)/.test(todoSrc)) {
+        problems.push(
+          "the row does not show its due date through relativeDue — a " +
+            "one-word pill says the same thing about yesterday and about " +
+            "three months ago"
+        );
+      }
+      // Project and priority read BEFORE the title, inside the body.
+      // Parked at the end of the row they were labels you had to go
+      // looking for; the whole point of Vikunja's row is that it reads
+      // as a sentence.
+      const body = todoSrc.slice(
+        todoSrc.indexOf('<div className="todo-body">'),
+        todoSrc.indexOf('className="todo-text"')
+      );
+      for (const [what, pattern] of [
+        ["the project", /className="todo-proj"/],
+        ["the priority", /showsPriority\(item\.priority\)/],
+      ]) {
+        if (!pattern.test(body)) {
+          problems.push(
+            `${what} is not drawn before the task's title — it is context ` +
+              "for the title, and after it, it is a chip at the end of a row"
+          );
+        }
+      }
+      // The syntax is behind the ?, not in the placeholder. A screen
+      // whose only content is a line of punctuation reads as homework.
+      if (/placeholder \?\? "[^"]*[*+!]/.test(todoSrc)) {
+        problems.push(
+          "the add field's placeholder is the syntax again — it is the one " +
+            "thing on an empty screen, and it has to be readable"
+        );
+      }
+      if (!/\{helpOpen && <QuickAddHelp \/>\}/.test(todoSrc)) {
+        problems.push(
+          "nothing shows the quick-add syntax — it is behind the ? and " +
+            "nowhere else, so removing that leaves it undocumented"
+        );
+      }
+      // An empty list is the screen most people see first.
+      if (!/<EmptyList campaignId=\{campaignId\} \/>/.test(todoSrc)) {
+        problems.push(
+          "the empty list is not the EmptyList block — one sentence and a " +
+            "text box does not say what the tool is for"
+        );
+      }
+      if (!/quickAdd\(\{ campaignId, text, today \}\)/.test(todoSrc)) {
+        problems.push(
+          "the starter tasks do not go through quickAdd, so they would add " +
+            "their syntax as literal words instead of demonstrating it"
         );
       }
       // Links come from other TOOLS, so they are cleaned server-side.

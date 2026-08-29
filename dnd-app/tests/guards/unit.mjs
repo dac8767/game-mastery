@@ -7639,6 +7639,74 @@ export const unit = {
         "a name matches past case and spacing",
         td.nameKey("  Boss   Fight ") === td.nameKey("boss fight")
       );
+
+      // ---- how far off a due date is, in words ---------------------
+      // Vikunja's phrasing, and the reason for it: "Overdue" is the
+      // same word for yesterday and for March, and the second one
+      // wants noticing more.
+      const T = "2026-08-29";
+      const rel = (due) => td.relativeDue(due, T);
+      check("today", rel(T) === "Due today");
+      check("tomorrow", rel("2026-08-30") === "Due tomorrow");
+      check("yesterday", rel("2026-08-28") === "Due yesterday");
+      check("a few days out", rel("2026-09-02") === "Due in 4 days");
+      check("a few days late", rel("2026-08-25") === "Due 4 days ago");
+      // Days stop being readable somewhere; nobody counts "in 47 days".
+      check("a fortnight becomes weeks", rel("2026-09-12") === "Due in 2 weeks");
+      check("and so does one behind", rel("2026-08-15") === "Due 2 weeks ago");
+      check("far enough out becomes months", rel("2026-12-01") === "Due in 3 months");
+      check(
+        "nothing to say about no date",
+        rel(null) === null && rel(undefined) === null && rel("nope") === null
+      );
+
+      // The arithmetic underneath. Built at UTC midnight on both ends,
+      // so a daylight-saving hour cannot make a day count come out at
+      // 1.958 and floor to the wrong answer twice a year.
+      check(
+        "days across a month end",
+        td.daysBetween("2026-08-29", "2026-09-02") === 4
+      );
+      check(
+        "days across a year end",
+        td.daysBetween("2026-12-30", "2027-01-02") === 3
+      );
+      check("backwards is negative", td.daysBetween("2026-08-29", "2026-08-25") === -4);
+      check("the same day is zero", td.daysBetween(T, T) === 0);
+      // The two Sundays either side of a US daylight-saving change.
+      check(
+        "days across a clock change",
+        td.daysBetween("2026-03-07", "2026-03-09") === 2 &&
+          td.daysBetween("2026-10-31", "2026-11-02") === 2
+      );
+
+      // And outside UTC, which the sandbox cannot see on its own.
+      check(
+        "the relative dates hold up outside UTC, in both directions",
+        (() => {
+          const dir = compile("components/todoModel.ts");
+          const url = pathToFileURL(join(dir, "todoModel.js")).href;
+          const script = `
+            const td = await import(${JSON.stringify(url)});
+            const fail = (m) => { console.log("FAIL " + m); process.exitCode = 1; };
+            const T = "2026-08-29";
+            if (td.relativeDue(T, T) !== "Due today") fail("today in " + process.env.TZ);
+            if (td.relativeDue("2026-08-30", T) !== "Due tomorrow") fail("tomorrow in " + process.env.TZ);
+            if (td.relativeDue("2026-08-25", T) !== "Due 4 days ago") fail("late in " + process.env.TZ);
+            if (td.daysBetween("2026-03-07", "2026-03-09") !== 2) fail("clock change in " + process.env.TZ);
+            if (td.daysBetween("2026-12-30", "2027-01-02") !== 3) fail("year end in " + process.env.TZ);
+          `;
+          for (const tz of ["America/New_York", "Asia/Tokyo"]) {
+            const r = spawnSync(
+              process.execPath,
+              ["--input-type=module", "-e", script],
+              { env: { ...process.env, TZ: tz }, encoding: "utf8" }
+            );
+            if (r.status !== 0) return false;
+          }
+          return true;
+        })()
+      );
       check(
         "but not past a real difference",
         td.nameKey("NPCs") !== td.nameKey("NPC")

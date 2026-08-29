@@ -163,6 +163,58 @@ export function dueState(
   return due <= addDays(today, 7) ? "soon" : "later";
 }
 
+/**
+ * How far off a due date is, in words. Vikunja's phrasing.
+ *
+ * "Due in 2 days", "Due 4 days ago" — a relative reading rather than a
+ * pill saying "Overdue", because the two facts a prep list needs from a
+ * date are which side of today it falls and HOW FAR. "Overdue" is the
+ * same word for a thing you missed yesterday and a thing you missed in
+ * March, and the second one wants noticing more.
+ *
+ * Days apart, computed by walking the string arithmetic rather than
+ * subtracting two Dates — same reason as everything else in this file.
+ * Weeks and months once the day count stops being readable; nobody
+ * counts "in 47 days".
+ */
+export function relativeDue(
+  due: string | null | undefined,
+  today: string
+): string | null {
+  if (!due || !isDate(due) || !isDate(today)) return null;
+  const days = daysBetween(today, due);
+
+  if (days === 0) return "Due today";
+  if (days === 1) return "Due tomorrow";
+  if (days === -1) return "Due yesterday";
+
+  const ahead = days > 0;
+  const n = Math.abs(days);
+  const span =
+    n < 14
+      ? `${n} days`
+      : n < 60
+        ? `${Math.round(n / 7)} weeks`
+        : `${Math.round(n / 30)} months`;
+  return ahead ? `Due in ${span}` : `Due ${span} ago`;
+}
+
+/**
+ * Whole days from `from` to `to`, negative when `to` is earlier.
+ *
+ * Both built at UTC midnight, so the difference is an exact number of
+ * 86,400,000ms with no daylight-saving hour to round wrongly — the
+ * classic way a "days between" helper returns 1.958 and floors to the
+ * wrong answer twice a year.
+ */
+export function daysBetween(from: string, to: string): number {
+  const at = (iso: string) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+  return Math.round((at(to) - at(from)) / 86400000);
+}
+
 /** "YYYY-MM-DD", and a real date rather than merely the right shape. */
 export function isDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
