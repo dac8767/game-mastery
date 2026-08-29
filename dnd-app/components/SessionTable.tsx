@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -28,7 +28,11 @@ import {
 } from "@/components/TableToolbar";
 import { ExpandIcon } from "@/components/ExpandIcon";
 import { SessionDetail, SessionRow } from "@/components/SessionDetail";
-import { ColumnDef, ColumnState } from "@/components/npcColumns";
+import {
+  ColumnDef,
+  ColumnState,
+  reconcileColumns,
+} from "@/components/npcColumns";
 import {
   Leveling,
   SESSION_COLUMN_BY_KEY,
@@ -69,8 +73,14 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
 
   /* Which leveling field this campaign's sessions carry. myCampaigns
      is already subscribed by AppShell, so this is that subscription
-     rather than a second one. */
+     rather than a second one.
+
+     `known` is the half that matters. Until this query answers, the
+     mode is a GUESS — "xp", because that is what a campaign that has
+     never said gets — and a guess must not be written into the saved
+     layout. See the reconcile effect below. */
   const campaigns = useQuery(api.campaigns.myCampaigns);
+  const levelingKnown = campaigns !== undefined;
   const leveling: Leveling =
     campaigns?.find((c) => c._id === campaignId)?.leveling ?? "xp";
   const columns = useMemo(() => sessionColumnsFor(leveling), [leveling]);
@@ -82,6 +92,61 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
     columns,
     SESSION_DEFAULT_SORT
   );
+
+  /* The saved layout, held to the leveling mode this campaign uses.
+
+     useViewPrefs reconciles what the server has ONCE, against whatever
+     `columns` said at the moment views.getViewPrefs answered — and
+     myCampaigns is a separate subscription that can answer second. Land
+     in that order on a milestone campaign and the layout hydrates
+     against the XP column set: the grid shows XP Awarded, "Leveled Up
+     To" is in neither the grid nor the column picker, and it stays that
+     way until the screen is mounted again. Which query wins that race
+     is not something a screen should be able to notice.
+
+     So reconcile a second time, here — but only once the mode is KNOWN.
+     Healing against the "xp" default while myCampaigns is still in
+     flight would overwrite a correct milestone layout with the guess,
+     which is the same bug with the sides swapped.
+
+     reconcileColumns keeps the saved order and widths, drops the key
+     this campaign does not use, and appends the one it does. Writing it
+     back is the point: the stored layout named a column that is not
+     this campaign's. */
+  useEffect(() => {
+    if (!prefs.ready || !levelingKnown) return;
+    const want = columns.map((c) => c.key);
+    const have = new Set(prefs.columns.map((c) => c.key));
+    if (want.length === have.size && want.every((k) => have.has(k))) return;
+
+    prefs.setColumns((cur) => reconcileColumns(cur, isDm, columns));
+
+    // A sort left pointing at the field that just went is a sort on a
+    // column nobody can see — rows in an order the screen cannot
+    // explain. The extra sorts are not columns and are never dropped,
+    // so they are asked about separately rather than being reset by a
+    // test that only knows about columns.
+    const stillSortable =
+      want.includes(prefs.sortKey) ||
+      SESSION_EXTRA_SORTS.some((e) => e.key === prefs.sortKey);
+    if (!stillSortable) {
+      prefs.setSortKey(prefs.defaultSortKey);
+      prefs.setSortAsc(prefs.defaultSortAsc);
+    }
+  }, [
+    prefs.ready,
+    prefs.columns,
+    prefs.setColumns,
+    prefs.sortKey,
+    prefs.setSortKey,
+    prefs.setSortAsc,
+    prefs.defaultSortKey,
+    prefs.defaultSortAsc,
+    levelingKnown,
+    columns,
+    isDm,
+  ]);
+
   const createSession = useMutation(api.sessions.createSession);
   const updateSession = useMutation(api.sessions.updateSession);
 
@@ -111,7 +176,7 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
     const m = new Map<string, string>();
     for (const s of all) m.set(s._id, searchText(s, columns));
     return m;
-  }, [all]);
+  }, [all, columns]);
 
   const searched = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -173,7 +238,7 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
       }
     }
     return m;
-  }, [all]);
+  }, [all, columns]);
 
   /* One page of the list, cut BEFORE grouping — "N rows at a time"
      counts rows, and the groups on screen are rebuilt from the page.
@@ -220,7 +285,7 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
       ...columns.filter((c) => c.sortable !== false),
       ...SESSION_EXTRA_SORTS,
     ],
-    []
+    [columns]
   );
 
   /** The night's facts are the GM's record of it. */

@@ -292,6 +292,36 @@ export const integrity = {
         }
       }
 
+      // Which is necessary and was not sufficient. The LIST draws its
+      // columns from the saved layout, and useViewPrefs reconciles that
+      // once — against whatever sessionColumnsFor said at the moment
+      // views.getViewPrefs answered. myCampaigns is a second
+      // subscription and can answer after it, and then a milestone
+      // campaign's grid shows XP Awarded and has no Leveled Up To at
+      // all. So the screen reconciles again itself, once the mode is
+      // KNOWN — that second half matters just as much, because healing
+      // against the "xp" default while myCampaigns is still in flight
+      // overwrites a correct milestone layout with the guess.
+      if (!/reconcileColumns\(cur, isDm, columns\)/.test(tableSrc2)) {
+        problems.push(
+          "SessionTable does not reconcile its saved layout against the " +
+            "campaign's leveling mode — whichever of getViewPrefs and " +
+            "myCampaigns answers first decides which leveling column the " +
+            "grid shows"
+        );
+      }
+      // The NEGATED form: `levelingKnown` on its own also appears in the
+      // effect's dependency list, and a check that matched that would
+      // pass with the wait itself deleted.
+      if (!/!levelingKnown/.test(tableSrc2)) {
+        problems.push(
+          "SessionTable reconciles its saved layout without waiting to " +
+            "know how the campaign levels — the reconcile would run " +
+            "against the \"xp\" default and write the guess over a " +
+            "milestone layout"
+        );
+      }
+
       // Tabs, GM first — which is the way round it was asked for and is
       // not otherwise recoverable: both tabs are the same markup with
       // different props, so swapping them is a silent change that still

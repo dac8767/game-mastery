@@ -432,6 +432,30 @@ export const dmVisibility = {
       );
     }
 
+    // And the tools that ADD to a page wait for the same answer. Which
+    // side a new box lands on is read from the open tab, and the DM tab
+    // does not exist until `notes.dm` arrives — so a toolbar rendered
+    // during the load points at the player page, and a box added in
+    // that second carries whatever gets typed into it onto the page the
+    // table can read. The gate is the fix; this is the guard that it
+    // stays there.
+    const notesGate = detail.indexOf("{notes && (");
+    const boxTools = detail.indexOf("<BoxTools");
+    const formatBar = detail.indexOf("<NotebookFormatBar");
+    if (notesGate === -1) {
+      problems.push(
+        "SessionDetail no longer gates its notes toolbar on `notes` " +
+          "having arrived — until getNotes answers, the open side reads " +
+          "as the player page for a DM too"
+      );
+    } else if (boxTools < notesGate || formatBar < notesGate) {
+      problems.push(
+        "SessionDetail renders the box tools or the format bar outside " +
+          "the `{notes && …}` gate — a box added before getNotes answers " +
+          "lands on the player page whoever is looking"
+      );
+    }
+
     // ---- per-person view state is never shared ---------------------
     const views = read("convex", "views.ts");
     if (/args\.userId|userId:\s*v\.id\("users"\)/.test(views)) {

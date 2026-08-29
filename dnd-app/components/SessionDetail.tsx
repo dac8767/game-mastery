@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -366,23 +366,36 @@ export function SessionDetail({
 
           {/* Under the tabs rather than above them: it acts on the page
               below it, and a toolbar floating above the thing that
-              names the page reads as belonging to the record. */}
-          <NotebookFormatBar
-            trailing={
-              <>
-                <NoteLinkPicker campaignId={campaignId} targets={targets} />
-                <BoxTools
-                  onAdd={canvasProps(side).onAdd}
-                  onUploadImage={(file) => uploadImage(side, file)}
-                />
-              </>
-            }
-          />
+              names the page reads as belonging to the record.
 
-          {/* Renders nothing until somebody types `#`, and then a list
-              at the caret. Mounted here, beside the toolbar, because
-              both read the same tracked caret. */}
-          <NoteMentions campaignId={campaignId} targets={targets} />
+              And not before the notes have ARRIVED. `side` is read from
+              the open tab, and the DM tab does not exist until the
+              server has said there is a DM side — so in the window
+              between opening a session and getNotes answering, a DM's
+              toolbar points at the PLAYER page. It rendered there, so
+              "add a text box" in that second put the box, and then
+              whatever was typed into it, on the page the table can
+              read. There is nothing to write to yet anyway. */}
+          {notes && (
+            <>
+              <NotebookFormatBar
+                trailing={
+                  <>
+                    <NoteLinkPicker campaignId={campaignId} targets={targets} />
+                    <BoxTools
+                      onAdd={canvasProps(side).onAdd}
+                      onUploadImage={(file) => uploadImage(side, file)}
+                    />
+                  </>
+                }
+              />
+
+              {/* Renders nothing until somebody types `#`, and then a
+                  list at the caret. Mounted here, beside the toolbar,
+                  because both read the same tracked caret. */}
+              <NoteMentions campaignId={campaignId} targets={targets} />
+            </>
+          )}
 
           {notes === undefined ? (
             <p className="centered-note">Opening the notes…</p>
@@ -467,8 +480,27 @@ function SessionField({
     if (!focused) setDraft(value);
   }, [value, focused]);
 
+  /**
+   * Escape, on its way out through blur.
+   *
+   * Escape puts the old text back and leaves the field, and leaving the
+   * field is what saves — so the two ran in that order and Escape SAVED
+   * the edit it was pressed to abandon. setDraft is queued, blur() is
+   * not: by the time onBlur reads `draft` it is still the half-typed
+   * text, which does not equal `value`, which is a write.
+   *
+   * A ref rather than a state flag, for the same reason: it is set and
+   * read inside one event, before React has re-rendered anything.
+   */
+  const cancelled = useRef(false);
+
   const commit = () => {
     setFocused(false);
+    if (cancelled.current) {
+      cancelled.current = false;
+      setDraft(value);
+      return;
+    }
     if (draft === value) return;
     onCommit(draft);
   };
@@ -551,6 +583,7 @@ function SessionField({
           onKeyDown={(e) => {
             if (e.key === "Enter") e.currentTarget.blur();
             if (e.key === "Escape") {
+              cancelled.current = true;
               setDraft(value);
               e.currentTarget.blur();
             }
