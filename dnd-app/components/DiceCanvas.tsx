@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { toDddiceRoll } from "@/components/dddiceMap";
+import { backgroundUrl, toDddiceRoll } from "@/components/dddiceMap";
+import { reason, statusOf } from "@/components/dddiceError";
 import type { DieRoll } from "@/components/diceModel";
 
 /**
@@ -29,36 +30,6 @@ import type { DieRoll } from "@/components/diceModel";
  * is far and away the heaviest thing in the app — a table that never
  * turns dddice on should not pay for it.
  */
-
-/**
- * Whatever the thing that failed had to say for itself.
- *
- * dddice's errors are not all Error instances — the SDK throws its own
- * APIError types and axios-shaped rejections — and `String(e)` on one
- * of those is "[object Object]", which is how a diagnosable failure
- * turns into an unactionable one.
- */
-function statusOf(e: unknown): number | null {
-  if (!e || typeof e !== "object") return null;
-  const any = e as Record<string, unknown>;
-  if (typeof any.status === "number") return any.status;
-  const response = any.response as { status?: number } | undefined;
-  return typeof response?.status === "number" ? response.status : null;
-}
-
-function reason(e: unknown): string {
-  if (typeof e === "string") return e;
-  if (e && typeof e === "object") {
-    const any = e as Record<string, unknown>;
-    const status = statusOf(e);
-    const message =
-      typeof any.message === "string" && any.message ? any.message : null;
-    if (status && message) return `${message} (HTTP ${status})`;
-    if (status) return `HTTP ${status}`;
-    if (message) return message;
-  }
-  return "no reason given — see the browser console";
-}
 
 /** Where a browser keeps the guest account it made for itself. */
 const GUEST_KEY = "gm.dddice.guest";
@@ -115,6 +86,8 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
   const fallbackThemeRef = useRef<string | null>(null);
   const [status, setStatus] = useState<Status>("off");
   const [note, setNote] = useState<string | null>(null);
+  /** The room's own artwork, which the renderer does not draw. */
+  const [background, setBackground] = useState<string | null>(null);
 
   // ---- mount the engine once per room -----------------------------
   useEffect(() => {
@@ -197,6 +170,17 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
         step = "connecting to the room";
         engine.connect(slug, passcode ?? undefined);
         engine.start();
+
+        // The camera stays put.
+        //
+        // The engine ships with orbit controls on, which means the
+        // scroll wheel flies the camera — and since this canvas is a
+        // panel inside a page rather than dddice's own full-screen
+        // room, a scroll aimed at the page zoomed straight past the
+        // dice instead. There is no gesture here that should move a
+        // camera, so there is no camera to move.
+        engine.controlsEnabled = false;
+        engine.resetCamera();
         // No preloading: `preloadTheme` is newer than the SDK version
         // this app pins, and each die carries its own `theme` anyway,
         // so the engine fetches what it needs on the first throw.
@@ -206,6 +190,20 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
           engine.disconnect();
           return;
         }
+        // The room's background image. The renderer does not draw it —
+        // bgOpacity defaults to 0 and the artwork belongs to dddice's
+        // own room page — so it is fetched and painted behind the
+        // canvas here. Best-effort, like the theme below it.
+        step = "reading the room";
+        try {
+          const room = await engine.api.room.get(slug, passcode ?? undefined);
+          const path = (room as { data?: { bg_file_path?: string | null } })
+            .data?.bg_file_path;
+          if (!cancelled) setBackground(backgroundUrl(path));
+        } catch {
+          if (!cancelled) setBackground(null);
+        }
+
         // Best-effort: no theme is a worse throw, not a broken one, so
         // this must not be able to fail the whole connection.
         step = "reading the dice box";
@@ -226,11 +224,17 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
         setStatus("ready");
       } catch (e) {
         if (cancelled) return;
-        // The whole error to the console, where a stack is useful; the
-        // step and dddice's own words to the screen, where they are
-        // the difference between "check the passcode" and "wait a
-        // minute and reload".
-        console.error("[dice] dddice failed while " + step, e);
+        // WARN, not error. Next's dev overlay promotes console.error to
+        // a full-screen blocking card, and this whole component is
+        // decoration — a failure here changes no number on screen. A
+        // red modal over the app is a wildly overstated way to say the
+        // pretty dice are off.
+        //
+        // The whole error still goes to the console, where a stack is
+        // useful; the step and dddice's own words go to the screen,
+        // where they are the difference between "check the passcode"
+        // and "wait a minute and reload".
+        console.warn("[dice] dddice failed while " + step, e);
         setStatus("failed");
         setNote(`3D dice off — failed while ${step}: ${reason(e)}`);
       }
@@ -293,7 +297,7 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
       // Same rule as the connection: the console gets everything, the
       // screen gets dddice's own words. A bare "didn't take that roll"
       // is a dead end for whoever has to fix it.
-      console.error("[dice] dddice rejected the roll", { dice, error: e });
+      console.warn("[dice] dddice rejected the roll", { dice, error: e });
       setNote(`3D dice off — dddice rejected the roll: ${reason(e)}`);
     });
   }, [roll, status, theme]);
@@ -302,6 +306,12 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
 
   return (
     <div className="dice-canvas-wrap">
+      {background && (
+        <div
+          className="dice-canvas-bg"
+          style={{ backgroundImage: `url(${background})` }}
+        />
+      )}
       <canvas ref={canvasRef} className="dice-canvas" />
       {status === "connecting" && (
         <p className="dice-canvas-note">Waking the dice…</p>

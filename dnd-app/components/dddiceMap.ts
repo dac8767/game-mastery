@@ -136,3 +136,23 @@ export function toDddiceRoll(
   if (out.length > limit) return null;
   return out;
 }
+
+/**
+ * The room's background art, as a URL a page can load.
+ *
+ * dddice stores it as a PATH, and a path is only half an address. An
+ * absolute URL is taken as-is; anything else is resolved against
+ * dddice.com, with the leading slashes normalised so "/bg/x.webp" and
+ * "bg/x.webp" cannot become two different addresses — one of which is
+ * "https://dddice.com//bg/x.webp".
+ *
+ * A wrong guess costs nothing visible: the image does not paint, and
+ * the roll is unaffected.
+ */
+export function backgroundUrl(path: string | null | undefined): string | null {
+  if (typeof path !== "string") return null;
+  const trimmed = path.trim();
+  if (trimmed === "") return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://dddice.com/${trimmed.replace(/^\/+/, "")}`;
+}

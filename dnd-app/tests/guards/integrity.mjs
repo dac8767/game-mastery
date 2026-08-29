@@ -5188,6 +5188,7 @@ export const integrity = {
         "dice-felt-read",
         "dice-canvas-wrap",
         "dice-canvas",
+        "dice-canvas-bg",
         "dice-canvas-note",
         "dice-setup",
         "dice-setup-note",
@@ -5256,10 +5257,20 @@ export const integrity = {
         // the roll one shipped with a bare .catch(() => …) that threw
         // the reason away, which is the same mistake as the message it
         // was written beside.
-        if ((canvasSrc.match(/console\.error\(/g) ?? []).length < 2) {
+        // console.WARN, deliberately. Next's dev overlay turns a
+        // console.error into a full-screen blocking card, and this
+        // component is decoration — its failure changes no number on
+        // screen, so it must not present as a fatal one.
+        if ((canvasSrc.match(/console\.warn\(/g) ?? []).length < 2) {
           problems.push(
             "DiceCanvas has a failure path that swallows its error — the " +
               "connection and the roll can each fail, and both have to say why"
+          );
+        }
+        if (/console\.error\(/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas logs with console.error — Next's dev overlay makes " +
+              "that a full-screen blocking card for a decorative failure"
           );
         }
         if (/\.catch\(\(\) =>/.test(canvasSrc)) {
@@ -5288,6 +5299,15 @@ export const integrity = {
               "the guest is already a participant, which is success"
           );
         }
+        // The canvas is a panel in a page, not a full-screen room. Orbit
+        // controls turn a scroll aimed at the page into a camera flight
+        // past the dice.
+        if (!/controlsEnabled = false/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas leaves the orbit controls on — the scroll wheel " +
+              "flies the camera past the dice instead of scrolling the page"
+          );
+        }
         if (!/diceBox\.list\(\)/.test(canvasSrc)) {
           problems.push(
             "DiceCanvas no longer reads the dice box — the fallback theme " +
@@ -5295,11 +5315,28 @@ export const integrity = {
           );
         }
         // The screen gets dddice's own words, not a house sentence
-        // that replaces them.
-        if (!/function reason\(e: unknown\)/.test(canvasSrc)) {
+        // that replaces them. reason() lives in its own module so the
+        // unit guard can exercise it — it shipped printing a rejected
+        // roll as "{}" — so this checks the canvas USES it rather than
+        // that the canvas defines it.
+        if (!/\breason\(e\)/.test(canvasSrc)) {
           problems.push(
-            "DiceCanvas has no reason() — an SDK rejection is not always an " +
-              "Error, and String(e) on one of those is \"[object Object]\""
+            "DiceCanvas does not report through reason() — an SDK rejection " +
+              "is not always an Error, and String(e) on one is \"[object Object]\""
+          );
+        }
+        if (!/from "@\/components\/dddiceError"/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas no longer imports the error readers — a copy of that " +
+              "parsing inside the component is a copy nothing tests"
+          );
+        }
+        // The renderer does not draw the room's artwork, so the canvas
+        // has to fetch and paint it.
+        if (!/setBackground\(backgroundUrl\(/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas does not resolve the room's background — the " +
+              "renderer never draws it, so nothing else will"
           );
         }
       }

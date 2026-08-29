@@ -7394,6 +7394,114 @@ export const unit = {
       );
     }
 
+    // ---- reading a dddice failure back ------------------------------
+    // Getting this wrong is invisible in the worst way: the dice keep
+    // working and only the DIAGNOSTIC breaks. It shipped printing a
+    // rejected roll as "{}" — the SDK had handed over an object with
+    // no message and no status, and the actual complaint was sitting
+    // in the response body. Every round trip that costs is a round
+    // trip spent asking what happened.
+    {
+      const err = await import(
+        pathToFileURL(
+          join(compile("components/dddiceError.ts"), "dddiceError.js")
+        ).href
+      );
+
+      check(
+        "a status is found whether it is on the error or its response",
+        err.statusOf({ status: 409 }) === 409 &&
+          err.statusOf({ response: { status: 422 } }) === 422 &&
+          err.statusOf(new Error("nope")) === null &&
+          err.statusOf(null) === null
+      );
+      check(
+        "an ordinary Error speaks for itself",
+        err.reason(new Error("Request failed")) === "Request failed"
+      );
+      check(
+        "a message and a status are reported together",
+        err.reason({ message: "Request failed", response: { status: 409 } }) ===
+          "Request failed — HTTP 409"
+      );
+      // The one that mattered: a rejection whose complaint is only in
+      // the body. This is what printed as "{}".
+      check(
+        "a validation body is read rather than shown as an empty object",
+        (() => {
+          const out = err.reason({
+            response: {
+              status: 422,
+              data: {
+                message: "The given data was invalid.",
+                errors: { "dice.0.theme": ["The theme field is required."] },
+              },
+            },
+          });
+          return (
+            out.includes("The given data was invalid.") &&
+            out.includes("dice.0.theme") &&
+            out.includes("The theme field is required.") &&
+            out.includes("422")
+          );
+        })()
+      );
+      check(
+        "a plain-text body is used, and not at unbounded length",
+        (() => {
+          const out = err.reason({ response: { status: 500, data: "x".repeat(900) } });
+          return out.includes("HTTP 500") && out.length < 300;
+        })()
+      );
+      // An SDK error class with nothing on it still has a name, and
+      // "RollError" beats "no reason given" by a wide margin.
+      check(
+        "a nameless failure still names its own class",
+        (() => {
+          class RollError {}
+          return err.reason(new RollError()) === "RollError";
+        })()
+      );
+      check(
+        "nothing at all still produces a sentence, never [object Object]",
+        (() => {
+          for (const bad of [{}, null, undefined, 0, []]) {
+            const out = err.reason(bad);
+            if (typeof out !== "string" || out === "" || out.includes("[object")) {
+              return false;
+            }
+          }
+          return true;
+        })()
+      );
+      check("a string is its own reason", err.reason("boom") === "boom");
+    }
+
+    // ---- the room's background art ----------------------------------
+    {
+      const map2 = await import(
+        pathToFileURL(join(compile("components/dddiceMap.ts"), "dddiceMap.js"))
+          .href
+      );
+      check(
+        "a stored path becomes an address, however it was written",
+        map2.backgroundUrl("/bg/x.webp") === "https://dddice.com/bg/x.webp" &&
+          map2.backgroundUrl("bg/x.webp") === "https://dddice.com/bg/x.webp" &&
+          map2.backgroundUrl("//bg/x.webp") === "https://dddice.com/bg/x.webp"
+      );
+      check(
+        "an absolute URL is left alone",
+        map2.backgroundUrl("https://cdn.dddice.com/a.webp") ===
+          "https://cdn.dddice.com/a.webp"
+      );
+      check(
+        "a room with no background asks for no image",
+        map2.backgroundUrl(null) === null &&
+          map2.backgroundUrl(undefined) === null &&
+          map2.backgroundUrl("   ") === null
+      );
+    }
+
     // ---- the Moonbrook session import holds to its sources ----------
     // The records in scripts/import-moonbrook-sessions.mjs were merged
     // from the OneNote session pages and the Discord scheduling
