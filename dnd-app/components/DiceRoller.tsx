@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -58,6 +58,17 @@ export function DiceRoller({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [setup, setSetup] = useState(false);
+  /**
+   * The roll whose dice are still in the air.
+   *
+   * Convex answers in milliseconds; the animation takes seconds. Left
+   * alone, the total was readable well before the dice landed, which
+   * makes the throw a re-enactment of something you already knew. The
+   * log holds this one row back until the canvas says they stopped.
+   */
+  const [rolling, setRolling] = useState<string | null>(null);
+  /** The theme's own rendered dice, when dddice has told us. */
+  const [previews, setPreviews] = useState<Record<string, string> | null>(null);
 
   const isDm = view?.isDm ?? false;
 
@@ -83,6 +94,14 @@ export function DiceRoller({ campaignId }: { campaignId: Id<"campaigns"> }) {
     [latest]
   );
 
+  // Hold the newest roll the moment it is handed to the canvas, and
+  // only then: a table with no dddice room never waits for anything.
+  const drawId = toDraw?.id ?? null;
+  const has3d = Boolean(table?.room);
+  useEffect(() => {
+    if (has3d && drawId) setRolling(drawId);
+  }, [has3d, drawId]);
+
   async function throwDice(what: string, secret: boolean) {
     if (busy) return;
     setBusy(true);
@@ -102,6 +121,11 @@ export function DiceRoller({ campaignId }: { campaignId: Id<"campaigns"> }) {
       setBusy(false);
     }
   }
+
+  /** The dice have stopped: let the log show what they said. */
+  const onSettled = useCallback((id: string) => {
+    setRolling((held) => (held === id ? null : held));
+  }, []);
 
   /** Swap the dice, keep the modifier. A +5 is not collateral. */
   function setDice(dice: string) {
@@ -125,15 +149,24 @@ export function DiceRoller({ campaignId }: { campaignId: Id<"campaigns"> }) {
               passcode={table.room.passcode}
               theme={table.room.theme}
               roll={toDraw}
+              onSettled={onSettled}
+              onPreviews={setPreviews}
             />
           )}
-          <div className="dice-felt-read">
-            {latest ? (
-              <RollFace roll={latest} big />
-            ) : (
-              <p className="dice-nothing">Nothing thrown yet.</p>
-            )}
-          </div>
+          {/* With 3D dice running, the felt is the dice and nothing
+              else — a summary printed over them says the answer before
+              they land, and competes with the artwork behind them.
+              Without a dddice room there would otherwise be nothing to
+              look at, so the readout stays for that case. */}
+          {!table?.room && (
+            <div className="dice-felt-read">
+              {latest ? (
+                <RollFace roll={latest} big />
+              ) : (
+                <p className="dice-nothing">Nothing thrown yet.</p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* The pool, at the size of the thing you are about to throw. */}
@@ -242,7 +275,16 @@ export function DiceRoller({ campaignId }: { campaignId: Id<"campaigns"> }) {
               aria-label={`Add a d${sides}`}
               onClick={() => setNotation((n) => addDie(n, sides))}
             >
-              <DiceIcon sides={sides} />
+              {/* dddice's own render of the die you are about to
+                  throw, so the tray matches what lands. The drawn
+                  icon stays as the fallback — it is what a table with
+                  no dddice room sees, and what shows before the theme
+                  has loaded. */}
+              {previews?.[`d${sides}`] ? (
+                <img src={previews[`d${sides}`]} alt="" />
+              ) : (
+                <DiceIcon sides={sides} />
+              )}
             </button>
           ))}
         </div>
@@ -312,7 +354,7 @@ export function DiceRoller({ campaignId }: { campaignId: Id<"campaigns"> }) {
         )}
 
         {view.rolls.map((r) => (
-          <RollFace key={r._id} roll={r} />
+          <RollFace key={r._id} roll={r} rolling={r._id === rolling} />
         ))}
       </section>
     </div>
@@ -339,7 +381,15 @@ type LoggedRoll = {
  * roll that just landed and the roll three rows down cannot end up
  * disagreeing about what a dropped die looks like.
  */
-function RollFace({ roll, big = false }: { roll: LoggedRoll; big?: boolean }) {
+function RollFace({
+  roll,
+  big = false,
+  rolling = false,
+}: {
+  roll: LoggedRoll;
+  big?: boolean;
+  rolling?: boolean;
+}) {
   const crit = critOfDice(roll.dice);
   const groups = groupDice(roll.dice);
 
@@ -361,6 +411,11 @@ function RollFace({ roll, big = false }: { roll: LoggedRoll; big?: boolean }) {
         </span>
       </div>
 
+      {/* Still in the air. The row exists — you can see the roll was
+          made — but the number waits for the dice to say it. */}
+      {rolling ? (
+        <p className="dice-rolling">Rolling…</p>
+      ) : (
       <div className="dice-roll-body">
         {/* Grouped, so "8d6+4d4+3" reads as two handfuls and a
             modifier rather than twelve numbers in a row with nothing
@@ -395,8 +450,9 @@ function RollFace({ roll, big = false }: { roll: LoggedRoll; big?: boolean }) {
         <span className="dice-notation-read">{roll.notation}</span>
         <span className="dice-total">{roll.total}</span>
       </div>
+      )}
 
-      {crit && (
+      {!rolling && crit && (
         <p className="dice-crit">
           {crit === "high" ? "Natural 20" : "Natural 1"}
         </p>

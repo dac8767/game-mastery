@@ -8843,17 +8843,17 @@ button.cal-day:hover {
 }
 
 /* The room's own artwork, behind the dice.
-   Held well back: this is a panel a few hundred pixels tall with the
-   roll's total printed across it, and dddice's room art is a
-   full-bleed painting. At full strength it wins the contrast fight
-   against the number, which is the one thing on this screen that has
-   to be readable. */
+
+   At full strength, because nothing is printed over it any more: the
+   result moved to the log, so the felt is the artwork and the dice,
+   the way dddice's own room looks. It was held at 0.4 while the total
+   was drawn across it, and that reads as a washed-out picture rather
+   than as a deliberate one. */
 .dice-canvas-bg {
   position: absolute;
   inset: 0;
   background-position: center;
   background-size: cover;
-  opacity: 0.4;
 }
 
 .dice-canvas {
@@ -9027,9 +9027,16 @@ button.cal-day:hover {
   line-height: 0;
 }
 
-.dice-tray-die svg {
+.dice-tray-die svg,
+.dice-tray-die img {
   width: 100%;
   height: 100%;
+}
+
+/* A rendered die is a picture of a solid object; it needs to sit in
+   the button the way the drawn outline does rather than fill it. */
+.dice-tray-die img {
+  object-fit: contain;
 }
 
 .dice-tray-die:hover {
@@ -9162,7 +9169,19 @@ button.cal-day:hover {
   margin-top: 0.6rem;
 }
 
-.dice-roll.big .dice-groups {
+.dice-roll.big /* A roll whose dice are still in the air. Same height as the row it
+   replaces, so the log does not jump when the number arrives. */
+.dice-rolling {
+  display: flex;
+  align-items: center;
+  min-height: 1.9rem;
+  margin: 0.35rem 0 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.dice-groups {
   justify-content: center;
 }
 
@@ -9215,6 +9234,18 @@ button.cal-day:hover {
   align-items: center;
   gap: 0.5rem;
   margin-top: 0.35rem;
+}
+
+/* A roll whose dice are still in the air. Same height as the row it
+   replaces, so the log does not jump when the number arrives. */
+.dice-rolling {
+  display: flex;
+  align-items: center;
+  min-height: 1.9rem;
+  margin: 0.35rem 0 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  font-style: italic;
 }
 
 .dice-groups {

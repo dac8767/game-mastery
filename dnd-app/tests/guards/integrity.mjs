@@ -5221,6 +5221,7 @@ export const integrity = {
         "dice-notation-read",
         "dice-total",
         "dice-crit",
+        "dice-rolling",
       ]) {
         if (!new RegExp(`^\\.${cls}\\s*[,{]`, "m").test(diceCss)) {
           problems.push(
@@ -5361,6 +5362,61 @@ export const integrity = {
               "parsing inside the component is a copy nothing tests"
           );
         }
+        // The number must not beat the dice to the screen. Convex
+        // answers in milliseconds; the animation takes seconds.
+        // The CALL, not the prop. A declared onSettled that is never
+        // reached looks exactly like a working one — this is the third
+        // time a check here has matched a declaration and passed on
+        // code that does nothing.
+        if (!/\.then\(\(\) => waitForDice\(engineRef, settled\)\)/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas does not wait for the dice to stop after throwing " +
+              "them — the total then appears seconds before the throw it is " +
+              "supposed to be reading"
+          );
+        }
+        if (!/if \(engine\.isDiceThrowing\)/.test(canvasSrc)) {
+          problems.push(
+            "the settle wait does not consult isDiceThrowing, so it is a " +
+              "fixed delay wearing the costume of a real one"
+          );
+        }
+        // Every wait has a way out, and the way out has to be REACHED.
+        if (!/waited > FINISH_BY \|\| \(!started && waited > START_BY\)/.test(canvasSrc)) {
+          problems.push(
+            "the wait for the dice to settle is uncapped — a dropped socket " +
+              "or a throttled background tab would withhold the result for good"
+          );
+        }
+        // A refused roll never animates, so nothing else would ever
+        // release the result waiting on it.
+        // Comments stripped: this looks at the SHAPE of the code, and
+        // an explanatory comment between two statements is not a gap
+        // between them. Left in, it made this fail on correct code.
+        if (!/rejected the roll[\s\S]{0,80}settled\(\);/.test(
+          stripComments(canvasSrc)
+        )) {
+          problems.push(
+            "a rejected roll does not release the held result — the log " +
+              "would sit at \"Rolling…\" for a throw that never happened"
+          );
+        }
+        {
+          const roller2 = stripComments(read("components", "DiceRoller.tsx"));
+          if (!/rolling === null|held === id \? null : held/.test(roller2)) {
+            problems.push(
+              "DiceRoller never releases a held roll — the log would stop at " +
+                "\"Rolling…\" and never show the number"
+            );
+          }
+          if (!/has3d && drawId/.test(roller2)) {
+            problems.push(
+              "DiceRoller holds rolls without checking there are 3D dice to " +
+                "wait for — a table with no dddice room would wait for nothing"
+            );
+          }
+        }
+
         // The renderer does not draw the room's artwork, so the canvas
         // has to fetch and paint it.
         if (!/setBackground\(backgroundUrl\(/.test(canvasSrc)) {
@@ -5399,6 +5455,20 @@ export const integrity = {
               }
             }
           }
+        }
+      }
+
+      // The artwork is the felt now that nothing is printed over it.
+      // Fading it reads as a washed-out picture rather than a choice.
+      {
+        const bg = /\.dice-canvas-bg\s*\{([^}]*)\}/.exec(diceCss);
+        if (!bg) {
+          problems.push("no .dice-canvas-bg rule — the room's art is not drawn");
+        } else if (/opacity/.test(bg[1])) {
+          problems.push(
+            "the room's artwork is faded — it was held back only while the " +
+              "total was printed across it, and that moved to the log"
+          );
         }
       }
 

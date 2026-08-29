@@ -96,6 +96,43 @@ async function ownedTheme(
   }
 }
 
+/**
+ * Wait for the dice to stop moving, then say so.
+ *
+ * `roll()` resolves when the SERVER accepts the throw, which is well
+ * before anything moves on screen — the animation starts when the room
+ * broadcasts it back. So this waits for the dice to appear, then for
+ * them to settle.
+ *
+ * Both waits are capped. A dropped websocket, a tab in the background
+ * throttling its timers, an animation that never starts: every one of
+ * them would otherwise leave a result withheld forever, and a roll you
+ * never get to see is worse than one you see too early.
+ */
+function waitForDice(
+  engineRef: { current: { readonly isDiceThrowing: boolean } | null },
+  done: () => void
+): void {
+  const START_BY = 4000;
+  const FINISH_BY = 12000;
+  const TICK = 120;
+  const began = Date.now();
+  let started = false;
+
+  const tick = () => {
+    const engine = engineRef.current;
+    if (!engine) return done();
+
+    if (engine.isDiceThrowing) started = true;
+    else if (started) return done();
+
+    const waited = Date.now() - began;
+    if (waited > FINISH_BY || (!started && waited > START_BY)) return done();
+    window.setTimeout(tick, TICK);
+  };
+  window.setTimeout(tick, TICK);
+}
+
 /** Where a browser keeps the guest account it made for itself. */
 const GUEST_KEY = "gm.dddice.guest";
 
@@ -123,11 +160,29 @@ export interface DiceCanvasProps {
    * browsers announce the same throw draws it six times.
    */
   roll: { id: string; dice: DieRoll[] } | null;
+  /**
+   * Called when the thrown dice have stopped moving.
+   *
+   * The reason this exists: Convex answers in milliseconds and the
+   * animation takes seconds, so the number was on screen well before
+   * the dice landed. Knowing the result and then watching dice pretend
+   * to decide it is worse than having no dice at all.
+   */
+  onSettled?: (rollId: string) => void;
+  /** The theme's own rendered dice, for the tray. */
+  onPreviews?: (previews: Record<string, string>) => void;
 }
 
 type Status = "off" | "connecting" | "ready" | "failed";
 
-export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
+export function DiceCanvas({
+  slug,
+  passcode,
+  theme,
+  roll,
+  onSettled,
+  onPreviews,
+}: DiceCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // `unknown` rather than the SDK's type: importing the type eagerly
   // would pull the module into the server bundle it is dynamically
@@ -137,7 +192,13 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
     resize: (w: number, h: number) => unknown;
     stop: () => unknown;
     disconnect: () => unknown;
+    readonly isDiceThrowing: boolean;
   } | null>(null);
+  // Held in a ref so the throw effect does not re-run when the parent
+  // hands down a new function identity — a re-run there re-throws the
+  // dice.
+  const settledRef = useRef(onSettled);
+  settledRef.current = onSettled;
   const sentRef = useRef<string | null>(null);
   /**
    * A theme to use when the DM has not named one.
@@ -281,6 +342,26 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
         if (!fallbackThemeRef.current) {
           console.warn("[dice] no dddice theme found; rolls will be refused");
         }
+
+        // The theme's own rendered dice, for the tray. Nothing draws a
+        // d12 like the thing that is about to draw the d12.
+        const themeId = theme ?? fallbackThemeRef.current;
+        if (themeId && onPreviews) {
+          try {
+            const res = await fetch(
+              `https://dddice.com/api/1.0/theme/${encodeURIComponent(themeId)}`,
+              { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" } }
+            );
+            if (res.ok) {
+              const previews = (
+                (await res.json()) as { data?: { preview?: Record<string, string> } }
+              ).data?.preview;
+              if (previews && !cancelled) onPreviews(previews);
+            }
+          } catch {
+            // The drawn icons stay. They were always the fallback.
+          }
+        }
         if (cancelled) {
           engine.stop();
           engine.disconnect();
@@ -360,7 +441,11 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
       return;
     }
     setNote(null);
-    void engineRef.current?.roll(dice).catch((e: unknown) => {
+    const settled = () => settledRef.current?.(roll.id);
+    void engineRef.current
+      ?.roll(dice)
+      .then(() => waitForDice(engineRef, settled))
+      .catch((e: unknown) => {
       // Same rule as the connection: the console gets everything, the
       // screen gets dddice's own words. A bare "didn't take that roll"
       // is a dead end for whoever has to fix it.
@@ -374,6 +459,9 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
         error: e,
       });
       setNote(`3D dice off — dddice rejected the roll: ${reason(e)}`);
+      // A refused roll never animates, so nothing would ever release
+      // the result that is waiting on it.
+      settled();
     });
   }, [roll, status, theme]);
 
