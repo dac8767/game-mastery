@@ -1333,4 +1333,39 @@ export default defineSchema({
     text: v.array(v.object({ id: v.string(), value: v.string() })),
     layout: v.array(v.object({ id: v.string(), value: v.number() })),
   }).index("by_campaign", ["campaignId"]),
+
+  /* ---- dice ---- */
+
+  /**
+   * The table's roll log.
+   *
+   * The dice are thrown on the SERVER (convex/dice.ts) and the faces
+   * stored, so the log is a record rather than a claim — a client that
+   * rolled for itself could post a 20 every time.
+   *
+   * `secret` is the DM's private roll. It is filtered out of listRolls
+   * for everyone else rather than hidden in the UI, so a player cannot
+   * learn that a roll happened at all.
+   */
+  diceRolls: defineTable({
+    campaignId: v.id("campaigns"),
+    userId: v.id("users"),
+    /** Normalised notation, as re-written by the parser. */
+    notation: v.string(),
+    /** What the roll was for — "Stealth", "Fireball". Optional. */
+    label: v.optional(v.string()),
+    /**
+     * Every face rolled, dropped ones included: seeing the 2 you threw
+     * away is half the point of 4d6kh3.
+     */
+    dice: v.array(
+      v.object({
+        sides: v.number(),
+        value: v.number(),
+        kept: v.boolean(),
+      })
+    ),
+    total: v.number(),
+    secret: v.boolean(),
+  }).index("by_campaign", ["campaignId"]),
 });

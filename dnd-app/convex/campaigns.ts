@@ -560,6 +560,12 @@ export const purgeCampaign = internalMutation({
       .take(left);
     if (await sweep(uiOverrides)) return await more();
 
+    const diceRolls = await ctx.db
+      .query("diceRolls")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
+      .take(left);
+    if (await sweep(diceRolls)) return await more();
+
     const members = await ctx.db
       .query("campaignMembers")
       .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))

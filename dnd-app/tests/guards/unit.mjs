@@ -6924,6 +6924,238 @@ export const unit = {
       );
     }
 
+    // ---- dice notation ---------------------------------------------
+    // A dice roller fails quietly by definition: nobody at the table
+    // can tell a keep-highest that kept the lowest, a modifier that
+    // was dropped, or a d100 that can come up 0, from bad luck. The
+    // random source is injected so every one of those is decidable
+    // here rather than after somebody rolls a character.
+    {
+      const dice = await import(
+        pathToFileURL(join(compile("components/diceModel.ts"), "diceModel.js"))
+          .href
+      );
+      /** A fixed sequence, looping. Feeds exact faces to the roller. */
+      const seq = (...fracs) => {
+        let i = 0;
+        return () => fracs[i++ % fracs.length];
+      };
+      /** Faces 1..sides, as the fractions that produce them. */
+      const face = (n, sides) => (n - 1) / sides + 1 / (sides * 2);
+
+      check(
+        "a bare d20 is one die, not zero",
+        (() => {
+          const p = dice.parseRoll("d20");
+          return (
+            p?.terms.length === 1 &&
+            p.terms[0].kind === "dice" &&
+            p.terms[0].count === 1 &&
+            p.terms[0].sides === 20
+          );
+        })()
+      );
+
+      // The one that is invisible when wrong. 4d6kh3 on faces
+      // 2,5,3,6 must drop the 2 — keeping the LOWEST three is the
+      // same arithmetic shape and gives stats nobody questions.
+      check(
+        "keep-highest drops the lowest die and only that one",
+        (() => {
+          const r = dice.roll(
+            "4d6kh3",
+            seq(face(2, 6), face(5, 6), face(3, 6), face(6, 6))
+          );
+          const d = dice.allDice(r);
+          return (
+            r.total === 14 &&
+            d.length === 4 &&
+            d.map((x) => x.value).join() === "2,5,3,6" &&
+            d.filter((x) => !x.kept).map((x) => x.value).join() === "2"
+          );
+        })()
+      );
+      check(
+        "keep-lowest is disadvantage, not advantage under another name",
+        (() => {
+          const adv = dice.roll("2d20kh1", seq(face(4, 20), face(17, 20)));
+          const dis = dice.roll("2d20kl1", seq(face(4, 20), face(17, 20)));
+          return adv.total === 17 && dis.total === 4;
+        })()
+      );
+      // The dropped die stays in the record. Half the pleasure of a
+      // stat roll is seeing the 2 you threw away, and the log renders
+      // what is here.
+      check(
+        "a dropped die is kept in the result, just not in the total",
+        dice.allDice(dice.roll("2d20kh1", seq(face(4, 20), face(17, 20))))
+          .length === 2
+      );
+
+      check(
+        "a negative term subtracts, and terms add up in order",
+        (() => {
+          const r = dice.roll("1d8+1d6-2", seq(face(5, 8), face(4, 6)));
+          return r.total === 7 && r.terms.length === 3;
+        })()
+      );
+      check(
+        "the sign belongs to the dice, not just to flat numbers",
+        dice.roll("1d8-1d6", seq(face(5, 8), face(4, 6))).total === 1
+      );
+
+      // The classic off-by-one at both ends of the random source. A
+      // d100 that can roll 0 or 101 is a bug nobody reports, because
+      // one roll in a hundred looks like a bad memory.
+      check(
+        "no die ever lands off its own faces",
+        (() => {
+          for (const sides of dice.STANDARD_DICE) {
+            const lo = dice.roll(`1d${sides}`, () => 0);
+            const hi = dice.roll(`1d${sides}`, () => 0.999999999);
+            if (lo.total !== 1 || hi.total !== sides) return false;
+          }
+          // And a source that misbehaves outright is clamped rather
+          // than trusted: 1.0 is outside [0, 1) but arrives anyway.
+          return (
+            dice.roll("1d20", () => 1).total === 20 &&
+            dice.roll("1d20", () => -1).total === 1
+          );
+        })()
+      );
+      // The two checks above only sample: the ends of the range and
+      // the middle of each face. This walks EVERY face of every die
+      // and lands just inside both ends of its share of [0, 1), which
+      // is where a shifted or squeezed range shows up — a d100 whose
+      // top face needs a fraction the source cannot produce is a die
+      // that never rolls 100 and never explains why.
+      //
+      // Just inside, not exactly on the boundary: n/sides * sides is
+      // 28.999999999999996 for 29/100, so an exact edge tests the
+      // float unit rather than the arithmetic.
+      check(
+        "every face owns an equal share of the range, end to end",
+        (() => {
+          for (const sides of [4, 6, 20, 100]) {
+            for (let n = 0; n < sides; n++) {
+              const lo = dice.roll(`1d${sides}`, () => (n + 0.001) / sides);
+              const hi = dice.roll(`1d${sides}`, () => (n + 0.999) / sides);
+              if (lo.total !== n + 1 || hi.total !== n + 1) return false;
+            }
+          }
+          return true;
+        })()
+      );
+
+      // Every one of these is a typo somebody will make in the box.
+      // They must come back as null — a thrown error here is an
+      // unhandled rejection in a keystroke handler.
+      check(
+        "nonsense is null rather than a throw or a silent zero",
+        [
+          "",
+          "   ",
+          "d",
+          "d0",
+          "d1",
+          "0d6",
+          "2d6 3",
+          "2d6+",
+          "2d6++3",
+          "4d6kh5",
+          "4d6kh0",
+          "2d6 apples",
+          "abc",
+          "-",
+          "1d2000",
+          "200d6",
+          "1d6+1d6+1d6+1d6+1d6+1d6+1d6+1d6+1d6+1d6+1d6+1d6+1d6",
+        ].every((s) => dice.parseRoll(s) === null)
+      );
+      check(
+        "the things a person actually types all parse",
+        ["d20", "2d6+3", "4d6kh3", "2d20kl1", "1d8+1d6-2", "10", "3D6 + 2"]
+          .every((s) => dice.parseRoll(s) !== null)
+      );
+
+      // What is stored is the normalised string, so it has to parse
+      // back to the same terms. Otherwise re-rolling a logged roll
+      // quietly rolls something else.
+      check(
+        "the stored notation re-parses to the roll it came from",
+        ["d20", " 3D6 + 2 ", "4d6kh3", "1d8+1d6-2", "2d20kl1"].every((s) => {
+          const once = dice.parseRoll(s);
+          const twice = dice.parseRoll(once.notation);
+          return (
+            twice !== null &&
+            twice.notation === once.notation &&
+            JSON.stringify(twice.terms) === JSON.stringify(once.terms)
+          );
+        })
+      );
+      check(
+        "a bare d20 is written back as 1d20",
+        dice.parseRoll("d20").notation === "1d20" &&
+          dice.parseRoll("2d6 + 3").notation === "2d6+3" &&
+          dice.parseRoll("1d8 - 2").notation === "1d8-2"
+      );
+
+      // The crit is what the table reacts to, and it is only a crit
+      // when there is exactly one d20 scoring. A dropped nat 20 on
+      // disadvantage is not a crit, and announcing it as one is worse
+      // than saying nothing.
+      check(
+        "a crit needs one scoring d20 and nothing else",
+        (() => {
+          const nat20 = dice.roll("1d20+5", () => face(20, 20));
+          const nat1 = dice.roll("1d20", () => face(1, 20));
+          const dropped = dice.roll(
+            "2d20kl1",
+            seq(face(20, 20), face(9, 20))
+          );
+          const two = dice.roll("2d20", seq(face(20, 20), face(9, 20)));
+          const notAd20 = dice.roll("1d12", () => face(12, 12));
+          return (
+            dice.critOf(nat20) === "high" &&
+            dice.critOf(nat1) === "low" &&
+            dice.critOf(dropped) === null &&
+            dice.critOf(two) === null &&
+            dice.critOf(notAd20) === null
+          );
+        })()
+      );
+      // Advantage that comes up 20 IS a crit: the 20 is the die that
+      // scored, and the other one was never in play.
+      check(
+        "advantage keeping a natural 20 still crits",
+        dice.critOf(dice.roll("2d20kh1", seq(face(20, 20), face(9, 20)))) ===
+          "high"
+      );
+
+      // The ceilings are what stop one pasted string costing the whole
+      // table a re-send of ten thousand dice.
+      check(
+        "the caps hold across terms, not just within one",
+        dice.parseRoll(`${dice.MAX_DICE}d6`) !== null &&
+          dice.parseRoll(`${dice.MAX_DICE + 1}d6`) === null &&
+          dice.parseRoll(`${dice.MAX_DICE}d6+1d6`) === null
+      );
+      check(
+        "a flat term cannot be arbitrarily large either",
+        dice.parseRoll(`1d6+${dice.MAX_FLAT}`) !== null &&
+          dice.parseRoll(`1d6+${dice.MAX_FLAT + 1}`) === null
+      );
+
+      check(
+        "the one-line description shows dropped dice and the total",
+        dice.describe(dice.roll("2d6+3", seq(face(4, 6), face(5, 6)))) ===
+          "2d6+3 → 4, 5 +3 = 12" &&
+          dice
+            .describe(dice.roll("2d20kh1", seq(face(4, 20), face(17, 20))))
+            .includes("(4)")
+      );
+    }
+
     // ---- the Moonbrook session import holds to its sources ----------
     // The records in scripts/import-moonbrook-sessions.mjs were merged
     // from the OneNote session pages and the Discord scheduling
