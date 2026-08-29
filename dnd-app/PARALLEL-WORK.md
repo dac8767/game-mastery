@@ -93,9 +93,26 @@ Tables:  dmScreens, dmWorkspaces, dmNotes
 Branch:  claude/tool-dmscreen
 ```
 
-Roughly twelve tools: `dmscreen`, `lookup`, `npcs`, `sessions`,
-`groups`, `locations`, `calendar`, `chat`, `notebook`, `ribbon`,
-`shell` (sidebar, settings, themes), `feedback`.
+**Built as `dnd-app/TOOLS.md`** — that file is the registry, and it
+supersedes this section. Sixteen tools (`calendar`, `chat`, `combat`,
+`dmscreen`, `feedback`, `groups`, `locations`, `lookup`, `maps`,
+`notebook`, `npcs`, `ribbon`, `rules`, `scheduler`, `sessions`,
+`shell`), three reserved for work not started (`dice`, `shops`,
+`vtt`), and every one of the app's 84 components assigned to exactly
+one of them.
+
+Writing it out turned up two categories this spec had missed, and both
+matter:
+
+- **Common** — shared building blocks no tool owns: `TableToolbar`,
+  `FilterPanel`, `recordGrid`, `useViewPrefs`, `Pager`, `ExpandIcon`,
+  `boxHtml`. Three or four tools each. A change here ripples, so it
+  runs alone.
+- **Layers** — cross-cutting *features*, as opposed to shared parts.
+  The UI designer is the clear one: `UiText` and `uiRegistry` reach
+  into 10 files across six tools, because editing labels everywhere is
+  the whole point of it. Calling it a tool and claiming it owns its
+  files would be a lie the registry then enforces badly.
 
 ### 3.2 CSS: one file per tool, one manifest
 
