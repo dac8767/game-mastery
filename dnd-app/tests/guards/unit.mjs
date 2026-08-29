@@ -7475,6 +7475,38 @@ export const unit = {
         })()
       );
       check("a string is its own reason", err.reason("boom") === "boom");
+      // The body is printed VERBATIM when its shape is not one of the
+      // recognised ones. Three messages in a row identified this
+      // failure as "422" and nothing else, each because it assumed a
+      // shape and dropped what did not fit. A reader that only
+      // understands what it expects goes blind exactly when needed.
+      check(
+        "an unrecognised body is dumped rather than discarded",
+        (() => {
+          const out = err.reason({
+            message: "Request failed with status code 422",
+            response: { status: 422, data: { detail: "dice.0.value invalid" } },
+          });
+          return out.includes("dice.0.value invalid") && out.includes("422");
+        })()
+      );
+      check(
+        "the dump is bounded and skips a body with nothing in it",
+        (() => {
+          const big = err.reason({
+            response: { status: 422, data: { junk: "y".repeat(2000) } },
+          });
+          const empty = err.reason({
+            message: "Request failed",
+            response: { status: 422, data: {} },
+          });
+          return (
+            big.length < 400 &&
+            big.includes("422") &&
+            empty === "Request failed — HTTP 422"
+          );
+        })()
+      );
     }
 
     // ---- the room's background art ----------------------------------

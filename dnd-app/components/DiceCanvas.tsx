@@ -32,40 +32,65 @@ import type { DieRoll } from "@/components/diceModel";
  */
 
 /**
- * A theme id, from the account's dice box or from the public list.
+ * A theme the account actually OWNS.
  *
- * The dice box is tried first because it is what the account actually
- * owns, and a fresh guest's box can be empty — which is exactly the
- * case that sent themeless dice and got them refused. The public
- * catalogue is the backstop.
+ * Every die needs a theme — it carries the mesh and the faces — and a
+ * themeless die is refused. But so, in all likelihood, is a die
+ * wearing a theme the roller does not own, which is why this does not
+ * simply hand back the first slug in the public catalogue: that would
+ * have swapped one 422 for another and looked like the same bug.
  *
- * Nothing here is hard-coded: a theme slug copied out of a docs
- * example is a slug that stops existing without warning, and its
- * failure looks identical to having no theme at all.
+ * So the catalogue is a place to SHOP, not a place to borrow from. A
+ * theme found there is added to the dice box first, and the id that
+ * comes back is one the account holds.
+ *
+ * Nothing is hard-coded. A slug copied out of a docs example is a slug
+ * that stops existing without warning, and its failure is
+ * indistinguishable from having no theme at all.
  */
-async function firstTheme(
+async function ownedTheme(
   api: { diceBox: { list: () => Promise<unknown> } },
   key: string
 ): Promise<string | null> {
+  const headers = {
+    Authorization: `Bearer ${key}`,
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
   const idOf = (payload: unknown): string | null => {
-    const list = (payload as { data?: { id?: string }[] } | undefined)?.data;
-    const id = Array.isArray(list) ? list[0]?.id : undefined;
+    const data = (payload as { data?: unknown } | undefined)?.data;
+    const first = Array.isArray(data) ? data[0] : data;
+    const id = (first as { id?: string } | undefined)?.id;
     return typeof id === "string" && id ? id : null;
   };
 
+  // What the account already has.
   try {
     const mine = idOf(await api.diceBox.list());
     if (mine) return mine;
   } catch {
-    // Fall through to the catalogue.
+    // An unreadable dice box is not a reason to stop.
   }
 
+  // Nothing owned yet: find one, then take it.
   try {
-    const res = await fetch("https://dddice.com/api/1.0/theme", {
-      headers: { Authorization: `Bearer ${key}`, Accept: "application/json" },
+    const listed = await fetch("https://dddice.com/api/1.0/theme", { headers });
+    if (!listed.ok) return null;
+    const id = idOf(await listed.json());
+    if (!id) return null;
+
+    const added = await fetch("https://dddice.com/api/1.0/dice-box", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ id }),
     });
-    if (!res.ok) return null;
-    return idOf(await res.json());
+    // The add is what makes it usable, so a refusal here is the answer
+    // rather than something to roll past.
+    if (!added.ok) {
+      console.warn("[dice] could not add a theme to the dice box", added.status);
+      return null;
+    }
+    return idOf(await added.json()) ?? id;
   } catch {
     return null;
   }
@@ -252,7 +277,7 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
         // have an EMPTY dice box, which is what made the first fallback
         // find nothing and send nothing.
         step = "finding a dice theme";
-        fallbackThemeRef.current = await firstTheme(engine.api, key);
+        fallbackThemeRef.current = await ownedTheme(engine.api, key);
         if (!fallbackThemeRef.current) {
           console.warn("[dice] no dddice theme found; rolls will be refused");
         }
@@ -341,7 +366,11 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
       // is a dead end for whoever has to fix it.
       console.warn("[dice] dddice rejected the roll", {
         theme: useTheme ?? "(none)",
-        dice,
+        sent: dice,
+        // Pulled out by name: an axios error logs as a wall of config
+        // and request objects, and the response body — the part that
+        // says WHY — is buried several levels into it.
+        body: (e as { response?: { data?: unknown } })?.response?.data,
         error: e,
       });
       setNote(`3D dice off — dddice rejected the roll: ${reason(e)}`);

@@ -5324,6 +5324,16 @@ export const integrity = {
               "empty dice box then sends themeless dice, which are refused"
           );
         }
+        // Found in the catalogue is not the same as owned. Rolling a
+        // theme the account does not hold trades one 422 for another
+        // and presents as the same bug.
+        if (!/api\/1\.0\/dice-box/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas takes a theme from the catalogue without adding it " +
+              "to the dice box — the account would be rolling dice it does " +
+              "not own"
+          );
+        }
         // A slug from a docs example is a slug that stops existing, and
         // its failure is indistinguishable from having no theme at all.
         // The package name is not a theme slug: "dddice-js" is the
