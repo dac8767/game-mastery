@@ -5252,9 +5252,36 @@ export const integrity = {
               "dddice failure reads the same and none of them is actionable"
           );
         }
-        if (!/console\.error\(/.test(canvasSrc)) {
+        // BOTH failure paths. Connecting and rolling fail separately —
+        // the roll one shipped with a bare .catch(() => …) that threw
+        // the reason away, which is the same mistake as the message it
+        // was written beside.
+        if ((canvasSrc.match(/console\.error\(/g) ?? []).length < 2) {
           problems.push(
-            "DiceCanvas swallows the underlying error instead of logging it"
+            "DiceCanvas has a failure path that swallows its error — the " +
+              "connection and the roll can each fail, and both have to say why"
+          );
+        }
+        if (/\.catch\(\(\) =>/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas discards a rejection with .catch(() => …) — the " +
+              "reason is the only actionable part of a dddice failure"
+          );
+        }
+        // A die with no theme has no mesh. The DM may leave it blank,
+        // so something must fill it in.
+        // The USE, not the declaration. A ref that is still assigned
+        // and never read looks exactly like a working fallback.
+        if (!/theme \?\? fallbackThemeRef\.current/.test(canvasSrc)) {
+          problems.push(
+            "the DM's blank theme does not fall back to the account's own — " +
+              "a die with no theme has no mesh, and dddice refuses the roll"
+          );
+        }
+        if (!/diceBox\.list\(\)/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas no longer reads the dice box — the fallback theme " +
+              "would have to be a hard-coded slug, which stops existing"
           );
         }
         // The screen gets dddice's own words, not a house sentence

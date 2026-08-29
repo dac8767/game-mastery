@@ -96,6 +96,16 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
     disconnect: () => unknown;
   } | null>(null);
   const sentRef = useRef<string | null>(null);
+  /**
+   * A theme to use when the DM has not named one.
+   *
+   * Every die needs a theme: it is what carries the mesh and the face
+   * values, so a die without one has nothing to draw. Read out of the
+   * account's own dice box rather than hard-coded, because a theme
+   * slug guessed from a docs example is a slug that stops existing
+   * without warning.
+   */
+  const fallbackThemeRef = useRef<string | null>(null);
   const [status, setStatus] = useState<Status>("off");
   const [note, setNote] = useState<string | null>(null);
 
@@ -178,6 +188,22 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
           engine.disconnect();
           return;
         }
+        // Best-effort: no theme is a worse throw, not a broken one, so
+        // this must not be able to fail the whole connection.
+        step = "reading the dice box";
+        try {
+          const box = await engine.api.diceBox.list();
+          const themes = (box as { data?: { id?: string }[] }).data;
+          fallbackThemeRef.current = themes?.[0]?.id ?? null;
+        } catch {
+          fallbackThemeRef.current = null;
+        }
+        if (cancelled) {
+          engine.stop();
+          engine.disconnect();
+          return;
+        }
+
         engineRef.current = engine as unknown as typeof engineRef.current;
         setStatus("ready");
       } catch (e) {
@@ -234,7 +260,10 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
     if (sentRef.current === roll.id) return;
     sentRef.current = roll.id;
 
-    const dice = toDddiceRoll(roll.dice, theme ?? undefined);
+    // A die with no theme has no mesh and nothing to draw, so the
+    // DM's choice falls back to whatever the account actually owns.
+    const useTheme = theme ?? fallbackThemeRef.current ?? undefined;
+    const dice = toDddiceRoll(roll.dice, useTheme);
     if (!dice) {
       // Too many dice for the room, or a die with no mesh. The log
       // already has the real answer; a partial throw would not.
@@ -242,8 +271,12 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
       return;
     }
     setNote(null);
-    void engineRef.current?.roll(dice).catch(() => {
-      setNote("dddice didn't take that roll. The result above stands.");
+    void engineRef.current?.roll(dice).catch((e: unknown) => {
+      // Same rule as the connection: the console gets everything, the
+      // screen gets dddice's own words. A bare "didn't take that roll"
+      // is a dead end for whoever has to fix it.
+      console.error("[dice] dddice rejected the roll", { dice, error: e });
+      setNote(`3D dice off — dddice rejected the roll: ${reason(e)}`);
     });
   }, [roll, status, theme]);
 
