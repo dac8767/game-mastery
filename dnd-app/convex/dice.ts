@@ -93,6 +93,7 @@ export const listRolls = query({
         notation: r.notation,
         label: r.label ?? null,
         dice: r.dice,
+        mod: r.mod ?? 0,
         total: r.total,
         secret: r.secret,
       })),
@@ -130,6 +131,13 @@ export const rollDice = mutation({
     const dice = result.terms.flatMap((t) => t.dice);
     if (dice.length > MAX_DICE) throw new Error("That is too many dice.");
 
+    // The flat half of the roll, summed and signed. Stored so the log
+    // can show the "+3" of "8d6+4d4+3" without parsing the notation
+    // back apart on the client.
+    const mod = result.terms
+      .filter((t) => t.term.kind === "flat")
+      .reduce((n, t) => n + t.subtotal, 0);
+
     const label = args.label?.trim().slice(0, MAX_LABEL) || undefined;
 
     await ctx.db.insert("diceRolls", {
@@ -138,6 +146,7 @@ export const rollDice = mutation({
       notation: result.notation,
       label,
       dice,
+      mod: mod === 0 ? undefined : mod,
       total: result.total,
       secret,
     });

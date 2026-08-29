@@ -1363,8 +1363,21 @@ export default defineSchema({
         sides: v.number(),
         value: v.number(),
         kept: v.boolean(),
+        /**
+         * Which term threw it. "8d6+4d4" is twelve faces in one list
+         * and nothing else says where the d6s stop. Optional because
+         * rows written before this field exist; groupDice falls back
+         * to runs of one die size for those.
+         */
+        t: v.optional(v.number()),
       })
     ),
+    /**
+     * The flat modifier, all of it, signed. Stored rather than re-read
+     * out of the notation so the log needs no parser of its own — and
+     * without it the "+3" of "8d6+4d4+3" appears nowhere on screen.
+     */
+    mod: v.optional(v.number()),
     total: v.number(),
     secret: v.boolean(),
   }).index("by_campaign", ["campaignId"]),

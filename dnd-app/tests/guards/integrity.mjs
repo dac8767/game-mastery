@@ -5134,10 +5134,22 @@ export const integrity = {
             "tell a typo from a formula, and the preview is a lie"
         );
       }
-      if (!/disabled=\{!parsed \|\| busy\}/.test(roller)) {
-        problems.push(
-          "the Roll button is not disabled on an unparseable notation"
-        );
+      // Counted, not merely found. Roll and Hidden Roll carry the
+      // same guard, so testing for one of them passes while the other
+      // is throwing unparseable pools at the server.
+      {
+        const gated = (roller.match(/disabled=\{!parsed \|\| busy\}/g) ?? [])
+          .length;
+        const buttons = (roller.match(/void throwDice\(parsed\.notation/g) ?? [])
+          .length;
+        if (buttons === 0) {
+          problems.push("no roll button calls throwDice — parser out of date?");
+        } else if (gated !== buttons) {
+          problems.push(
+            `${buttons} button(s) roll the pool but ${gated} are disabled on ` +
+              "an unparseable one — the ungated one throws a typo at the server"
+          );
+        }
       }
 
       // One answer to "is this a crit", used by the log and by the
@@ -5153,7 +5165,7 @@ export const integrity = {
             "implementations of the crit rule will disagree"
         );
       }
-      if (!/critOfDice\(r\.dice\)/.test(roller)) {
+      if (!/critOfDice\(roll\.dice\)/.test(roller)) {
         problems.push(
           "the roll log does not use critOfDice — a second crit rule in " +
             "the component is a crit rule nothing tests"
@@ -5165,18 +5177,27 @@ export const integrity = {
       // still correct, so nothing throws and nothing is missing —
       // it simply looks like an unstyled list.
       const diceCss = read("app", "globals.css");
+      // A rule of its OWN, at the start of a line. Searching for the
+      // class anywhere passes on ".dice-tray-die svg" after the rule
+      // that sizes .dice-tray-die has been renamed away — the class is
+      // still "mentioned" and the button is still unstyled.
       for (const cls of [
         "dice",
-        "dice-controls",
-        "dice-quick",
-        "dice-die",
-        "dice-shortcuts",
-        "dice-form",
+        "dice-stage",
+        "dice-felt",
+        "dice-nothing",
+        "dice-pool",
+        "dice-formula",
+        "dice-error",
+        "dice-mods",
+        "dice-chip",
+        "dice-actions",
+        "dice-roll-btn",
+        "dice-hidden-btn",
+        "dice-clear",
+        "dice-tray",
+        "dice-tray-die",
         "dice-notation",
-        "dice-label",
-        "dice-preview",
-        "dice-go",
-        "dice-secret",
         "dice-log",
         "dice-log-head",
         "dice-roll",
@@ -5185,18 +5206,60 @@ export const integrity = {
         "dice-for",
         "dice-at",
         "dice-roll-body",
-        "dice-faces",
+        "dice-groups",
+        "dice-group",
+        "dice-group-label",
         "dice-face",
         "dice-notation-read",
         "dice-total",
         "dice-crit",
       ]) {
-        if (!new RegExp(`\\.${cls}[\\s,.:{+>]`).test(diceCss)) {
+        if (!new RegExp(`^\\.${cls}\\s*[,{]`, "m").test(diceCss)) {
           problems.push(
-            `DiceRoller renders .${cls}, which globals.css does not style`
+            `DiceRoller renders .${cls}, which globals.css gives no rule of ` +
+              "its own — a descendant selector elsewhere is not the same thing"
           );
         }
       }
+      // The one class deliberately styled only in context: a bare
+      // .dice-label would leak onto any other label named that.
+      if (!/\.dice-actions \.dice-label\s*\{/.test(diceCss)) {
+        problems.push(
+          "the roll label input has no .dice-actions .dice-label rule"
+        );
+      }
+
+      // Every die the tray offers has a shape drawn for it. DiceIcon
+      // returns null for a size it does not know, so a mismatch here
+      // renders an EMPTY button — clickable, correct, invisible.
+      {
+        const icons = read("components", "DiceIcon.tsx");
+        const model = read("components", "diceModel.ts");
+        const listed = /STANDARD_DICE = \[([^\]]*)\]/.exec(model);
+        if (!listed) {
+          problems.push("no STANDARD_DICE in diceModel.ts — parser out of date?");
+        } else {
+          // Sliced rather than matched: the map's own type annotation
+          // contains an arrow, and a regex reaching for the first "="
+          // stops inside it.
+          const at = icons.indexOf("const SHAPES");
+          const end = at === -1 ? -1 : icons.indexOf("};", at);
+          if (at === -1 || end === -1) {
+            problems.push("no SHAPES map in DiceIcon.tsx — parser out of date?");
+          } else {
+            const shapes = icons.slice(at, end);
+            for (const sides of listed[1].split(",").map((n) => n.trim()).filter(Boolean)) {
+              if (!new RegExp(`(^|[^0-9])${sides}:`).test(shapes)) {
+                problems.push(
+                  `the tray offers a d${sides} and DiceIcon has no shape for ` +
+                    "it — the button renders empty rather than failing"
+                );
+              }
+            }
+          }
+        }
+      }
+
       // The dropped die has to stay legible as a dropped die.
       const dropped = /\.dice-face\.dropped\s*\{([^}]*)\}/.exec(diceCss);
       if (!dropped) {

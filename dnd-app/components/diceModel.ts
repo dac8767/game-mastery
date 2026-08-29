@@ -44,6 +44,18 @@ export interface DieRoll {
   value: number;
   /** False for a die dropped by a keep — shown struck through. */
   kept: boolean;
+  /**
+   * Which term of the roll threw this die.
+   *
+   * The log stores every face in one flat list, and "8d6+4d4" is
+   * twelve numbers in a row unless something says where the d6s stop.
+   * Grouping by `sides` alone would be wrong for "2d6+3d6kh2", where
+   * the two groups differ by their keep rather than their die.
+   *
+   * Optional because rows written before this existed do not have it;
+   * groupDice falls back for those.
+   */
+  t?: number;
 }
 
 export interface RolledTerm {
@@ -154,6 +166,119 @@ export function formatNotation(terms: readonly RollTerm[]): string {
 }
 
 /**
+ * One more of a die, added to a notation string.
+ *
+ * This is the pool builder: click d6 eight times and get "8d6", then
+ * click d4 four times and get "8d6+4d4". The notation string stays the
+ * single source of truth — the buttons write to the same box you can
+ * type in, so the two can never hold different rolls.
+ *
+ * Returns the input UNCHANGED when the die will not fit, rather than
+ * clamping to something the caller did not ask for. A button that
+ * silently stops working at the ceiling is better than one that quietly
+ * rolls fewer dice than the screen says.
+ */
+export function addDie(notation: string, sides: number): string {
+  if (!Number.isInteger(sides) || sides < 2 || sides > MAX_SIDES) {
+    return notation;
+  }
+  const trimmed = String(notation ?? "").trim();
+  if (trimmed === "") return `1d${sides}`;
+
+  const parsed = parseRoll(trimmed);
+  // An unparseable box is somebody mid-typo. Leave it alone rather
+  // than throwing their half-written notation away.
+  if (!parsed) return notation;
+
+  const total = parsed.terms.reduce(
+    (n, t) => n + (t.kind === "dice" ? t.count : 0),
+    0
+  );
+  if (total + 1 > MAX_DICE) return notation;
+
+  // Merge into a matching term if there is an honest one to merge
+  // into. A term with a keep is NOT one: adding a d6 to "4d6kh3" and
+  // calling it "5d6kh3" changes what the keep means, which is a
+  // different roll from the one the button promised.
+  const terms = parsed.terms.slice();
+  const at = terms.findIndex(
+    (t) => t.kind === "dice" && t.sides === sides && !t.keep && t.sign === 1
+  );
+  if (at !== -1) {
+    const t = terms[at] as Extract<RollTerm, { kind: "dice" }>;
+    terms[at] = { ...t, count: t.count + 1 };
+  } else {
+    if (terms.length >= MAX_TERMS) return notation;
+    // Dice before the modifier, so the notation reads the way people
+    // write it: 8d6+4d4+3, never 8d6+3+4d4.
+    const flatAt = terms.findIndex((t) => t.kind === "flat");
+    const die: RollTerm = {
+      kind: "dice",
+      sign: 1,
+      count: 1,
+      sides,
+      keep: null,
+    };
+    if (flatAt === -1) terms.push(die);
+    else terms.splice(flatAt, 0, die);
+  }
+  return formatNotation(terms);
+}
+
+/**
+ * The flat modifier a notation currently carries, signed.
+ *
+ * Zero for "8d6" and for anything that does not parse. Used when a
+ * button REPLACES the dice but should leave the modifier alone —
+ * switching to Advantage with a +5 on the box means "2d20kh1+5", not
+ * a silently discarded +5.
+ */
+export function flatOf(notation: string): number {
+  const parsed = parseRoll(String(notation ?? "").trim());
+  if (!parsed) return 0;
+  return parsed.terms.reduce(
+    (n, t) => n + (t.kind === "flat" ? t.sign * t.value : 0),
+    0
+  );
+}
+
+/**
+ * The flat modifier, nudged by `delta`.
+ *
+ * All the flat terms collapse into one, because "+3+2" is not a thing
+ * anybody means to have written. A modifier that reaches zero is
+ * REMOVED rather than left as "+0" — an empty modifier should look
+ * empty.
+ */
+export function adjustFlat(notation: string, delta: number): string {
+  if (!Number.isInteger(delta) || delta === 0) return notation;
+
+  const trimmed = String(notation ?? "").trim();
+  const parsed = trimmed === "" ? { terms: [] as RollTerm[] } : parseRoll(trimmed);
+  if (!parsed) return notation;
+
+  const dice = parsed.terms.filter((t) => t.kind === "dice");
+  const flat = parsed.terms
+    .filter((t): t is Extract<RollTerm, { kind: "flat" }> => t.kind === "flat")
+    .reduce((n, t) => n + t.sign * t.value, 0);
+
+  const next = flat + delta;
+  if (Math.abs(next) > MAX_FLAT) return notation;
+
+  const terms: RollTerm[] = [...dice];
+  if (next !== 0) {
+    terms.push({
+      kind: "flat",
+      sign: next < 0 ? -1 : 1,
+      value: Math.abs(next),
+    });
+  }
+  if (terms.length === 0) return "";
+  if (terms.length > MAX_TERMS) return notation;
+  return formatNotation(terms);
+}
+
+/**
  * A parsed roll, rolled.
  *
  * `random` returns a float in [0, 1) — Math.random in the app, a fixed
@@ -167,7 +292,7 @@ export function rollParsed(
   const terms: RolledTerm[] = [];
   let total = 0;
 
-  for (const term of parsed.terms) {
+  for (const [index, term] of parsed.terms.entries()) {
     if (term.kind === "flat") {
       const subtotal = term.sign * term.value;
       total += subtotal;
@@ -183,6 +308,7 @@ export function rollParsed(
         sides: term.sides,
         value: Math.min(Math.max(value, 1), term.sides),
         kept: true,
+        t: index,
       });
     }
 
@@ -221,6 +347,53 @@ export function roll(
  */
 export function allDice(result: RollResult): DieRoll[] {
   return result.terms.flatMap((t) => t.dice);
+}
+
+/** One term's worth of dice, as the log shows them. */
+export interface DiceGroup {
+  sides: number;
+  dice: DieRoll[];
+  /** What these dice contributed, dropped ones excluded. */
+  subtotal: number;
+  /** "8d6", for the label beside the group. */
+  label: string;
+}
+
+/**
+ * The flat list of faces, back into the groups it was rolled in.
+ *
+ * "8d6+4d4+3" is twelve numbers in a row without this, and there is no
+ * reading of that list that tells you which four were the d4s. The
+ * grouping is by TERM rather than by die size, so "2d6+3d6kh2" stays
+ * two groups — they differ by their keep, not their die.
+ *
+ * Rows written before dice carried a term index fall back to runs of
+ * the same size, which is right for every roll anybody had made by
+ * then and never worse than the single undifferentiated row it
+ * replaces.
+ */
+export function groupDice(dice: readonly DieRoll[]): DiceGroup[] {
+  const groups: DiceGroup[] = [];
+  let key: string | null = null;
+
+  for (const die of dice) {
+    // The fallback: with no term index, a change of die size starts a
+    // new group. Written as a key so both paths share the run logic.
+    const here = die.t === undefined ? `s${die.sides}` : `t${die.t}`;
+    if (here !== key || groups.length === 0) {
+      groups.push({ sides: die.sides, dice: [], subtotal: 0, label: "" });
+      key = here;
+    }
+    groups[groups.length - 1].dice.push(die);
+  }
+
+  for (const g of groups) {
+    g.subtotal = g.dice
+      .filter((d) => d.kept)
+      .reduce((a, d) => a + d.value, 0);
+    g.label = `${g.dice.length}d${g.sides}`;
+  }
+  return groups;
 }
 
 /**

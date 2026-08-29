@@ -4,57 +4,67 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import { DiceIcon } from "@/components/DiceIcon";
 import {
   STANDARD_DICE,
+  addDie,
+  adjustFlat,
   critOfDice,
-  formatNotation,
+  flatOf,
+  groupDice,
   parseRoll,
 } from "@/components/diceModel";
 
 /**
  * The dice roller.
  *
- * The dice are thrown on the SERVER — nothing here decides a number.
- * What this file does is take the notation, show what it will roll
- * before it is rolled, and read the log back.
+ * Built as a TABLE rather than a form. You pick dice out of a tray at
+ * the bottom, the pool reads back at you in the middle at the size of
+ * something you are about to throw, and the result lands where you were
+ * already looking. The first version was a column of small buttons
+ * beside a list — a calculator that accepted dice notation. It could
+ * roll anything and it made you feel nothing, which for a dice roller
+ * is the whole failure.
  *
- * The parse happens twice on purpose. Here it decides whether the Roll
- * button is available and what the preview says; in convex/dice.ts it
- * decides what is real. A client parse that disagreed with the server's
- * would show a disabled button on a roll that works, which is a nuisance
- * — the reverse, a client that decided its own result, would be a
- * cheat, and is why the server does not accept one.
+ * The dice are thrown on the SERVER; nothing here decides a number.
+ * The parse happens twice on purpose: here it decides what the pool
+ * reads and whether Roll is available, and in convex/dice.ts it decides
+ * what is real. A client that produced its own faces would be a client
+ * that could produce a 20 every time.
  *
- * A secret roll is the DM's. It never appears in a player's data at all,
- * so there is nothing here that hides one: what arrives is already what
- * the caller is allowed to see.
+ * The notation string is the single source of truth for the pool. The
+ * tray writes to it, the modifier chips write to it, and you can still
+ * type into it — so the buttons and the box can never disagree about
+ * what is about to be rolled.
+ *
+ * A secret roll is the DM's. It never appears in a player's data at
+ * all, so nothing here hides one: what arrives is already what the
+ * caller is allowed to see.
  */
 
-/** The most-used d20 rolls, which nobody should have to type. */
-const SHORTCUTS: { label: string; notation: string; hint: string }[] = [
-  { label: "Advantage", notation: "2d20kh1", hint: "Roll two d20, keep the higher" },
-  { label: "Disadvantage", notation: "2d20kl1", hint: "Roll two d20, keep the lower" },
-  { label: "Stats", notation: "4d6kh3", hint: "Four d6, drop the lowest" },
-];
+/** The nudges worth a button. Past these, type it. */
+const MOD_STEPS = [1, 3, 5];
 
 export function DiceRoller({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const view = useQuery(api.dice.listRolls, { campaignId });
   const rollDice = useMutation(api.dice.rollDice);
   const clearRolls = useMutation(api.dice.clearRolls);
 
-  const [notation, setNotation] = useState("1d20");
+  const [notation, setNotation] = useState("");
   const [label, setLabel] = useState("");
-  const [secret, setSecret] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const isDm = view?.isDm ?? false;
 
-  // What the box currently means, if it means anything. Recomputed per
-  // keystroke, which is free — this is a dozen characters of arithmetic.
+  // What the pool currently means, if it means anything. Recomputed
+  // per keystroke, which is free — a dozen characters of arithmetic.
   const parsed = useMemo(() => parseRoll(notation), [notation]);
 
-  async function throwDice(what: string, itsLabel?: string) {
+  /** The roll everyone is looking at: the last one to land. */
+  const latest = view?.rolls[0];
+
+  async function throwDice(what: string, secret: boolean) {
     if (busy) return;
     setBusy(true);
     try {
@@ -62,7 +72,7 @@ export function DiceRoller({ campaignId }: { campaignId: Id<"campaigns"> }) {
       await rollDice({
         campaignId,
         notation: what,
-        label: (itsLabel ?? label).trim() || undefined,
+        label: label.trim() || undefined,
         // The server ANDs this with DM status. Sending it from a
         // player's browser achieves nothing, which is the point.
         secret: secret || undefined,
@@ -74,104 +84,152 @@ export function DiceRoller({ campaignId }: { campaignId: Id<"campaigns"> }) {
     }
   }
 
+  /** Swap the dice, keep the modifier. A +5 is not collateral. */
+  function setDice(dice: string) {
+    setNotation(adjustFlat(dice, flatOf(notation)));
+  }
+
   if (view === undefined) {
     return <p className="centered-note">Fetching the dice…</p>;
   }
 
   return (
     <div className="dice">
-      <section className="dice-controls">
-        {/* One click, one die. The common case is not a formula. */}
-        <div className="facet-label">Quick roll</div>
-        <div className="dice-quick">
-          {STANDARD_DICE.map((sides) => (
-            <button
-              key={sides}
-              type="button"
-              className="dice-die"
-              disabled={busy}
-              title={`Roll a d${sides}`}
-              onClick={() => void throwDice(`1d${sides}`)}
-            >
-              d{sides}
-            </button>
-          ))}
+      <section className="dice-stage">
+        {/* Where the roll lands: the table's last roll, whoever threw
+            it — the same thing everyone at a real table looks at when
+            the dice stop. */}
+        <div className="dice-felt">
+          {latest ? (
+            <RollFace roll={latest} big />
+          ) : (
+            <p className="dice-nothing">Nothing thrown yet.</p>
+          )}
         </div>
 
-        <div className="facet-label">Common rolls</div>
-        <div className="dice-shortcuts">
-          {SHORTCUTS.map((s) => (
-            <button
-              key={s.notation}
-              type="button"
-              className="npc-btn"
-              disabled={busy}
-              title={s.hint}
-              onClick={() => void throwDice(s.notation)}
-            >
-              {s.label}
-            </button>
-          ))}
+        {/* The pool, at the size of the thing you are about to throw. */}
+        <div className="dice-pool">
+          {parsed ? (
+            <span className="dice-formula">{parsed.notation}</span>
+          ) : notation.trim() === "" ? (
+            <span className="dice-formula empty">Pick your dice</span>
+          ) : (
+            <span className="dice-formula bad">{notation}</span>
+          )}
         </div>
 
-        <form
-          className="dice-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (parsed) void throwDice(parsed.notation);
-          }}
-        >
-          <div className="facet-label">Anything else</div>
-          <input
-            className="dice-notation"
-            value={notation}
-            onChange={(e) => setNotation(e.target.value)}
-            placeholder="2d6+3"
-            maxLength={60}
-            spellCheck={false}
-            aria-label="Dice notation"
-          />
+        {error && <p className="form-error nb-error dice-error">{error}</p>}
+
+        <div className="dice-mods">
+          {MOD_STEPS.map((n) => (
+            <button
+              key={`p${n}`}
+              type="button"
+              className="dice-chip"
+              onClick={() => setNotation((v) => adjustFlat(v, n))}
+            >
+              +{n}
+            </button>
+          ))}
+          {MOD_STEPS.map((n) => (
+            <button
+              key={`m${n}`}
+              type="button"
+              className="dice-chip"
+              onClick={() => setNotation((v) => adjustFlat(v, -n))}
+            >
+              −{n}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="dice-chip wide"
+            title="Two d20, keep the higher"
+            onClick={() => setDice("2d20kh1")}
+          >
+            ADV
+          </button>
+          <button
+            type="button"
+            className="dice-chip wide"
+            title="Two d20, keep the lower"
+            onClick={() => setDice("2d20kl1")}
+          >
+            DIS
+          </button>
+        </div>
+
+        <div className="dice-actions">
+          <button
+            type="button"
+            className="dice-roll-btn"
+            disabled={!parsed || busy}
+            onClick={() => parsed && void throwDice(parsed.notation, false)}
+          >
+            Roll!
+          </button>
+          {isDm && (
+            <button
+              type="button"
+              className="dice-hidden-btn"
+              disabled={!parsed || busy}
+              title="Only you will see it"
+              onClick={() => parsed && void throwDice(parsed.notation, true)}
+            >
+              Hidden Roll
+            </button>
+          )}
           <input
             className="dice-label"
             value={label}
             onChange={(e) => setLabel(e.target.value)}
-            placeholder="What for? (optional)"
+            placeholder="What for?"
             maxLength={60}
             aria-label="Roll label"
           />
+          <button
+            type="button"
+            className="dice-clear"
+            title="Empty the pool"
+            aria-label="Empty the pool"
+            disabled={notation === ""}
+            onClick={() => setNotation("")}
+          >
+            ✕
+          </button>
+        </div>
 
-          {/* Says what the notation means BEFORE it is rolled, so a
-              typo is caught by reading rather than by a strange total. */}
-          <p className={`dice-preview${parsed ? "" : " bad"}`}>
-            {parsed
-              ? `Rolls ${formatNotation(parsed.terms)}`
-              : notation.trim() === ""
-                ? "Type something like 2d6+3, 4d6kh3, or d20."
-                : `Can't read that. Try 2d6+3, 4d6kh3, or d20.`}
-          </p>
-
-          <div className="dice-go">
+        {/* The tray. Click a die to add one of it — d6 eight times for
+            8d6, then d4 four times for 8d6+4d4. Shapes rather than
+            words, because picking a die out of a handful is something
+            a player already knows how to do. */}
+        <div className="dice-tray">
+          {STANDARD_DICE.map((sides) => (
             <button
-              type="submit"
-              className="npc-btn primary"
-              disabled={!parsed || busy}
+              key={sides}
+              type="button"
+              className="dice-tray-die"
+              title={`Add a d${sides}`}
+              aria-label={`Add a d${sides}`}
+              onClick={() => setNotation((n) => addDie(n, sides))}
             >
-              Roll
+              <DiceIcon sides={sides} />
             </button>
-            {isDm && (
-              <label className="dice-secret" title="Only you will see it">
-                <input
-                  type="checkbox"
-                  checked={secret}
-                  onChange={(e) => setSecret(e.target.checked)}
-                />
-                Roll in secret
-              </label>
-            )}
-          </div>
-        </form>
+          ))}
+        </div>
 
-        {error && <p className="form-error nb-error">{error}</p>}
+        {/* Still typeable, because a tray cannot express 4d6kh3 and
+            somebody will always want to. Same state as everything
+            above it. */}
+        <input
+          className="dice-notation"
+          value={notation}
+          onChange={(e) => setNotation(e.target.value)}
+          placeholder="or type it: 8d6+4d4+3"
+          maxLength={60}
+          spellCheck={false}
+          aria-label="Dice notation"
+        />
       </section>
 
       <section className="dice-log">
@@ -197,60 +255,99 @@ export function DiceRoller({ campaignId }: { campaignId: Id<"campaigns"> }) {
         </header>
 
         {view.rolls.length === 0 && (
-          <p className="centered-note">No rolls yet. Throw something.</p>
+          <p className="centered-note">No rolls yet.</p>
         )}
 
-        {view.rolls.map((r) => {
-          const crit = critOfDice(r.dice);
-          return (
-            <article
-              key={r._id}
-              className={`dice-roll${r.mine ? " mine" : ""}${
-                r.secret ? " secret" : ""
-              }${crit ? ` crit-${crit}` : ""}`}
-            >
-              <div className="dice-roll-head">
-                <span className="dice-by">{r.by}</span>
-                {r.label && <span className="dice-for">{r.label}</span>}
-                {r.secret && <span className="chip warn">Secret</span>}
-                <span className="dice-at">
-                  {new Date(r.at).toLocaleTimeString(undefined, {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                </span>
-              </div>
-
-              <div className="dice-roll-body">
-                <span className="dice-faces">
-                  {r.dice.map((d, i) => (
-                    <span
-                      key={i}
-                      className={`dice-face${d.kept ? "" : " dropped"}`}
-                      title={
-                        d.kept ? `d${d.sides}` : `d${d.sides}, dropped`
-                      }
-                    >
-                      {d.value}
-                    </span>
-                  ))}
-                  {r.dice.length === 0 && (
-                    <span className="dice-face flat">—</span>
-                  )}
-                </span>
-                <span className="dice-notation-read">{r.notation}</span>
-                <span className="dice-total">{r.total}</span>
-              </div>
-
-              {crit && (
-                <p className="dice-crit">
-                  {crit === "high" ? "Natural 20" : "Natural 1"}
-                </p>
-              )}
-            </article>
-          );
-        })}
+        {view.rolls.map((r) => (
+          <RollFace key={r._id} roll={r} />
+        ))}
       </section>
     </div>
+  );
+}
+
+type LoggedRoll = {
+  _id: string;
+  at: number;
+  by: string;
+  mine: boolean;
+  notation: string;
+  label: string | null;
+  dice: { sides: number; value: number; kept: boolean; t?: number }[];
+  mod: number;
+  total: number;
+  secret: boolean;
+};
+
+/**
+ * One roll, read back.
+ *
+ * The same component on the felt and in the log, at two sizes, so the
+ * roll that just landed and the roll three rows down cannot end up
+ * disagreeing about what a dropped die looks like.
+ */
+function RollFace({ roll, big = false }: { roll: LoggedRoll; big?: boolean }) {
+  const crit = critOfDice(roll.dice);
+  const groups = groupDice(roll.dice);
+
+  return (
+    <article
+      className={`dice-roll${big ? " big" : ""}${roll.mine ? " mine" : ""}${
+        roll.secret ? " secret" : ""
+      }${crit ? ` crit-${crit}` : ""}`}
+    >
+      <div className="dice-roll-head">
+        <span className="dice-by">{roll.by}</span>
+        {roll.label && <span className="dice-for">{roll.label}</span>}
+        {roll.secret && <span className="chip warn">Secret</span>}
+        <span className="dice-at">
+          {new Date(roll.at).toLocaleTimeString(undefined, {
+            hour: "numeric",
+            minute: "2-digit",
+          })}
+        </span>
+      </div>
+
+      <div className="dice-roll-body">
+        {/* Grouped, so "8d6+4d4+3" reads as two handfuls and a
+            modifier rather than twelve numbers in a row with nothing
+            to say where the d6s stop. A single group goes unlabelled —
+            "1d20" over one die is noise. */}
+        <span className="dice-groups">
+          {groups.map((g, gi) => (
+            <span className="dice-group" key={gi}>
+              {groups.length > 1 && (
+                <span className="dice-group-label">{g.label}</span>
+              )}
+              {g.dice.map((d, i) => (
+                <span
+                  key={i}
+                  className={`dice-face${d.kept ? "" : " dropped"}`}
+                  title={d.kept ? `d${d.sides}` : `d${d.sides}, dropped`}
+                >
+                  {d.value}
+                </span>
+              ))}
+            </span>
+          ))}
+          {roll.mod !== 0 && (
+            <span className="dice-face flat" title="Modifier">
+              {roll.mod > 0 ? `+${roll.mod}` : roll.mod}
+            </span>
+          )}
+          {groups.length === 0 && roll.mod === 0 && (
+            <span className="dice-face flat">—</span>
+          )}
+        </span>
+        <span className="dice-notation-read">{roll.notation}</span>
+        <span className="dice-total">{roll.total}</span>
+      </div>
+
+      {crit && (
+        <p className="dice-crit">
+          {crit === "high" ? "Natural 20" : "Natural 1"}
+        </p>
+      )}
+    </article>
   );
 }

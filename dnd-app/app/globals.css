@@ -8794,19 +8794,222 @@ button.cal-day:hover {
 
 /* ---------- Dice roller ---------- */
 
-/* Controls on the left at a fixed width, log on the right taking the
-   rest. The log is the part that grows, and it scrolls inside itself
-   rather than pushing the controls off the top of the screen — the
-   quick-roll buttons are the reason anyone opened this. */
+/* A table, not a form. The stage takes the room; the log is a rail
+   beside it. Everything the hand touches — tray, chips, Roll — sits
+   along the bottom where a hand already is. */
 .dice {
   display: grid;
-  grid-template-columns: 17rem minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 20rem;
   gap: 0.75rem;
   flex: 1;
   min-height: 0;
 }
 
-.dice-controls,
+.dice-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 0;
+  padding: 0.9rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+/* Where the dice land. Takes all the leftover height so the result is
+   the biggest thing on the screen — that is the whole point of a dice
+   roller, and the first version gave it a table row. */
+.dice-felt {
+  flex: 1;
+  min-height: 8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: auto;
+}
+
+.dice-nothing {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.dice-pool {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.6rem;
+}
+
+/* The pool at the size of the thing you are about to throw. */
+.dice-formula {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 1.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.dice-formula.empty {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.dice-formula.bad {
+  color: var(--bloodied);
+}
+
+.dice-error {
+  margin: 0;
+  text-align: center;
+}
+
+.dice-mods {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.3rem;
+}
+
+.dice-chip {
+  min-width: 2.6rem;
+  padding: 0.3rem 0.5rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.dice-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.dice-chip.wide {
+  min-width: 3.4rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.dice-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* The one button the whole screen is arranged around. */
+.dice-roll-btn {
+  padding: 0.55rem 1.6rem;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 9px;
+  color: var(--bg);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.dice-roll-btn:disabled,
+.dice-hidden-btn:disabled,
+.dice-clear:disabled {
+  opacity: 0.45;
+}
+
+.dice-hidden-btn {
+  padding: 0.55rem 0.9rem;
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: 9px;
+  color: var(--text-dim);
+  font-size: 0.88rem;
+}
+
+.dice-hidden-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.dice-actions .dice-label {
+  flex: 1;
+  min-width: 0;
+  padding: 0.45rem 0.55rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.86rem;
+}
+
+.dice-clear {
+  padding: 0.45rem 0.6rem;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-dim);
+}
+
+/* The tray. Seven shapes, sized to be picked up rather than read. */
+.dice-tray {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem;
+  padding-top: 0.2rem;
+}
+
+.dice-tray-die {
+  width: 3.4rem;
+  height: 3.4rem;
+  padding: 0.25rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--accent);
+  line-height: 0;
+}
+
+.dice-tray-die svg {
+  width: 100%;
+  height: 100%;
+}
+
+.dice-tray-die:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.dice-tray-die:active {
+  transform: translateY(1px);
+}
+
+.dice-notation {
+  width: 100%;
+  padding: 0.4rem 0.55rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.dice-notation:focus {
+  outline: none;
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* ---- the log rail ---- */
+
 .dice-log {
   padding: 0.75rem;
   background: var(--bg-raised);
@@ -8814,107 +9017,6 @@ button.cal-day:hover {
   border-radius: 12px;
   min-height: 0;
   overflow-y: auto;
-}
-
-.dice-controls .facet-label {
-  margin-top: 0.75rem;
-}
-
-.dice-controls .facet-label:first-child {
-  margin-top: 0;
-}
-
-.dice-quick {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-  margin-top: 0.4rem;
-}
-
-/* Wide enough for "d100" without the row reflowing when it appears. */
-.dice-die {
-  min-width: 3.1rem;
-  padding: 0.45rem 0.3rem;
-  background: var(--bg-inset);
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  color: var(--text);
-  font-size: 0.9rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.dice-die:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.dice-die:disabled {
-  opacity: 0.5;
-}
-
-.dice-shortcuts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-  margin-top: 0.4rem;
-}
-
-.dice-form {
-  display: grid;
-  gap: 0.4rem;
-}
-
-.dice-notation,
-.dice-label {
-  width: 100%;
-  padding: 0.45rem 0.55rem;
-  background: var(--bg-inset);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  font-size: 0.9rem;
-}
-
-/* The notation is read character by character when it goes wrong, so
-   it gets a face where a 1 and an l are different shapes. */
-.dice-notation {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-.dice-notation:focus,
-.dice-label:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-
-/* What the box means, said before it is rolled. Dim when it is fine —
-   this is a confirmation, not an instruction — and only coloured when
-   the notation cannot be read at all. */
-.dice-preview {
-  margin: 0;
-  min-height: 1.1rem;
-  color: var(--text-dim);
-  font-size: 0.78rem;
-}
-
-.dice-preview.bad {
-  color: var(--bloodied);
-}
-
-.dice-go {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.dice-secret {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  color: var(--text-dim);
-  font-size: 0.8rem;
 }
 
 .dice-log-head {
@@ -8930,6 +9032,8 @@ button.cal-day:hover {
 .dice-log-title {
   font-weight: 600;
 }
+
+/* ---- one roll, in the log and on the felt ---- */
 
 .dice-roll {
   padding: 0.5rem 0.6rem;
@@ -8948,6 +9052,55 @@ button.cal-day:hover {
 
 .dice-roll.secret {
   border-style: dashed;
+}
+
+/* The same roll, on the felt: no card of its own, just bigger. */
+.dice-roll.big {
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  text-align: center;
+}
+
+.dice-roll.big .dice-roll-head {
+  justify-content: center;
+  font-size: 0.85rem;
+}
+
+.dice-roll.big .dice-at {
+  margin-left: 0;
+}
+
+.dice-roll.big .dice-roll-body {
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.dice-roll.big .dice-groups {
+  justify-content: center;
+}
+
+.dice-roll.big .dice-face {
+  min-width: 2.2rem;
+  padding: 0.3rem 0.45rem;
+  font-size: 1.1rem;
+}
+
+.dice-roll.big .dice-notation-read {
+  margin-left: 0;
+  font-size: 0.85rem;
+}
+
+.dice-roll.big .dice-total {
+  font-size: 3.2rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.dice-roll.big .dice-crit {
+  font-size: 0.9rem;
 }
 
 .dice-roll-head {
@@ -8980,11 +9133,28 @@ button.cal-day:hover {
   margin-top: 0.35rem;
 }
 
-.dice-faces {
+.dice-groups {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem;
+  align-items: center;
+  gap: 0.5rem;
   min-width: 0;
+}
+
+/* One term's dice, held together. The gap inside a group is smaller
+   than the gap between groups — that difference is the only thing
+   telling you which four of the twelve faces were the d4s. */
+.dice-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.dice-group-label {
+  color: var(--text-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
 }
 
 .dice-face {
@@ -8999,9 +9169,9 @@ button.cal-day:hover {
 }
 
 /* A die the keep threw away. Struck through rather than hidden: seeing
-   the 2 you dropped is half the point of rolling 4d6kh3 — which means
-   it has to stay READABLE. Dimmed by colour alone; an opacity on top
-   of that rendered a struck-through "1" as a smudge.
+   the 2 you dropped is half the point of 4d6kh3 — which means it has
+   to stay READABLE. Dimmed by colour alone; an opacity on top of that
+   drew a struck-through "1" as a smudge.
 
    No background, so it sinks into the card rather than sitting on it.
    Keeping --bg-raised made the dropped die the LIGHTEST chip in the
@@ -9061,20 +9231,21 @@ button.cal-day:hover {
   color: var(--bloodied);
 }
 
-/* Side by side needs the width. Stacked, the controls stay on top so
-   the dice are still the first thing under your thumb. */
+/* Side by side needs the width. Stacked, the stage stays on top so the
+   dice are still the first thing under your thumb, and the PAGE
+   scrolls rather than each panel keeping a scrollbar of its own. */
 @media (max-width: 900px) {
   .dice {
     grid-template-columns: minmax(0, 1fr);
-    /* And the PAGE scrolls, not each panel. Left as two flex-filled
-       panels this split a short screen in half and gave three quick
-       dice above one scrollbar and one roll below another. */
     flex: initial;
     min-height: auto;
   }
 
-  .dice-controls,
   .dice-log {
     overflow-y: visible;
+  }
+
+  .dice-actions {
+    flex-wrap: wrap;
   }
 }

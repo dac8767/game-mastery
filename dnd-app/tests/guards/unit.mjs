@@ -7146,6 +7146,134 @@ export const unit = {
           dice.parseRoll(`1d6+${dice.MAX_FLAT + 1}`) === null
       );
 
+      // ---- the pool builder ----
+      // The tray writes to the same notation string you can type in,
+      // so every one of these is a way the two could silently
+      // disagree about what is in your hand.
+      check(
+        "clicking a die adds one of it, and merges with its own kind",
+        dice.addDie("", 6) === "1d6" &&
+          dice.addDie("1d6", 6) === "2d6" &&
+          dice.addDie("8d6", 6) === "9d6" &&
+          dice.addDie("8d6", 4) === "8d6+1d4" &&
+          dice.addDie("8d6+4d4", 4) === "8d6+5d4"
+      );
+      // Merging into a kept term would change what the keep means:
+      // "4d6kh3" plus a d6 is not "5d6kh3", it is a different roll.
+      check(
+        "a die added to a kept term becomes its own term",
+        dice.addDie("4d6kh3", 6) === "4d6kh3+1d6"
+      );
+      // Dice before the modifier, so the pool reads the way people
+      // write it rather than 8d6+3+4d4.
+      check(
+        "a new die goes in front of the modifier, not after it",
+        dice.addDie("8d6+3", 4) === "8d6+1d4+3"
+      );
+      check(
+        "the ceilings hold, and refuse rather than clamp",
+        dice.addDie(`${dice.MAX_DICE}d6`, 6) === `${dice.MAX_DICE}d6` &&
+          dice.addDie(`${dice.MAX_DICE - 1}d6`, 4) === `${dice.MAX_DICE - 1}d6+1d4`
+      );
+      // Not a die at all is refused. An odd-but-real die is not: the
+      // TRAY only offers the standard seven, but the notation has
+      // always accepted anything with two or more faces, and addDie
+      // must not be the thing that quietly narrows that.
+      check(
+        "a size that is not a die is refused, an unusual one is not",
+        dice.addDie("2d6", 0) === "2d6" &&
+          dice.addDie("2d6", 1) === "2d6" &&
+          dice.addDie("2d6", dice.MAX_SIDES + 1) === "2d6" &&
+          dice.addDie("2d6", 2.5) === "2d6" &&
+          dice.addDie("2d6", 7) === "2d6+1d7"
+      );
+      // A half-typed box is somebody mid-thought, not an error.
+      check(
+        "clicking a die on unreadable text leaves the text alone",
+        dice.addDie("2d6+", 6) === "2d6+" && dice.addDie("gibberish", 6) === "gibberish"
+      );
+
+      check(
+        "the modifier collapses to one term and can go negative",
+        dice.adjustFlat("2d6", 3) === "2d6+3" &&
+          dice.adjustFlat("2d6+3", 2) === "2d6+5" &&
+          dice.adjustFlat("2d6+3", -5) === "2d6-2" &&
+          dice.adjustFlat("2d6-2", -1) === "2d6-3"
+      );
+      // "+0" is a modifier that looks like it is doing something.
+      check(
+        "a modifier nudged back to zero disappears",
+        dice.adjustFlat("2d6+3", -3) === "2d6" &&
+          dice.adjustFlat("2d6-1", 1) === "2d6"
+      );
+      check(
+        "the modifier alone is a roll, and emptying it empties the pool",
+        dice.adjustFlat("", 3) === "3" && dice.adjustFlat("3", -3) === ""
+      );
+      check(
+        "the flat total is readable back out of a notation",
+        dice.flatOf("8d6+4d4+3") === 3 &&
+          dice.flatOf("1d20-2") === -2 &&
+          dice.flatOf("8d6") === 0 &&
+          dice.flatOf("nonsense") === 0
+      );
+      // Switching to Advantage must not eat the +5 you just set.
+      check(
+        "swapping the dice keeps the modifier",
+        dice.adjustFlat("2d20kh1", dice.flatOf("1d20+5")) === "2d20kh1+5"
+      );
+
+      // ---- reading a mixed roll back ----
+      // "8d6+4d4" is twelve faces in one list, and the grouping is
+      // the only thing that says which four were the d4s.
+      check(
+        "the faces group by the term that threw them",
+        (() => {
+          const r = dice.roll("2d6+3d4", seq(face(5, 6), face(2, 6), face(1, 4), face(4, 4), face(3, 4)));
+          const g = dice.groupDice(dice.allDice(r));
+          return (
+            g.length === 2 &&
+            g[0].label === "2d6" &&
+            g[0].subtotal === 7 &&
+            g[1].label === "3d4" &&
+            g[1].subtotal === 8
+          );
+        })()
+      );
+      // Two terms of the SAME die stay two groups — they differ by
+      // their keep, and merging them would show one handful of five.
+      check(
+        "same-sided terms stay apart when they are different terms",
+        (() => {
+          const r = dice.roll("2d6+3d6", seq(face(5, 6), face(2, 6), face(1, 6), face(4, 6), face(3, 6)));
+          return dice.groupDice(dice.allDice(r)).length === 2;
+        })()
+      );
+      // A dropped die belongs to its group but not to its subtotal.
+      check(
+        "a group's subtotal excludes the dice the keep dropped",
+        (() => {
+          const r = dice.roll("4d6kh3", seq(face(2, 6), face(5, 6), face(3, 6), face(6, 6)));
+          const g = dice.groupDice(dice.allDice(r));
+          return g.length === 1 && g[0].dice.length === 4 && g[0].subtotal === 14;
+        })()
+      );
+      // Rows stored before dice carried a term index: falls back to
+      // runs of one size rather than to one undifferentiated row.
+      check(
+        "rows written before term indexes still group by die size",
+        (() => {
+          const old = [
+            { sides: 6, value: 4, kept: true },
+            { sides: 6, value: 2, kept: true },
+            { sides: 4, value: 3, kept: true },
+          ];
+          const g = dice.groupDice(old);
+          return g.length === 2 && g[0].label === "2d6" && g[1].label === "1d4";
+        })()
+      );
+      check("no dice is no groups", dice.groupDice([]).length === 0);
+
       check(
         "the one-line description shows dropped dice and the total",
         dice.describe(dice.roll("2d6+3", seq(face(4, 6), face(5, 6)))) ===
