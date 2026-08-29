@@ -1,21 +1,23 @@
 #!/usr/bin/env node
 /**
- * Moonbrook's session history, 2021–2025, imported in one run.
+ * Moonbrook's session history, 2021–2026, imported in one run.
  *
  *   node scripts/import-moonbrook-sessions.mjs <campaignId>
  *
- * The records were merged from the OneNote session pages and the
- * Discord #scheduling channel, and the OneNote page content lands as
- * each session's DM notes page.
+ * The records were merged from the OneNote session pages, the Discord
+ * #scheduling channel, and — from February 2026 on, after the group
+ * gave up on Discord — the Moonbrook Scheduling text thread. The
+ * OneNote page content lands as each session's DM notes page.
  *
  * THE NUMBERING HERE IS DEREK'S, read back out of the app after he
- * corrected it: 53 sessions, 1 through 53, whole numbers only. An
- * earlier version of this file parked the three games Discord knew
- * about but OneNote never numbered on .5 numbers; he folded those in
- * and renumbered everything after them, and dated the session OneNote
- * left blank (2022-10-07). That numbering is now the record. Anything
- * added here later goes in by date and takes the number that falls
- * out of it — never renumber to suit this file.
+ * corrected it: sessions 1 through 53, whole numbers only. An earlier
+ * version of this file parked the three games Discord knew about but
+ * OneNote never numbered on .5 numbers; he folded those in and
+ * renumbered everything after them, and dated the session OneNote
+ * left blank (2022-10-07). That numbering is the record, and 54
+ * onward continues it. Anything added here later goes in by date and
+ * takes the number that falls out of it — never renumber to suit
+ * this file.
  *
  * Which is why both passes match on the DATE. Matching on the number
  * is what broke the last run: the summaries were written by number
@@ -28,10 +30,10 @@
  * "The party fights the bandits outside of town. One bandit dies." No
  * attendance, no start times, no prep: those are facts about the
  * evening, not about Moonbrook, and the columns beside it already
- * carry the ones worth keeping. Nineteen sessions left no record of
- * their events in either source and carry NO description rather than
- * an invented one; everything known about where a date came from
- * lives in that session's DM notes under "Source note".
+ * carry the ones worth keeping. Twenty sessions left no record of
+ * their events in any source and carry NO description rather than an
+ * invented one; everything known about where a date came from lives
+ * in that session's DM notes under "Source note".
  *
  * Two passes, both in convex/sessions.ts and both safe to repeat:
  * `importRecords` creates the sessions missing from the campaign and
@@ -616,6 +618,34 @@ export const MOONBROOK_SESSIONS = [
     number: 53,
     date: "2025-11-23",
     players: minus(WITH_CAPRICA, "Scott"),
+  },
+  {
+    number: 54,
+    date: "2026-03-14",
+    players: WITH_CAPRICA,
+    description:
+      "Saia's story takes the spotlight at last. The party levels to eleven and sits down to a hero's feast, keeping its blessings for the battle ahead.",
+    dmNotes:
+      "<h4>Source note</h4>" +
+      "<p>From the Moonbrook Scheduling text thread, which the group moved to from Discord in February 2026 after four months of failed scheduling. Everyone was there. The party had been told two days earlier they could level to eleven — the idea being to level at the START of a big fight rather than after it, so the new abilities get used — and the session ended with the reminder that everyone is carrying hero's feast effects into the next fight.</p>",
+  },
+  {
+    number: 55,
+    date: "2026-05-23",
+    players: WITH_CAPRICA,
+    dmNotes:
+      "<h4>Source note</h4>" +
+      "<p>From the Moonbrook Scheduling text thread. Everyone was there — a full house. Nothing survives about what happened in the game; the encounter deferred from the cancelled Easter game was described beforehand as one of the hardest fights the campaign has had, but nothing confirms it was played here.</p>",
+  },
+  {
+    number: 56,
+    date: "2026-06-20",
+    players: WITH_CAPRICA,
+    description:
+      "The party fights the battle it has been building toward, out in open ground.",
+    dmNotes:
+      "<h4>Source note</h4>" +
+      "<p>From the Moonbrook Scheduling text thread. Scott played remotely over Discord voice, which was workable because the fight was in the open rather than a tactical one. The next game was set for the air temple, which Derek has also been calling the sky temple.</p>",
   },
 ];
 

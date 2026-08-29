@@ -6943,8 +6943,8 @@ export const unit = {
       // them in, and this is now the record rather than something this
       // file gets to re-derive.
       check(
-        "the numbering is 1 through 53, whole numbers, in date order",
-        R.length === 53 &&
+        "the numbering is 1 through 56, whole numbers, in date order",
+        R.length === 56 &&
           R.every((r, i) => r.number === i + 1) &&
           R.every((r) => Number.isInteger(r.number))
       );
@@ -7001,7 +7001,7 @@ export const unit = {
         );
         check(
           "every session's DM notes survive the sanitizer untouched",
-          R.filter((r) => r.dmNotes).length === 39 && changed.length === 0
+          R.filter((r) => r.dmNotes).length === 42 && changed.length === 0
         );
       }
 
@@ -7026,12 +7026,12 @@ export const unit = {
           );
         })()
       );
-      // Nineteen sessions left no account of their events in either
+      // Twenty sessions left no account of their events in either
       // source. They carry NO description rather than an invented one,
       // and that silence is deliberate enough to pin.
       check(
         "sessions with no recorded events stay empty rather than invented",
-        R.filter((r) => r.description === undefined).length === 19 &&
+        R.filter((r) => r.description === undefined).length === 20 &&
           R.filter((r) => r.description !== undefined).every(
             (r) => r.description.trim().length > 20
           )
