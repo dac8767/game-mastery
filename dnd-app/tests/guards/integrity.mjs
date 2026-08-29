@@ -2992,28 +2992,38 @@ export const integrity = {
         /export interface SidebarSection\s*/,
         "the SidebarSection interface"
       );
-      const ifaceKeys = [
-        ...ifaceBody.matchAll(/^\s*([A-Za-z_$][\w$]*)\??\s*:/gm),
-      ].map((m) => m[1]);
-      if (ifaceKeys.length === 0) {
-        throw new Error("read no keys off SidebarSection — parser out of date?");
-      }
-
-      const validatorKeys = (src, anchor, label) =>
-        [
-          ...blockAfter(src, anchor, label).matchAll(
-            /^\s*([A-Za-z_$][\w$]*)\s*:/gm
-          ),
-        ].map((m) => m[1]);
-
-      // The mutation's validator: the section object inside
-      // sidebarValidator's `sections: v.array(v.object({ … }))`.
-      const mutationKeys = validatorKeys(
-        settingsSrc.slice(settingsSrc.indexOf("export const sidebarValidator")),
-        /sections: v\.array\(\s*v\.object\(/,
-        "the sidebarValidator section object"
+      const ifaceItemBody = blockAfter(
+        layoutSrc,
+        /export interface SidebarItem\s*/,
+        "the SidebarItem interface"
       );
+      const keysOfIface = (body, label) => {
+        const keys = [
+          ...body.matchAll(/^\s*([A-Za-z_$][\w$]*)\??\s*:/gm),
+        ].map((m) => m[1]);
+        if (keys.length === 0) {
+          throw new Error(`read no keys off ${label} — parser out of date?`);
+        }
+        return keys;
+      };
+      const ifaceKeys = keysOfIface(ifaceBody, "SidebarSection");
+      const ifaceItemKeys = keysOfIface(ifaceItemBody, "SidebarItem");
 
+      // topLevelKeys rather than a line-anchored regex: a section
+      // validator now CONTAINS the item validator, and reading the
+      // nested object's keys as if they were the section's is how this
+      // check started reporting `hidden` as an unknown field of
+      // SidebarSection the first time the item shape grew past one
+      // line. Nesting has to be walked, not formatted around.
+      const validatorKeys = (src, anchor, label) =>
+        topLevelKeys(blockAfter(src, anchor, label), label);
+
+      const SECTION_AT = /sections: v\.array\(\s*v\.object\(/;
+      const ITEM_AT = /items: v\.array\(\s*v\.object\(/;
+
+      const mutationSrc = settingsSrc.slice(
+        settingsSrc.indexOf("export const sidebarValidator")
+      );
       // And the table's, sliced from userSettings first so the anchor
       // cannot run away into another table's `sections:`.
       const settingsTable = schemaSrc.slice(
@@ -3022,36 +3032,61 @@ export const integrity = {
       if (!settingsTable) {
         throw new Error("no userSettings table in schema.ts");
       }
-      const tableKeys = validatorKeys(
-        settingsTable,
-        /sections: v\.array\(\s*v\.object\(/,
-        "the schema's sidebar section validator"
-      );
 
-      for (const key of ifaceKeys) {
-        for (const [where, keys] of [
-          ["settings.sidebarValidator", mutationKeys],
-          ["the userSettings table", tableKeys],
-        ]) {
-          if (!keys.includes(key)) {
-            problems.push(
-              `SidebarSection declares \`${key}\` but ${where} does not — ` +
-                "Convex objects are strict, so saving a sidebar would fail " +
-                "validation outright rather than dropping the field"
-            );
+      /* Four comparisons, not two: the item object is a validator in
+         its own right and drifts from SidebarItem the same way. Adding
+         `expanded` to the interface and to only one of the two copies
+         would store the sidebar in one place and reject it in the
+         other — and Convex objects are STRICT, so the failure is the
+         whole save, not one field. */
+      const shapes = [
+        {
+          what: "SidebarSection",
+          iface: ifaceKeys,
+          anchor: SECTION_AT,
+          label: "section object",
+        },
+        {
+          what: "SidebarItem",
+          iface: ifaceItemKeys,
+          anchor: ITEM_AT,
+          label: "item object",
+        },
+      ];
+
+      for (const shape of shapes) {
+        const copies = [
+          [
+            "settings.sidebarValidator",
+            validatorKeys(mutationSrc, shape.anchor, `the ${shape.label}`),
+          ],
+          [
+            "the userSettings table",
+            validatorKeys(settingsTable, shape.anchor, `the schema's ${shape.label}`),
+          ],
+        ];
+        for (const key of shape.iface) {
+          for (const [where, keys] of copies) {
+            if (!keys.includes(key)) {
+              problems.push(
+                `${shape.what} declares \`${key}\` but ${where} does not — ` +
+                  "Convex objects are strict, so saving a sidebar would fail " +
+                  "validation outright rather than dropping the field"
+              );
+            }
           }
         }
-      }
-      // The other direction, which is a quieter loss: a validator key
-      // nothing writes is a setting that can be stored and can never
-      // be read back into anything.
-      for (const key of mutationKeys) {
-        if (!ifaceKeys.includes(key)) {
-          problems.push(
-            `settings.sidebarValidator accepts \`${key}\`, which is not a ` +
-              "field of SidebarSection — nothing writes it and nothing " +
-              "reads it"
-          );
+        // The other direction, which is a quieter loss: a validator key
+        // nothing writes is a setting that can be stored and can never
+        // be read back into anything.
+        for (const key of copies[0][1]) {
+          if (!shape.iface.includes(key)) {
+            problems.push(
+              `settings.sidebarValidator accepts \`${key}\`, which is not a ` +
+                `field of ${shape.what} — nothing writes it and nothing ` +
+                "reads it"
+            );
+          }
         }
       }
     }
@@ -5407,11 +5442,15 @@ export const integrity = {
       // The list is sorted by the MODEL, which is unit-tested. A sort
       // written inline in the component is a second answer to "what
       // order is this in" that nothing checks.
-      // The RENDER path, not merely a mention. sortTodos is called in
-      // the drop handler too, so looking for the name anywhere passed
-      // on a component that had gone back to sorting the visible list
+      // The RENDER path, not merely a mention. sortTodos is called from
+      // more than one place, so looking for the name anywhere passed on
+      // a component that had gone back to sorting the visible list
       // inline — the one place a wrong order is actually seen.
-      if (!/const sorted = useMemo\(\(\) => \(items \? sortTodos\(items\)/.test(todoSrc)) {
+      if (
+        !/const sorted = useMemo\(\s*\(\) => \(board \? sortTodos\(board\.items\)/.test(
+          todoSrc
+        )
+      ) {
         problems.push(
           "TodoTool does not sort the RENDERED list through sortTodos — a " +
             "second ordering rule in the component is one nothing tests"
@@ -5433,10 +5472,13 @@ export const integrity = {
       }
       // Finished items have no order of their own, so dragging one is
       // a move that silently undoes itself.
-      if (!/draggable=\{!item\.done\}/.test(todoSrc)) {
+      // `reorderable &&` as well, now that Upcoming shows the same rows
+      // in date order: dragging a list whose order on screen is not the
+      // stored one is a move you never see the result of.
+      if (!/draggable=\{reorderable && !item\.done\}/.test(todoSrc)) {
         problems.push(
-          "TodoTool lets a finished item be dragged — its place comes from " +
-            "when it was ticked, so the move would undo itself on reload"
+          "TodoTool lets a finished item — or a row on a list sorted by " +
+            "something else — be dragged, so the move would undo itself"
         );
       }
 
@@ -5514,6 +5556,256 @@ export const integrity = {
           "an overdue item is not coloured — the due pill is the only thing " +
             "on the row that carries urgency"
         );
+      }
+
+      /* ---- the Vikunja shape ------------------------------------- */
+
+      const projSrc = stripComments(read("components", "TodoProjects.tsx"));
+      const labelSrc = stripComments(read("components", "TodoLabels.tsx"));
+      const upSrc = stripComments(read("components", "TodoUpcoming.tsx"));
+      const todoConvexSrc = stripComments(read("convex", "todo.ts"));
+
+      /* A palette ID goes into the database; a COLOUR goes into the
+         style. The whole safety of this feature is that the two are
+         different values and the crossing is a lookup — a stored string
+         written straight into `style` is a hole with a CSS shape, and
+         "it came from our own database" is the assurance that stops
+         being true the first time another tool writes to the row.
+
+         Checked as: every style property that sets a colour on these
+         three screens is fed a colorOf(…) call. */
+      for (const [file, src] of [
+        ["TodoTool.tsx", todoSrc],
+        ["TodoProjects.tsx", projSrc],
+        ["TodoLabels.tsx", labelSrc],
+      ]) {
+        for (const [, prop, value] of src.matchAll(
+          /\b(backgroundColor|background|borderColor|color)\s*:\s*([^,\n}]+)/g
+        )) {
+          // Only the ones inside a style object — a CSS class name is
+          // not this. They are the ones whose value is an expression.
+          if (!/[a-zA-Z_$][\w$]*\s*[.(]/.test(value)) continue;
+          if (value.includes("colorOf(")) continue;
+          problems.push(
+            `${file} sets ${prop} from \`${value.trim()}\` rather than ` +
+              "colorOf() — what is stored is a palette id, and putting it " +
+              "into a style unlooked-up is how an arbitrary string reaches " +
+              "the CSS"
+          );
+        }
+      }
+
+      // Vikunja's rule about priority, applied through the model rather
+      // than restated. `item.priority >= 3` in the component is a second
+      // answer to "is this urgent enough to say so".
+      if (!/showsPriority\(item\.priority\)/.test(todoSrc)) {
+        problems.push(
+          "TodoTool decides whether to draw a priority without " +
+            "showsPriority — the threshold would live in two places"
+        );
+      }
+
+      // Quick Add: the parse is pure and unit-tested, and the mutation
+      // has to be the thing calling it. A second parser in the
+      // component would be the one that is wrong.
+      if (!/parseQuickAdd\(args\.text, args\.today\)/.test(todoConvexSrc)) {
+        problems.push(
+          "todo.quickAdd does not parse through parseQuickAdd — the syntax " +
+            "would have two implementations and only one of them is tested"
+        );
+      }
+      // `today` crosses the wire because only the browser knows which
+      // day the person typing is having. It is still an argument, so it
+      // is still checked.
+      if (!/if \(!isDate\(args\.today\)\)/.test(todoConvexSrc)) {
+        problems.push(
+          "todo.quickAdd trusts the `today` it is given — every date it " +
+            "computes is relative to it"
+        );
+      }
+
+      /* Ids that arrive as arguments belong to SOME row of the right
+         table, which is all a Convex id validator proves. Whose is the
+         question, and these three call sites are where it is asked. */
+      for (const [fn, from, to, call] of [
+        ["addTodo", "export const addTodo", "export const setDone", "cleanLabelIds("],
+        ["addTodo", "export const addTodo", "export const setDone", "cleanProjectId("],
+        ["updateTodo", "export const updateTodo", "export const setFavorite", "cleanLabelIds("],
+        ["updateTodo", "export const updateTodo", "export const setFavorite", "cleanProjectId("],
+        ["quickAdd", "export const quickAdd", "export const clearDone", "cleanProjectId("],
+      ]) {
+        const body = todoConvexSrc.slice(
+          todoConvexSrc.indexOf(from),
+          todoConvexSrc.indexOf(to)
+        );
+        if (!body.includes(call)) {
+          problems.push(
+            `todo.${fn} does not put its ids through ${call}) — an id from ` +
+              "another campaign would attach to this one's task"
+          );
+        }
+      }
+
+      /* Deleting a label has to take it OFF the tasks wearing it.
+         listTodos already filters dangling ids out of what it returns,
+         which is exactly what makes skipping this look correct: the
+         screen is right and every task keeps a dead id forever. */
+      const delLabel = todoConvexSrc.slice(
+        todoConvexSrc.indexOf("export const deleteLabel"),
+        todoConvexSrc.indexOf("export const quickAdd")
+      );
+      if (!/ctx\.db\.patch\(task\._id/.test(delLabel)) {
+        problems.push(
+          "todo.deleteLabel deletes the label without taking it off the " +
+            "tasks — the list still reads right, and every one of them " +
+            "keeps a dead id"
+        );
+      }
+
+      /* Deleting a project must not delete its tasks. A project is a
+         filing decision; the tasks are the work. */
+      const delProject = todoConvexSrc.slice(
+        todoConvexSrc.indexOf("export const deleteProject"),
+        todoConvexSrc.indexOf("/* ------")
+      );
+      if (!/patch\(task\._id, \{ projectId: undefined \}\)/.test(delProject)) {
+        problems.push(
+          "todo.deleteProject does not move its tasks to the Inbox — " +
+            "deleting the folder would delete the work"
+        );
+      }
+
+      /* Every link inside the tool is absolute.
+         The same list component renders on four screens at three
+         different depths, so a relative href is right on the screen it
+         was written for and lands somewhere that does not exist from
+         the other three — /todo/upcoming/project/… rather than
+         /todo/project/…. It is a 404 that only happens from one
+         starting point, which is the hardest kind to notice. */
+      for (const [file, src] of [
+        ["TodoTool.tsx", todoSrc],
+        ["TodoProjects.tsx", projSrc],
+        ["TodoLabels.tsx", labelSrc],
+        ["TodoUpcoming.tsx", upSrc],
+      ]) {
+        for (const [, rel] of src.matchAll(
+          /href=(?:"|\{`)(\.\.?\/[^"`]*)/g
+        )) {
+          problems.push(
+            `${file} links to \`${rel}\` relatively — this component renders ` +
+              "at three different depths, so the link is right from one of " +
+              "them and a 404 from the others. todoHref() builds it from " +
+              "the campaign instead"
+          );
+        }
+      }
+
+      // Upcoming is the DATED view. Showing the undated makes it the
+      // Overview again, and the reason to have two screens is that they
+      // leave different things out.
+      if (!/typeof i\.due === "string"/.test(upSrc)) {
+        problems.push(
+          "TodoUpcoming does not filter to dated tasks — it would be the " +
+            "Overview with headings on it"
+        );
+      }
+
+      for (const cls of [
+        "todo-row",
+        "todo-parse",
+        "todo-chip",
+        "todo-pri",
+        "todo-label",
+        "todo-proj",
+        "todo-star",
+        "todo-more",
+        "todo-detail",
+        "todo-field",
+        "todo-filter",
+        "todo-day",
+        "todo-day-head",
+        "proj-list",
+        "proj-row",
+        "proj-swatch",
+        "proj-palette",
+        "proj-name",
+        "proj-name-edit",
+        "proj-counts",
+        "proj-title",
+        "label-list",
+        "label-row",
+      ]) {
+        if (!new RegExp(`^\\.${cls}\\s*[,{]`, "m").test(todoCss)) {
+          problems.push(
+            `the To-Do screens render .${cls}, which globals.css gives no ` +
+              "rule of its own"
+          );
+        }
+      }
+    }
+
+    // ---- a tool's own screens, under a caret in the sidebar ---------
+    //
+    // Vikunja's four sections live in this app's sidebar rather than in
+    // a second navigation column of their own. Every way that breaks is
+    // quiet: a child with no page is a dead link, a caret with no
+    // handler is a button that does nothing, and a saved `expanded`
+    // that no validator accepts fails the WHOLE sidebar save rather
+    // than that one field.
+    {
+      const navSrcSub = stripComments(read("components", "navItems.ts"));
+      const shellSub = stripComments(read("components", "AppShell.tsx"));
+      const css = read("app", "globals.css");
+
+      if (!/children\?: NavItem\[\]/.test(navSrcSub)) {
+        problems.push(
+          "NavItem has no `children` — the sidebar cannot hold a tool's own " +
+            "screens, and they would need a navigation pane of their own"
+        );
+      }
+      // The list has to be REFERENCED by an item, not merely declared.
+      // A TODO_CHILDREN nothing points at is four screens nothing can
+      // reach from the sidebar, and the file still compiles.
+      if (!/children: TODO_CHILDREN/.test(navSrcSub)) {
+        problems.push(
+          "no nav item carries TODO_CHILDREN — the To-Do screens would be " +
+            "declared and unreachable"
+        );
+      }
+      // Flattened for lookups, flat for the designer. A child that
+      // NAV_ITEM_BY_ID cannot resolve renders as a chip with no label.
+      if (!/ALL_NAV_ITEMS\.flatMap\(withChildren\)/.test(navSrcSub)) {
+        problems.push(
+          "NAV_ITEM_BY_ID does not see through to children — a sub-screen's " +
+            "id would resolve to nothing wherever one is looked up"
+        );
+      }
+
+      // The caret, wired. A caret that only sets component state would
+      // spring shut on the next navigation, because moving between
+      // screens remounts this whole shell.
+      const caret = shellSub.slice(
+        shellSub.indexOf('className={`nav-caret'),
+        shellSub.indexOf("</button>", shellSub.indexOf('className={`nav-caret'))
+      );
+      if (!caret || !/onToggleExpand\(item\.id\)/.test(caret)) {
+        problems.push(
+          "the sidebar's caret does not call onToggleExpand — it would open " +
+            "and shut without the state surviving a click to another screen"
+        );
+      }
+      if (!/toggleItemExpanded\(layout, itemId\)/.test(shellSub)) {
+        problems.push(
+          "AppShell does not write the open state through toggleItemExpanded"
+        );
+      }
+      for (const cls of ["nav-row", "nav-caret", "nav-sub"]) {
+        if (!new RegExp(`^\\.${cls}\\s*[,{]`, "m").test(css)) {
+          problems.push(
+            `the sidebar renders .${cls}, which globals.css gives no rule ` +
+              "of its own"
+          );
+        }
       }
     }
 

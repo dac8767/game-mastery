@@ -22,6 +22,7 @@ import {
   SidebarLayout,
   defaultSidebar,
   reconcileSidebar,
+  toggleItemExpanded,
   toggleSectionCollapsed,
   visibleSidebar,
 } from "@/components/sidebarLayout";
@@ -48,11 +49,19 @@ function NavList({
   base,
   pathname,
   isDm,
+  expanded,
+  onToggleExpand,
 }: {
   items: NavItem[];
   base: string;
   pathname: string;
   isDm: boolean;
+  /**
+   * Which parents are open, by id. Absent for a child list — a
+   * sub-screen with sub-screens of its own is a menu, not a sidebar.
+   */
+  expanded?: Set<string>;
+  onToggleExpand?: (id: string) => void;
 }) {
   return (
     <ul className="nav-list">
@@ -69,16 +78,53 @@ function NavList({
           );
         }
         const href = navHref(item, base);
+        /* Children the reader may actually reach. Filtered here rather
+           than inside the child list, because a parent whose every
+           child is dmOnly must not draw a caret onto an empty tray. */
+        const kids = (item.children ?? []).filter((c) => isDm || !c.dmOnly);
+        const open = kids.length > 0 && Boolean(expanded?.has(item.id));
+        /* The caret opens the tray; the label still navigates. Two
+           targets on one row, so "show me what is in here" and "take me
+           to the front of it" stay separate questions — collapsing them
+           into one is how you end up unable to look without going. */
         return (
           <li key={item.id}>
-            <Link
-              href={href}
-              className={`nav-item${pathname === href ? " active" : ""}`}
-              title={item.label}
-            >
-              <NavIcon icon={item.icon} art={item.art} />
-              <span className="nav-label">{item.label}</span>
-            </Link>
+            <div className="nav-row">
+              <Link
+                href={href}
+                className={`nav-item${pathname === href ? " active" : ""}${
+                  kids.length > 0 ? " has-kids" : ""
+                }`}
+                title={item.label}
+              >
+                <NavIcon icon={item.icon} art={item.art} />
+                <span className="nav-label">{item.label}</span>
+              </Link>
+              {kids.length > 0 && onToggleExpand && (
+                <button
+                  type="button"
+                  className={`nav-caret${open ? " open" : ""}`}
+                  aria-expanded={open}
+                  aria-label={
+                    open ? `Hide ${item.label}'s screens` : `Show ${item.label}'s screens`
+                  }
+                  title={open ? "Hide these" : "Show these"}
+                  onClick={() => onToggleExpand(item.id)}
+                >
+                  <span aria-hidden="true">{open ? "▾" : "▸"}</span>
+                </button>
+              )}
+            </div>
+            {open && (
+              <div className="nav-sub">
+                <NavList
+                  items={kids}
+                  base={base}
+                  pathname={pathname}
+                  isDm={isDm}
+                />
+              </div>
+            )}
           </li>
         );
       })}
@@ -172,6 +218,25 @@ export function AppShell({
    */
   const toggleFold = (sectionId: string) => {
     void saveSettings({ sidebar: toggleSectionCollapsed(layout, sectionId) });
+  };
+
+  /**
+   * A tool's own screens, open or shut. Saved for the reason the folds
+   * above are: navigating remounts this shell.
+   */
+  const expandedIds = useMemo(
+    () =>
+      new Set(
+        layout.sections
+          .flatMap((s) => s.items)
+          .filter((i) => i.expanded)
+          .map((i) => i.id)
+      ),
+    [layout]
+  );
+
+  const toggleExpand = (itemId: string) => {
+    void saveSettings({ sidebar: toggleItemExpanded(layout, itemId) });
   };
 
   /**
@@ -306,6 +371,12 @@ export function AppShell({
                   base={base}
                   pathname={pathname}
                   isDm={isDm}
+                  /* A rail of icons has nowhere to put a tray of
+                     labelled sub-screens, so the caret is not offered
+                     while it is collapsed — the tool's own front page
+                     is one click away and has the same list on it. */
+                  expanded={collapsed ? undefined : expandedIds}
+                  onToggleExpand={collapsed ? undefined : toggleExpand}
                 />
               )}
             </div>

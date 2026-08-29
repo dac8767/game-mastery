@@ -251,11 +251,20 @@ Note    Session NUMBERS are the DM's to change; the importer matches on
 
 ### todo — To-Do
 ```
-Owns    components/TodoTool.tsx, components/todoModel.ts
+Owns    components/TodoTool.tsx, components/TodoUpcoming.tsx,
+        components/TodoProjects.tsx, components/TodoLabels.tsx,
+        components/todoModel.ts, components/quickAdd.ts
         convex/todo.ts
         app/campaign/[campaignId]/todo/
-Tables  todos
+Tables  todos, todoProjects, todoLabels
 Branch  claude/tool-todo
+Note    The tool has FOUR screens — Overview, Upcoming, Projects,
+        Labels — and they hang off the To-Do entry in the app's own
+        sidebar rather than off a navigation pane of the tool's own.
+        That means the todo tool's shape is expressed in
+        components/navItems.ts (TODO_CHILDREN), which belongs to the
+        SHELL. A chat changing which screens exist touches a shell
+        file and therefore runs alone.
 ```
 The DM's prep list, and DM-only in a stronger sense than the rest of
 the app. An NPC has a player-facing shape — the same row with the
@@ -273,6 +282,19 @@ rare exhausted-gap case rewrites the list once rather than leaving two
 items with the same key. Dates are compared as strings — "YYYY-MM-DD"
 sorts in date order, so nothing here builds a Date and nothing here
 has a timezone.
+
+Built after **Vikunja**: projects, labels, priority, favourites, and
+Quick Add Magic — `task tomorrow *label !4 +'Project'` typed in one
+field. The parse is pure and lives in `components/quickAdd.ts`, where
+it is unit-tested at a fixed date and again under two timezones. What
+is deliberately not copied: Vikunja's own navigation pane (this app
+has one), nested projects, Gantt and Kanban, assignees and teams.
+
+Colours are stored as **palette ids**, never as colours: the value ends
+up in a `style`, so what crosses has to be something the client looks
+up. `colorOf()` is that lookup and cannot fail open — an unknown id is
+the default, including `"toString"`, which the obvious `obj[id] ??`
+form returned a function for.
 
 ### shell — App frame, settings, campaigns, auth
 ```

@@ -721,6 +721,65 @@ button {
   cursor: pointer;
 }
 
+/* A row that carries a link AND a caret. Two controls, because "show
+   me what is in here" and "take me to the front of it" are different
+   questions — one target for both means you cannot look without going.
+   The link takes the width so the caret sits hard against the edge and
+   the rows without one still line up. */
+.nav-row {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.nav-row .nav-item {
+  min-width: 0;
+}
+
+.nav-caret {
+  flex: none;
+  display: grid;
+  place-items: center;
+  /* Wider than the arrow inside it. A caret is a small target on a
+     row you are aiming at with a mouse in a dim room, and the tuning
+     that fixed the section headings was hit area, not size. */
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.nav-caret:hover {
+  background: var(--bg-raised);
+  color: var(--text);
+}
+
+.nav-caret.open {
+  color: var(--text);
+}
+
+/* The tray. Indented to the width of an icon plus its gap, so a
+   sub-screen's label starts where its parent's label does — the
+   indent is what says "inside", and a guessed one reads as a
+   misalignment. The rule down the left is the same idea drawn. */
+.nav-sub {
+  margin: 1px 0 0.15rem 0.95rem;
+  padding-left: 0.45rem;
+  border-left: 1px solid var(--border);
+}
+
+.nav-sub .nav-item {
+  font-size: 0.72rem;
+  padding-top: 0.32rem;
+  padding-bottom: 0.32rem;
+}
+
 .nav-icon {
   width: 1.1rem;
   text-align: center;
@@ -777,7 +836,11 @@ button {
 .nav-collapsed .nav-group-title,
 .nav-collapsed .soon,
 .nav-collapsed .nav-campaign,
-.nav-collapsed .view-as {
+.nav-collapsed .view-as,
+/* The caret is not rendered on a rail at all — AppShell withholds the
+   handler — but the rule stays so a stray one could never widen the
+   rail past the icon it is meant to be. */
+.nav-collapsed .nav-caret {
   display: none;
 }
 
@@ -1836,6 +1899,16 @@ body.col-resizing {
   .sidebar .nav-list {
     grid-auto-flow: column;
     grid-auto-columns: max-content;
+  }
+
+  /* The sidebar is a top strip at this width, so a tool's sub-screens
+     join it inline. The indent and the rule down the left say "inside"
+     in a column and say nothing in a row — worse than nothing, since
+     the rule then reads as a divider between two unrelated items. */
+  .sidebar .nav-sub {
+    margin: 0;
+    padding-left: 0;
+    border-left: none;
   }
 
   .sidebar-footer {
@@ -8931,7 +9004,10 @@ button.cal-day:hover {
   gap: 0.6rem;
   flex: 1;
   min-height: 0;
-  max-width: 46rem;
+  /* Wider than the 46rem the flat checklist used. A row carries its
+     labels, its project and its priority now, and at the old width the
+     chips wrapped onto a second line on every task that had two. */
+  max-width: 56rem;
   width: 100%;
 }
 
@@ -8989,14 +9065,20 @@ button.cal-day:hover {
   min-height: 0;
 }
 
+/* The item is a COLUMN now — the row, and the details panel that folds
+   out under it. The row itself is what used to be the item. */
 .todo-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.55rem;
+  display: grid;
   padding: 0.5rem 0.6rem;
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: 10px;
+}
+
+.todo-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
 }
 
 /* The item under the cursor during a drag. Held at half opacity rather
@@ -9145,6 +9227,397 @@ button.cal-day:hover {
   color: var(--bloodied);
 }
 
+/* ---------- To-Do: the Vikunja shape ----------
+   Quick-add's reading, projects, labels, priority, and the two screens
+   that manage them. */
+
+.todo-add-wrap {
+  display: grid;
+  gap: 0.3rem;
+}
+
+/* What the field understood, before you commit it. Quick Add Magic
+   eats words out of the middle of a sentence — "buy the tomorrow
+   paper" loses one to a date — and showing the reading is the only
+   honest answer to a syntax that does that. */
+.todo-parse {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0 0.2rem;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.todo-parse-text {
+  color: var(--text);
+}
+
+.todo-chip {
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-inset);
+  font-size: 0.72rem;
+}
+
+.todo-chip.due {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.todo-chip.pri {
+  border-color: var(--bloodied);
+  color: var(--bloodied);
+}
+
+/* A `+name` that matches no project. Said rather than silently
+   ignored: the task still lands somewhere, and this is the one moment
+   you would want to know it is not the somewhere you typed. */
+.todo-chip.miss {
+  border-style: dashed;
+  color: var(--bloodied);
+}
+
+/* Only High and above wears one, which is what makes a five-point
+   scale usable — a list where every row has a badge has told you
+   nothing. */
+.todo-pri {
+  flex: none;
+  align-self: center;
+  padding: 0.05rem 0.4rem;
+  border-radius: 5px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.todo-pri.p4,
+.todo-pri.p5 {
+  background: rgba(217, 95, 59, 0.16);
+  color: var(--bloodied);
+}
+
+.todo-label {
+  flex: none;
+  align-self: center;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  /* Dark ink on the palette's colours, which are all mid-tones chosen
+     against this app's ground. White would vanish on the amber. */
+  color: #171310;
+  font-size: 0.68rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* In the picker a label is a toggle, so an unchosen one is the outline
+   of itself rather than a different colour. */
+.todo-label.pick {
+  cursor: pointer;
+  color: var(--text);
+}
+
+.todo-label.pick.on {
+  color: #171310;
+}
+
+.todo-proj {
+  flex: none;
+  align-self: center;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 5px;
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.todo-proj:hover {
+  color: var(--text);
+}
+
+.todo-star,
+.todo-more {
+  flex: none;
+  align-self: center;
+  padding: 0 0.2rem;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.todo-star.on {
+  color: var(--accent);
+}
+
+.todo-star:hover,
+.todo-more:hover,
+.todo-more.on {
+  color: var(--text);
+}
+
+/* The properties, folded away. A prep list with five dropdowns on
+   every row is a form; this is how they are reachable without being
+   in the way. */
+.todo-detail {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.todo-field {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+.todo-field.wide {
+  grid-column: 1 / -1;
+}
+
+.todo-field select,
+.todo-field input,
+.todo-note-edit {
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-inset);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.todo-note-edit {
+  resize: vertical;
+}
+
+.todo-label-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+/* The filter chips. All / starred / overdue — the three questions you
+   actually ask of a prep list, as three buttons rather than a menu. */
+.todo-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.todo-filter {
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.todo-filter:hover {
+  color: var(--text);
+}
+
+.todo-filter.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Upcoming: one heading per day, the late ones gathered above them. */
+.todo-day {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.todo-day-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0.6rem 0 0;
+  font-size: 0.78rem;
+  font-variant: small-caps;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.todo-day-head.late {
+  color: var(--bloodied);
+}
+
+.todo-day-count {
+  font-size: 0.7rem;
+  font-variant: normal;
+  opacity: 0.7;
+}
+
+/* ---------- To-Do: projects and labels ---------- */
+
+.proj-list,
+.label-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.proj-row,
+.label-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.proj-row.dragging {
+  opacity: 0.5;
+}
+
+/* The Inbox is not a row you can edit — it is the tasks with no
+   project, not a project — so it says so by being quieter. */
+.proj-row.inbox,
+.proj-row.archived {
+  background: none;
+}
+
+.proj-color {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+}
+
+.proj-swatch {
+  flex: none;
+  width: 0.85rem;
+  height: 0.85rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: default;
+}
+
+.proj-swatch.as-button {
+  cursor: pointer;
+}
+
+.proj-swatch.on {
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
+}
+
+.proj-palette {
+  position: absolute;
+  top: 1.3rem;
+  left: 0;
+  z-index: 5;
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.35rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+.label-swatches {
+  display: flex;
+  gap: 0.2rem;
+}
+
+.proj-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+/* The house inline-edit treatment: a name reads as a name and becomes
+   a field under the pointer. */
+.proj-name-edit {
+  flex: 1;
+  min-width: 0;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.proj-name-edit:hover {
+  border-color: var(--border);
+  background: var(--bg-inset);
+}
+
+.proj-name-edit:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  background: var(--bg-inset);
+}
+
+.proj-counts {
+  flex: none;
+  display: flex;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.proj-overdue {
+  color: var(--bloodied);
+}
+
+.proj-del.armed {
+  color: var(--bloodied);
+  font-weight: 600;
+}
+
+.proj-archived {
+  margin-top: 0.8rem;
+  display: grid;
+  /* Start, not stretch: a grid item fills its column, and the toggle's
+     text then sits in the middle of the screen looking like a heading
+     rather than beside the list it opens. */
+  justify-items: start;
+  gap: 0.3rem;
+}
+
+.proj-archived .proj-list {
+  width: 100%;
+}
+
+.proj-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 1rem;
+  color: var(--accent);
+  font-variant: small-caps;
+  letter-spacing: 0.06em;
+}
+
 @media (max-width: 700px) {
   .todo-add {
     flex-wrap: wrap;
@@ -9152,5 +9625,16 @@ button.cal-day:hover {
 
   .todo-input {
     flex-basis: 100%;
+  }
+
+  /* The chips wrap under the text rather than squeezing it to nothing.
+     A task you cannot read is worse than a label on the next line. */
+  .todo-row {
+    flex-wrap: wrap;
+  }
+
+  .todo-body {
+    flex-basis: 100%;
+    order: -1;
   }
 }

@@ -572,6 +572,22 @@ export const purgeCampaign = internalMutation({
       .take(left);
     if (await sweep(todos)) return await more();
 
+    // The prep list's two side tables. Swept after the tasks, so a
+    // half-finished purge never leaves tasks pointing at projects and
+    // labels that have gone — the order matters even though the job
+    // resumes, because it can resume minutes later.
+    const todoProjects = await ctx.db
+      .query("todoProjects")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
+      .take(left);
+    if (await sweep(todoProjects)) return await more();
+
+    const todoLabels = await ctx.db
+      .query("todoLabels")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
+      .take(left);
+    if (await sweep(todoLabels)) return await more();
+
     const members = await ctx.db
       .query("campaignMembers")
       .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))

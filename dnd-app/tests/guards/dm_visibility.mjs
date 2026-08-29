@@ -633,7 +633,20 @@ export const dmVisibility = {
         return todo.slice(at, next === -1 ? undefined : next);
       };
 
-      for (const fn of ["listTodos", "addTodo", "reorderTodos", "clearDone"]) {
+      for (const fn of [
+        "listTodos",
+        "addTodo",
+        "reorderTodos",
+        "clearDone",
+        // The Vikunja shape's campaign-addressed functions. Listed by
+        // name rather than swept, so ADDING one to this module is a
+        // deliberate line here — a new mutation that nobody remembered
+        // to gate is exactly the hole a sweep would wave through.
+        "quickAdd",
+        "addProject",
+        "reorderProjects",
+        "addLabel",
+      ]) {
         if (!/await requireDm\(ctx, args\.campaignId\)/.test(fnBody(fn))) {
           problems.push(`todo.${fn} is not gated on requireDm`);
         }
@@ -641,11 +654,40 @@ export const dmVisibility = {
       // The row-addressed ones authorise against the ROW's campaign.
       // Trusting a campaignId in the arguments would make somebody
       // else's todo id plus your own campaign enough to edit theirs.
-      for (const fn of ["setDone", "updateTodo", "deleteTodo"]) {
-        if (!/await ownedTodo\(ctx, args\.todoId\)/.test(fnBody(fn))) {
+      for (const [fn, owner, arg] of [
+        ["setDone", "ownedTodo", "todoId"],
+        ["updateTodo", "ownedTodo", "todoId"],
+        ["deleteTodo", "ownedTodo", "todoId"],
+        ["setFavorite", "ownedTodo", "todoId"],
+        ["updateProject", "ownedProject", "projectId"],
+        ["deleteProject", "ownedProject", "projectId"],
+        ["updateLabel", "ownedLabel", "labelId"],
+        ["deleteLabel", "ownedLabel", "labelId"],
+      ]) {
+        if (
+          !new RegExp(`await ${owner}\\(ctx, args\\.${arg}\\)`).test(fnBody(fn))
+        ) {
           problems.push(
-            `todo.${fn} does not authorise through ownedTodo — a row id is ` +
+            `todo.${fn} does not authorise through ${owner} — a row id is ` +
               "all a caller needs to reach another campaign's list"
+          );
+        }
+      }
+      // The three owners all ask the same question of the row they
+      // fetched. Checked separately from the functions that call them,
+      // because an owner that forgot to requireDm would make every one
+      // of the checks above pass while gating nothing.
+      for (const [owner, table] of [
+        ["ownedProject", "todoProjects"],
+        ["ownedLabel", "todoLabels"],
+      ]) {
+        const at = todo.indexOf(`async function ${owner}(`);
+        if (at === -1) throw new Error(`no ${owner} in convex/todo.ts`);
+        const body = todo.slice(at, todo.indexOf("\n}", at));
+        if (!/await requireDm\(ctx, row\.campaignId\)/.test(body)) {
+          problems.push(
+            `${owner} does not requireDm against the row's own campaign, so ` +
+              `any ${table} id would be enough`
           );
         }
       }

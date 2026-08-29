@@ -114,7 +114,14 @@ export const sidebarValidator = v.object({
       title: v.string(),
       dmOnly: v.optional(v.boolean()),
       collapsed: v.optional(v.boolean()),
-      items: v.array(v.object({ id: v.string(), hidden: v.boolean() })),
+      items: v.array(
+        v.object({
+          id: v.string(),
+          hidden: v.boolean(),
+          /** Open, showing the item's sub-screens. See SidebarItem. */
+          expanded: v.optional(v.boolean()),
+        })
+      ),
     })
   ),
 });

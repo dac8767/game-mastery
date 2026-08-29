@@ -16,6 +16,20 @@ export interface SidebarItem {
   /** A NavItem id from navItems.ts. */
   id: string;
   hidden: boolean;
+  /**
+   * Open, showing the item's own sub-screens beneath it.
+   *
+   * Only meaningful on an item that HAS children; on any other it is a
+   * flag nothing reads. Saved rather than held in component state for
+   * the same reason a section's fold is: walking from one screen to
+   * another remounts the whole shell, so a useState would snap shut on
+   * every click of the thing it just opened.
+   *
+   * Optional and absent-means-shut, because it is the rarer state and
+   * because a validator that demanded it would reject every sidebar
+   * saved before sub-items existed.
+   */
+  expanded?: boolean;
 }
 
 export interface SidebarSection {
@@ -239,6 +253,43 @@ export function toggleSectionCollapsed(
 ): SidebarLayout {
   const section = layout.sections.find((s) => s.id === id);
   return setSectionCollapsed(layout, id, !section?.collapsed);
+}
+
+/**
+ * Open or shut one item's sub-screens.
+ *
+ * `expanded` is deleted rather than set to false, so a shut item is
+ * byte-identical to one nobody has ever opened. Two spellings of the
+ * same state is how a "did they change anything" comparison starts
+ * answering yes for no reason.
+ */
+export function setItemExpanded(
+  layout: SidebarLayout,
+  id: string,
+  expanded: boolean
+): SidebarLayout {
+  return {
+    sections: layout.sections.map((s) => ({
+      ...s,
+      items: s.items.map((i) => {
+        if (i.id !== id) return i;
+        const next: SidebarItem = { ...i };
+        if (expanded) next.expanded = true;
+        else delete next.expanded;
+        return next;
+      }),
+    })),
+  };
+}
+
+export function toggleItemExpanded(
+  layout: SidebarLayout,
+  id: string
+): SidebarLayout {
+  const item = layout.sections
+    .flatMap((s) => s.items)
+    .find((i) => i.id === id);
+  return setItemExpanded(layout, id, !item?.expanded);
 }
 
 export function toggleHidden(

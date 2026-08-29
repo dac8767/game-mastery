@@ -273,3 +273,125 @@ export function normalizeLinks(
 export function safeHref(raw: string): string | null {
   return safeBoxHref(raw);
 }
+
+/* ---------------------------------------------------------------- */
+/* Projects, labels and priority — the Vikunja shape                  */
+/* ---------------------------------------------------------------- */
+
+/**
+ * The colours a project or a label may be, by NAME.
+ *
+ * A palette rather than a colour picker, and an id rather than a hex
+ * string, for two reasons that both matter. The design one: eight
+ * colours chosen against this app's dark ground stay a set, and a free
+ * picker produces one label nobody can read on the third try. The other
+ * one: the stored value ends up in a `style`, so it has to be something
+ * the client looks UP — an arbitrary string in that position is a hole
+ * with a CSS shape, and "it came from our own database" is exactly the
+ * assurance that stops being true the first time a tool writes to it.
+ */
+export const TODO_COLORS: Record<string, string> = {
+  amber: "#c9a227",
+  rust: "#c2683c",
+  blood: "#b1493f",
+  plum: "#8f5f9e",
+  ink: "#5a6fa8",
+  teal: "#3f8f89",
+  sage: "#6f9455",
+  stone: "#8a8175",
+};
+
+export const TODO_COLOR_IDS = Object.keys(TODO_COLORS);
+
+/** The default. First, not random: a new label should look decided. */
+export const DEFAULT_COLOR = "stone";
+
+/**
+ * The hex for a palette id, or the default's.
+ *
+ * Never throws and never returns the id it was given. A row written
+ * before a colour was removed from the palette, or by something that
+ * guessed, renders in the default rather than putting an unknown
+ * string into a style attribute.
+ */
+export function colorOf(id: string | null | undefined): string {
+  // Through isColorId, NOT `TODO_COLORS[id] ?? default`. That form
+  // reaches Object.prototype, so colorOf("toString") returned a
+  // FUNCTION — truthy, so the ?? never fired — and React would have
+  // stringified it into the style attribute. Its own unit check found
+  // this; nothing else would have.
+  return isColorId(id)
+    ? TODO_COLORS[id as string]
+    : TODO_COLORS[DEFAULT_COLOR];
+}
+
+/** True for a palette id this app actually has. */
+export function isColorId(id: unknown): boolean {
+  // hasOwnProperty through Object.prototype rather than Object.hasOwn:
+  // the Convex tsconfig's lib is ES2021 and does not have the latter.
+  // Own properties only, so "toString" is not a colour.
+  return (
+    typeof id === "string" &&
+    Object.prototype.hasOwnProperty.call(TODO_COLORS, id)
+  );
+}
+
+/**
+ * Vikunja's priority scale, and its rule about showing it.
+ *
+ * 1–5 with 0/absent meaning unset. Only HIGH and above is drawn on a
+ * row, which is the whole point of a five-point scale you can ignore:
+ * a list where every item wears a badge has told you nothing, and the
+ * two that are actually urgent are the two worth marking.
+ */
+export const PRIORITY_LABELS: Record<number, string> = {
+  1: "Low",
+  2: "Medium",
+  3: "High",
+  4: "Urgent",
+  5: "DO NOW",
+};
+
+export const PRIORITY_MIN = 1;
+export const PRIORITY_MAX = 5;
+/** At or above this, the row says so. Below it, the field is private. */
+export const PRIORITY_SHOWN = 3;
+
+/** A priority as stored: 1–5, or undefined for unset. */
+export function cleanPriority(value: unknown): number | undefined {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n) || n < PRIORITY_MIN || n > PRIORITY_MAX) {
+    return undefined;
+  }
+  return n;
+}
+
+/** Shown on the row? Vikunja's rule, in one place. */
+export function showsPriority(priority: number | null | undefined): boolean {
+  return typeof priority === "number" && priority >= PRIORITY_SHOWN;
+}
+
+/** A project or label name, trimmed to something a chip can hold. */
+export const MAX_TITLE = 60;
+/** More than this and the sidebar is a filing system, not a prep list. */
+export const MAX_PROJECTS = 40;
+export const MAX_LABELS = 60;
+/** Past this a task is a category. Vikunja caps nothing; a row does. */
+export const MAX_TASK_LABELS = 8;
+
+export function cleanTitle(raw: string): string {
+  return raw.replace(/\s+/g, " ").trim().slice(0, MAX_TITLE);
+}
+
+/**
+ * Matching a name the way a person means it.
+ *
+ * Quick-add resolves "*Combat" against a label called "combat", and a
+ * second label differing only in case is not a second label. Case and
+ * runs of whitespace are the two ways the same name gets typed
+ * differently; nothing else is folded, because "NPCs" and "NPC" ARE
+ * two labels.
+ */
+export function nameKey(raw: string): string {
+  return raw.replace(/\s+/g, " ").trim().toLowerCase();
+}

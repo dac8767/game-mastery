@@ -579,7 +579,17 @@ export default defineSchema({
             dmOnly: v.optional(v.boolean()),
             collapsed: v.optional(v.boolean()),
             items: v.array(
-              v.object({ id: v.string(), hidden: v.boolean() })
+              v.object({
+                id: v.string(),
+                hidden: v.boolean(),
+                /**
+                 * Open, showing this item's own sub-screens beneath
+                 * it. Optional for the same reason the two above are:
+                 * a sidebar saved before sub-items existed has no
+                 * opinion, and a required field would reject it.
+                 */
+                expanded: v.optional(v.boolean()),
+              })
             ),
           })
         ),
@@ -1391,5 +1401,85 @@ export default defineSchema({
         v.object({ tool: v.string(), label: v.string(), href: v.string() })
       )
     ),
+
+    /* ---- the Vikunja shape ------------------------------------------
+     *
+     * Four fields, all optional, all absent on every item written
+     * before them. That is the design rather than an accident of
+     * migration: a prep list has to work when you have filed nothing,
+     * labelled nothing and set no priorities, because that is what the
+     * first twenty seconds with it look like.
+     */
+
+    /**
+     * Which project it is filed under. Absent is the Inbox — Vikunja
+     * makes that a real project you cannot delete; here it is simply
+     * the items that have no projectId, which cannot get out of step
+     * with itself the way a magic row can.
+     */
+    projectId: v.optional(v.id("todoProjects")),
+    /**
+     * 1–5, Vikunja's scale: Low, Medium, High, Urgent, DO NOW. Absent
+     * is "unset", which is not the same as Low — most tasks have no
+     * priority and a list where everything is Low says nothing.
+     *
+     * Only High and above is drawn, which is Vikunja's rule too.
+     */
+    priority: v.optional(v.number()),
+    /** Labels, by id. Cleaned server-side against this campaign's own. */
+    labelIds: v.optional(v.array(v.id("todoLabels"))),
+    /** Starred. Vikunja's Favorites pseudo-project, as a flag. */
+    favorite: v.optional(v.boolean()),
+  })
+    .index("by_campaign", ["campaignId"])
+    // Reading one project's list without reading the campaign's whole
+    // list and throwing most of it away.
+    .index("by_project", ["projectId"]),
+
+  /**
+   * A project: one list of tasks inside the campaign's prep.
+   *
+   * Vikunja's top-level container, and the reason the tool needs a
+   * navigation of its own — "Session prep", "Worldbuilding", "Between
+   * sessions" are different lists that want reading separately.
+   *
+   * Deliberately FLAT. Vikunja nests projects inside projects, which
+   * earns its keep for a team tracking a product and costs a DM a tree
+   * to maintain instead of a list to read.
+   */
+  todoProjects: defineTable({
+    campaignId: v.id("campaigns"),
+    title: v.string(),
+    /**
+     * A palette id — "amber", "sage" — never a colour. The client puts
+     * this into a style, so what is stored has to be something the
+     * client LOOKS UP rather than something it passes through; an
+     * arbitrary string in that position is a hole with a CSS shape.
+     * components/todoModel.ts owns the palette and the server checks
+     * against it.
+     */
+    color: v.optional(v.string()),
+    order: v.number(),
+    /**
+     * Out of the way without being gone. A campaign arc that finished
+     * is not a project you want to delete — its tasks are the record
+     * of what you prepared — and it is not one you want in the sidebar
+     * either.
+     */
+    archived: v.optional(v.boolean()),
+  }).index("by_campaign", ["campaignId"]),
+
+  /**
+   * A label. Vikunja's cross-cutting tag: "combat", "handout", "buy".
+   *
+   * Separate from projects because they answer different questions —
+   * a project is WHICH LIST, a label is WHAT KIND — and a task has one
+   * of the first and any number of the second.
+   */
+  todoLabels: defineTable({
+    campaignId: v.id("campaigns"),
+    title: v.string(),
+    /** A palette id, checked server-side. See todoProjects.color. */
+    color: v.string(),
   }).index("by_campaign", ["campaignId"]),
 });

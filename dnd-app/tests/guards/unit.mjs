@@ -7374,6 +7374,277 @@ export const unit = {
       );
     }
 
+    // ---- Quick Add Magic --------------------------------------------
+    //
+    // Vikunja's one genuinely great idea, and the piece of this tool
+    // most worth testing: it reads a sentence and decides which words
+    // are the task and which are its properties. Every way it is wrong
+    // is silent — a task loses a word to a date it did not mean, or
+    // gains a due date a week off, and neither throws.
+    //
+    // `today` is an ARGUMENT, so all of this is testable at any date.
+    {
+      const qa = await import(
+        pathToFileURL(join(compile("components/quickAdd.ts"), "quickAdd.js"))
+          .href
+      );
+      // A Saturday, chosen so the weekend and the weekday rules are
+      // both exercised at an edge rather than in the middle of a week.
+      const SAT = "2026-08-29";
+
+      const parse = (line, today = SAT) => qa.parseQuickAdd(line, today);
+
+      check(
+        "the tokens come off and the task is what is left",
+        (() => {
+          const r = parse("statblock for the lich tomorrow *combat !4");
+          return (
+            r.text === "statblock for the lich" &&
+            r.due === "2026-08-30" &&
+            r.priority === 4 &&
+            r.labels.join() === "combat"
+          );
+        })()
+      );
+      check(
+        "a quoted name keeps its spaces",
+        (() => {
+          const r = parse("map the sewers *'boss fight' +'Between sessions'");
+          return (
+            r.text === "map the sewers" &&
+            r.labels.join() === "boss fight" &&
+            r.project === "Between sessions"
+          );
+        })()
+      );
+      // A bare token ends at the first space. Documented, and the
+      // reason the field shows what it understood.
+      check(
+        "an unquoted project takes one word",
+        parse("prep +Session prep").project === "Session"
+      );
+      check(
+        "the same label twice is one label",
+        parse("thing *prep *PREP *Prep").labels.length === 1
+      );
+
+      // ---- dates -----------------------------------------------
+      const due = (line, today = SAT) => parse(line, today).due;
+      check("today", due("x today") === SAT);
+      check("tomorrow", due("x tomorrow") === "2026-08-30");
+      check("in N days", due("x in 3 days") === "2026-09-01");
+      check("in N weeks", due("x in 2 weeks") === "2026-09-12");
+      check("in N months", due("x in 1 month") === "2026-09-29");
+      check("next week", due("x next week") === "2026-09-05");
+      check("next month", due("x next month") === "2026-09-29");
+      check("end of month", due("x end of month") === "2026-08-31");
+      check("an explicit date", due("x 2026-12-01") === "2026-12-01");
+      check("a month and a day", due("x sep 3") === "2026-09-03");
+      check("a day and a month", due("x 3 sep") === "2026-09-03");
+      check("an ordinal", due("x sept 3rd") === "2026-09-03");
+      // Rolling forward is the only useful reading: nobody schedules
+      // prep for a date that has already gone.
+      check(
+        "a month already past means next year",
+        due("x feb 3") === "2027-02-03"
+      );
+      // Strictly after. Typed on a Saturday, "saturday" is the one
+      // coming — you would have typed "today" for this one.
+      check("a weekday is the NEXT one", due("x saturday") === "2026-09-05");
+      check("next monday", due("x next monday") === "2026-08-31");
+      check("a three-letter weekday", due("x tue") === "2026-09-01");
+      check("this weekend on a Saturday is today", due("x this weekend") === SAT);
+      check(
+        "this weekend on a Wednesday is Saturday",
+        due("x this weekend", "2026-08-26") === "2026-08-29"
+      );
+
+      // The first date wins, and only the first is eaten.
+      check(
+        "two dates in a line leave the second as prose",
+        (() => {
+          const r = parse("book today for tomorrow");
+          return r.due === SAT && r.text === "book for tomorrow";
+        })()
+      );
+
+      // ---- what must NOT be eaten -------------------------------
+      check(
+        "an asterisk inside a word is not a label",
+        (() => {
+          const r = parse("roll 5*d6 damage");
+          return r.labels.length === 0 && r.text === "roll 5*d6 damage";
+        })()
+      );
+      check(
+        "a bang that is not a priority stays in the text",
+        (() => {
+          const r = parse("call about !soon thing");
+          return r.priority === null && r.text.includes("!soon");
+        })()
+      );
+      check(
+        "a priority outside 1-5 is not a priority",
+        parse("x !9").priority === null && parse("x !0").priority === null
+      );
+      // A label called *friday must not become a due date. Tokens are
+      // taken out BEFORE the prose is searched, which is what makes
+      // this hold.
+      check(
+        "a date word inside a label stays a label",
+        (() => {
+          const r = parse("do the thing *friday");
+          return r.due === null && r.labels.join() === "friday";
+        })()
+      );
+      // Numeric day/month is ambiguous and is deliberately not read.
+      // 3/9 is two different days depending on where you live, and a
+      // task silently due six months late is the worst kind of wrong.
+      check(
+        "a slashed numeric date is left alone",
+        (() => {
+          const r = parse("session 3/9");
+          return r.due === null && r.text === "session 3/9";
+        })()
+      );
+      check(
+        "an impossible explicit date is not a date",
+        parse("x 2026-02-30").due === null
+      );
+      // And the same through the month-name path, which is a different
+      // guard: monthDay builds the string and has to reject it before
+      // it ever becomes a due date.
+      check(
+        "an impossible month and day is left as prose",
+        (() => {
+          const r = parse("x feb 30");
+          return r.due === null && r.text === "x feb 30";
+        })()
+      );
+      check(
+        "the 29th of February lands on a leap year",
+        due("x feb 29", "2027-06-01") === "2028-02-29"
+      );
+
+      // ---- the arithmetic underneath ----------------------------
+      // Clamping, not rolling over: a Date rolls the 31st of January
+      // into the 3rd of March, which is a month later by nobody's
+      // reckoning.
+      check(
+        "a month after the 31st clamps to the short month",
+        qa.addMonths("2026-01-31", 1) === "2026-02-28"
+      );
+      check(
+        "and does it in a leap year too",
+        qa.addMonths("2028-01-31", 1) === "2028-02-29"
+      );
+      check(
+        "months cross a year end",
+        qa.addMonths("2026-11-30", 2) === "2027-01-30"
+      );
+      check("end of a 30-day month", qa.endOfMonth("2026-09-14") === "2026-09-30");
+      check("end of February", qa.endOfMonth("2026-02-01") === "2026-02-28");
+      check(
+        "the next weekday is never today",
+        qa.nextWeekday(SAT, 6) === "2026-09-05"
+      );
+
+      // And the same, outside UTC. The sandbox this runs in is UTC, so
+      // a `new Date()` that slipped into the parsing path would be
+      // invisible here and land on whoever is running the app —
+      // exactly the failure the todoModel dates section above was
+      // written for, one module along.
+      check(
+        "quick-add's dates hold up outside UTC, in both directions",
+        (() => {
+          const dir = compile("components/quickAdd.ts");
+          const url = pathToFileURL(join(dir, "quickAdd.js")).href;
+          const script = `
+            const qa = await import(${JSON.stringify(url)});
+            const fail = (m) => { console.log("FAIL " + m); process.exitCode = 1; };
+            const at = (l) => qa.parseQuickAdd(l, "2026-08-29").due;
+            if (at("x tomorrow") !== "2026-08-30") fail("tomorrow in " + process.env.TZ);
+            if (at("x next week") !== "2026-09-05") fail("next week in " + process.env.TZ);
+            if (at("x tue") !== "2026-09-01") fail("weekday in " + process.env.TZ);
+            if (at("x sep 3") !== "2026-09-03") fail("month day in " + process.env.TZ);
+            if (at("x end of month") !== "2026-08-31") fail("end of month in " + process.env.TZ);
+            if (qa.addMonths("2026-01-31", 1) !== "2026-02-28") fail("addMonths in " + process.env.TZ);
+            if (qa.dayOfWeek("2026-08-29") !== 6) fail("dayOfWeek in " + process.env.TZ);
+          `;
+          for (const tz of ["America/New_York", "Asia/Tokyo"]) {
+            const r = spawnSync(
+              process.execPath,
+              ["--input-type=module", "-e", script],
+              { env: { ...process.env, TZ: tz }, encoding: "utf8" }
+            );
+            if (r.status !== 0) return false;
+          }
+          return true;
+        })()
+      );
+    }
+
+    // ---- the To-Do palette and priority ------------------------------
+    // What is stored is a palette ID and what is drawn is a colour, and
+    // the crossing has to be a lookup that cannot fail open.
+    {
+      const td = await import(
+        pathToFileURL(join(compile("components/todoModel.ts"), "todoModel.js"))
+          .href
+      );
+      check(
+        "a known id is its colour",
+        td.colorOf("amber") === td.TODO_COLORS.amber
+      );
+      // Never returns what it was given, and never throws: a row
+      // written before a colour left the palette must render as
+      // something rather than putting an unknown string into a style.
+      for (const bad of [
+        "javascript:alert(1)",
+        "red; background:url(x)",
+        "",
+        null,
+        undefined,
+        "toString",
+        "__proto__",
+      ]) {
+        check(
+          `an unusable colour id (${JSON.stringify(bad)}) falls back`,
+          td.colorOf(bad) === td.TODO_COLORS[td.DEFAULT_COLOR] &&
+            !td.isColorId(bad)
+        );
+      }
+      check("every palette id is one", td.TODO_COLOR_IDS.every(td.isColorId));
+
+      check(
+        "a priority outside the scale is unset",
+        td.cleanPriority(0) === undefined &&
+          td.cleanPriority(6) === undefined &&
+          td.cleanPriority("x") === undefined &&
+          td.cleanPriority(null) === undefined
+      );
+      check("and inside it is itself", td.cleanPriority(3) === 3);
+      check("a decimal rounds into the scale", td.cleanPriority(3.4) === 3);
+      // Vikunja's rule: only High and above is drawn. A list where
+      // every row wears a badge has told you nothing.
+      check(
+        "only high and above shows",
+        !td.showsPriority(2) &&
+          td.showsPriority(3) &&
+          td.showsPriority(5) &&
+          !td.showsPriority(null) &&
+          !td.showsPriority(undefined)
+      );
+      check(
+        "a name matches past case and spacing",
+        td.nameKey("  Boss   Fight ") === td.nameKey("boss fight")
+      );
+      check(
+        "but not past a real difference",
+        td.nameKey("NPCs") !== td.nameKey("NPC")
+      );
+    }
+
     // ---- the Moonbrook session import holds to its sources ----------
     // The records in scripts/import-moonbrook-sessions.mjs were merged
     // from the OneNote session pages and the Discord scheduling

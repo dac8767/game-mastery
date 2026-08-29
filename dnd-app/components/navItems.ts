@@ -41,6 +41,24 @@ export type NavItem = {
    * (campaign.dmId === userId) and is enforced server-side, per screen.
    */
   dmOnly?: boolean;
+  /**
+   * The screens INSIDE this one, shown under a caret in the sidebar.
+   *
+   * For a tool big enough to have sections of its own. The alternative
+   * is what every such tool does by default — a second navigation pane
+   * down the left of its own screen — which means two navigation
+   * columns on screen at once, each unaware of the other, and the app's
+   * own one reduced to a bookmark you click before the real navigating
+   * starts.
+   *
+   * A child is an ordinary destination: it has a slug, the ribbon can
+   * address it by id, and the same "no slug means not built" rule
+   * applies. What it is NOT is separately arrangeable — children move
+   * and hide with their parent, which is why ALL_NAV_ITEMS (what the
+   * sidebar designer arranges) stays flat and only NAV_ITEM_BY_ID and
+   * NAV_DESTINATIONS see through to them.
+   */
+  children?: NavItem[];
 };
 
 /** The campaign's own page — the live table. */
@@ -66,6 +84,36 @@ export const CAMPAIGN_ITEMS: NavItem[] = [
   { id: "calendar", label: "World Calendar", icon: "◷", art: "calendar", slug: "calendar" },
 ];
 
+/**
+ * The To-Do tool's own sections, under its caret in the sidebar.
+ *
+ * Modelled on Vikunja, which is the tool this one is built after: its
+ * left pane is Overview, Upcoming, Projects and Labels, and those are
+ * the four places a task list actually has. What is deliberately NOT
+ * copied is the pane itself — Vikunja's would be a second navigation
+ * column beside this app's own, so its contents live here instead.
+ *
+ * The parent To-Do link IS the Overview, which is why there is no
+ * fifth entry for it. Vikunja has a separate Home row because its
+ * "Vikunja" wordmark is not a link; ours is.
+ *
+ * Not `export`ed, and that is load-bearing rather than tidiness: the
+ * integrity guard requires every exported `NavItem[]` to be a sidebar
+ * SECTION named in SIDEBAR_GROUPS. These are the inside of one item,
+ * not a section, and exporting them would either fail that check or
+ * force an exception into it.
+ */
+const TODO_CHILDREN: NavItem[] = [
+  // Everything with a date on it, grouped by when. Vikunja's second row.
+  { id: "todo-upcoming", label: "Upcoming", icon: "◷", slug: "todo/upcoming", dmOnly: true },
+  // The projects themselves. Vikunja lists each one in the sidebar and
+  // nests them; this is one screen that lists them, because the
+  // sidebar's contents are a static module here — read by the ribbon
+  // and by the guards, neither of which runs React or can call a query.
+  { id: "todo-projects", label: "Projects", icon: "▦", slug: "todo/projects", dmOnly: true },
+  { id: "todo-labels", label: "Labels", icon: "◆", slug: "todo/labels", dmOnly: true },
+];
+
 export const TOOL_ITEMS: NavItem[] = [
   { id: "chat", label: "Chat", icon: "◌", art: "speech", slug: "chat" },
   { id: "dice", label: "Dice Roller", icon: "⚄", art: "d20" },
@@ -84,7 +132,7 @@ export const TOOL_ITEMS: NavItem[] = [
   // caller rather than shaping the rows, since a prep list has no
   // player-facing version. The flag hides the link; the server is what
   // enforces it.
-  { id: "todo", label: "To-Do", icon: "☑", slug: "todo", dmOnly: true },
+  { id: "todo", label: "To-Do", icon: "☑", slug: "todo", dmOnly: true, children: TODO_CHILDREN },
 ];
 
 /**
@@ -125,7 +173,18 @@ export const SETTINGS_ITEM: NavItem = {
   slug: "settings",
 };
 
-/** Everything that exists today — the ribbon's `t:` registry. */
+/** An item and everything nested inside it, depth first. */
+function withChildren(item: NavItem): NavItem[] {
+  return [item, ...(item.children ?? []).flatMap(withChildren)];
+}
+
+/**
+ * Everything that exists today — the ribbon's `t:` registry.
+ *
+ * Children included: a sub-screen is a real destination, so a ribbon
+ * button may point at one. It is only the sidebar DESIGNER that treats
+ * a parent as indivisible.
+ */
 export const NAV_DESTINATIONS: NavItem[] = [
   TABLE_ITEM,
   ...CAMPAIGN_ITEMS,
@@ -133,7 +192,9 @@ export const NAV_DESTINATIONS: NavItem[] = [
   ...LOOKUP_ITEMS,
   ...ASSET_ITEMS,
   SETTINGS_ITEM,
-].filter((i) => i.slug !== undefined);
+]
+  .flatMap(withChildren)
+  .filter((i) => i.slug !== undefined);
 
 /** Where an item points, given the campaign's base path. */
 export function navHref(item: NavItem, base: string): string {
@@ -187,4 +248,15 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   ...ASSET_ITEMS,
 ];
 
-export const NAV_ITEM_BY_ID = new Map(ALL_NAV_ITEMS.map((i) => [i.id, i]));
+/**
+ * Every item by id, children included.
+ *
+ * Flattened, unlike ALL_NAV_ITEMS above: this is the lookup table, and
+ * anything that resolves an id — a To-Do item's source chip, a ribbon
+ * token — has to find a sub-screen as readily as a top-level one. The
+ * list the sidebar ARRANGES stays flat, because a child is not
+ * separately arrangeable.
+ */
+export const NAV_ITEM_BY_ID = new Map(
+  ALL_NAV_ITEMS.flatMap(withChildren).map((i) => [i.id, i])
+);
