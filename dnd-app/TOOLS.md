@@ -52,6 +52,31 @@ Tables  messages
 Branch  claude/tool-chat
 ```
 
+### dice — Dice Roller
+```
+Owns    components/DiceRoller.tsx, components/diceModel.ts
+        convex/dice.ts
+        app/campaign/[campaignId]/dice/
+Tables  diceRolls
+Branch  claude/tool-dice
+```
+The dice are thrown in `convex/dice.ts` and nowhere else. The client
+parses the notation to say what the box MEANS and to grey out a typo;
+it never produces a face. A mutation that accepted a total would be a
+mutation that accepted a natural 20 every time.
+
+A secret roll is filtered on the way OUT of `listRolls`, not hidden in
+the UI — same rule as a dmOnly channel. A player must not learn that
+the DM rolled at all.
+
+`critOfDice` is the one answer to "is this a crit", used by both the
+log (reading a stored row) and a fresh throw. Two implementations
+would drift, and that one is on screen when people cheer.
+
+Open: dddice for 3D dice. `IDiceRoll.value` lets an external RNG set
+the face, so Convex stays authoritative and dddice only draws. Secret
+rolls would not be sent to it at all.
+
 ### combat — Combat Tracker
 ```
 Owns    components/CombatPanel.tsx
@@ -297,15 +322,6 @@ inside `UiEditor.tsx` and `uiRegistry.ts`, or runs alone. Adding
 
 Entries exist so the boundary is settled before the work starts. A chat
 told to build one of these already knows which files are its own.
-
-### dice — Dice Roller
-```
-Will own  components/DiceRoller.tsx, components/diceModel.ts
-          convex/dice.ts (if it needs one)
-          app/campaign/[campaignId]/dice/
-Branch    claude/tool-dice
-Status    Nav entry exists, marked SOON. No component.
-```
 
 ### shops — Shops
 ```
