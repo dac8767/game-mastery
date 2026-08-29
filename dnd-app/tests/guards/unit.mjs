@@ -7645,6 +7645,616 @@ export const unit = {
       );
     }
 
+    // ---- dice notation ---------------------------------------------
+    // A dice roller fails quietly by definition: nobody at the table
+    // can tell a keep-highest that kept the lowest, a modifier that
+    // was dropped, or a d100 that can come up 0, from bad luck. The
+    // random source is injected so every one of those is decidable
+    // here rather than after somebody rolls a character.
+    {
+      const dice = await import(
+        pathToFileURL(join(compile("components/diceModel.ts"), "diceModel.js"))
+          .href
+      );
+      /** A fixed sequence, looping. Feeds exact faces to the roller. */
+      const seq = (...fracs) => {
+        let i = 0;
+        return () => fracs[i++ % fracs.length];
+      };
+      /** Faces 1..sides, as the fractions that produce them. */
+      const face = (n, sides) => (n - 1) / sides + 1 / (sides * 2);
+
+      check(
+        "a bare d20 is one die, not zero",
+        (() => {
+          const p = dice.parseRoll("d20");
+          return (
+            p?.terms.length === 1 &&
+            p.terms[0].kind === "dice" &&
+            p.terms[0].count === 1 &&
+            p.terms[0].sides === 20
+          );
+        })()
+      );
+
+      // The one that is invisible when wrong. 4d6kh3 on faces
+      // 2,5,3,6 must drop the 2 — keeping the LOWEST three is the
+      // same arithmetic shape and gives stats nobody questions.
+      check(
+        "keep-highest drops the lowest die and only that one",
+        (() => {
+          const r = dice.roll(
+            "4d6kh3",
+            seq(face(2, 6), face(5, 6), face(3, 6), face(6, 6))
+          );
+          const d = dice.allDice(r);
+          return (
+            r.total === 14 &&
+            d.length === 4 &&
+            d.map((x) => x.value).join() === "2,5,3,6" &&
+            d.filter((x) => !x.kept).map((x) => x.value).join() === "2"
+          );
+        })()
+      );
+      check(
+        "keep-lowest is disadvantage, not advantage under another name",
+        (() => {
+          const adv = dice.roll("2d20kh1", seq(face(4, 20), face(17, 20)));
+          const dis = dice.roll("2d20kl1", seq(face(4, 20), face(17, 20)));
+          return adv.total === 17 && dis.total === 4;
+        })()
+      );
+      // The dropped die stays in the record. Half the pleasure of a
+      // stat roll is seeing the 2 you threw away, and the log renders
+      // what is here.
+      check(
+        "a dropped die is kept in the result, just not in the total",
+        dice.allDice(dice.roll("2d20kh1", seq(face(4, 20), face(17, 20))))
+          .length === 2
+      );
+
+      check(
+        "a negative term subtracts, and terms add up in order",
+        (() => {
+          const r = dice.roll("1d8+1d6-2", seq(face(5, 8), face(4, 6)));
+          return r.total === 7 && r.terms.length === 3;
+        })()
+      );
+      check(
+        "the sign belongs to the dice, not just to flat numbers",
+        dice.roll("1d8-1d6", seq(face(5, 8), face(4, 6))).total === 1
+      );
+
+      // The classic off-by-one at both ends of the random source. A
+      // d100 that can roll 0 or 101 is a bug nobody reports, because
+      // one roll in a hundred looks like a bad memory.
+      check(
+        "no die ever lands off its own faces",
+        (() => {
+          for (const sides of dice.STANDARD_DICE) {
+            const lo = dice.roll(`1d${sides}`, () => 0);
+            const hi = dice.roll(`1d${sides}`, () => 0.999999999);
+            if (lo.total !== 1 || hi.total !== sides) return false;
+          }
+          // And a source that misbehaves outright is clamped rather
+          // than trusted: 1.0 is outside [0, 1) but arrives anyway.
+          return (
+            dice.roll("1d20", () => 1).total === 20 &&
+            dice.roll("1d20", () => -1).total === 1
+          );
+        })()
+      );
+      // The two checks above only sample: the ends of the range and
+      // the middle of each face. This walks EVERY face of every die
+      // and lands just inside both ends of its share of [0, 1), which
+      // is where a shifted or squeezed range shows up — a d100 whose
+      // top face needs a fraction the source cannot produce is a die
+      // that never rolls 100 and never explains why.
+      //
+      // Just inside, not exactly on the boundary: n/sides * sides is
+      // 28.999999999999996 for 29/100, so an exact edge tests the
+      // float unit rather than the arithmetic.
+      check(
+        "every face owns an equal share of the range, end to end",
+        (() => {
+          for (const sides of [4, 6, 20, 100]) {
+            for (let n = 0; n < sides; n++) {
+              const lo = dice.roll(`1d${sides}`, () => (n + 0.001) / sides);
+              const hi = dice.roll(`1d${sides}`, () => (n + 0.999) / sides);
+              if (lo.total !== n + 1 || hi.total !== n + 1) return false;
+            }
+          }
+          return true;
+        })()
+      );
+
+      // Every one of these is a typo somebody will make in the box.
+      // They must come back as null — a thrown error here is an
+      // unhandled rejection in a keystroke handler.
+      check(
+        "nonsense is null rather than a throw or a silent zero",
+        [
+          "",
+          "   ",
+          "d",
+          "d0",
+          "d1",
+          "0d6",
+          "2d6 3",
+          "2d6+",
+          "2d6++3",
+          "4d6kh5",
+          "4d6kh0",
+          "2d6 apples",
+          "abc",
+          "-",
+          "1d2000",
+          "200d6",
+          "1d6+1d6+1d6+1d6+1d6+1d6+1d6+1d6+1d6+1d6+1d6+1d6+1d6",
+        ].every((s) => dice.parseRoll(s) === null)
+      );
+      check(
+        "the things a person actually types all parse",
+        ["d20", "2d6+3", "4d6kh3", "2d20kl1", "1d8+1d6-2", "10", "3D6 + 2"]
+          .every((s) => dice.parseRoll(s) !== null)
+      );
+
+      // What is stored is the normalised string, so it has to parse
+      // back to the same terms. Otherwise re-rolling a logged roll
+      // quietly rolls something else.
+      check(
+        "the stored notation re-parses to the roll it came from",
+        ["d20", " 3D6 + 2 ", "4d6kh3", "1d8+1d6-2", "2d20kl1"].every((s) => {
+          const once = dice.parseRoll(s);
+          const twice = dice.parseRoll(once.notation);
+          return (
+            twice !== null &&
+            twice.notation === once.notation &&
+            JSON.stringify(twice.terms) === JSON.stringify(once.terms)
+          );
+        })
+      );
+      check(
+        "a bare d20 is written back as 1d20",
+        dice.parseRoll("d20").notation === "1d20" &&
+          dice.parseRoll("2d6 + 3").notation === "2d6+3" &&
+          dice.parseRoll("1d8 - 2").notation === "1d8-2"
+      );
+
+      // The crit is what the table reacts to, and it is only a crit
+      // when there is exactly one d20 scoring. A dropped nat 20 on
+      // disadvantage is not a crit, and announcing it as one is worse
+      // than saying nothing.
+      check(
+        "a crit needs one scoring d20 and nothing else",
+        (() => {
+          const nat20 = dice.roll("1d20+5", () => face(20, 20));
+          const nat1 = dice.roll("1d20", () => face(1, 20));
+          const dropped = dice.roll(
+            "2d20kl1",
+            seq(face(20, 20), face(9, 20))
+          );
+          const two = dice.roll("2d20", seq(face(20, 20), face(9, 20)));
+          const notAd20 = dice.roll("1d12", () => face(12, 12));
+          return (
+            dice.critOf(nat20) === "high" &&
+            dice.critOf(nat1) === "low" &&
+            dice.critOf(dropped) === null &&
+            dice.critOf(two) === null &&
+            dice.critOf(notAd20) === null
+          );
+        })()
+      );
+      // Advantage that comes up 20 IS a crit: the 20 is the die that
+      // scored, and the other one was never in play.
+      check(
+        "advantage keeping a natural 20 still crits",
+        dice.critOf(dice.roll("2d20kh1", seq(face(20, 20), face(9, 20)))) ===
+          "high"
+      );
+
+      // The ceilings are what stop one pasted string costing the whole
+      // table a re-send of ten thousand dice.
+      check(
+        "the caps hold across terms, not just within one",
+        dice.parseRoll(`${dice.MAX_DICE}d6`) !== null &&
+          dice.parseRoll(`${dice.MAX_DICE + 1}d6`) === null &&
+          dice.parseRoll(`${dice.MAX_DICE}d6+1d6`) === null
+      );
+      check(
+        "a flat term cannot be arbitrarily large either",
+        dice.parseRoll(`1d6+${dice.MAX_FLAT}`) !== null &&
+          dice.parseRoll(`1d6+${dice.MAX_FLAT + 1}`) === null
+      );
+
+      // ---- the pool builder ----
+      // The tray writes to the same notation string you can type in,
+      // so every one of these is a way the two could silently
+      // disagree about what is in your hand.
+      check(
+        "clicking a die adds one of it, and merges with its own kind",
+        dice.addDie("", 6) === "1d6" &&
+          dice.addDie("1d6", 6) === "2d6" &&
+          dice.addDie("8d6", 6) === "9d6" &&
+          dice.addDie("8d6", 4) === "8d6+1d4" &&
+          dice.addDie("8d6+4d4", 4) === "8d6+5d4"
+      );
+      // Merging into a kept term would change what the keep means:
+      // "4d6kh3" plus a d6 is not "5d6kh3", it is a different roll.
+      check(
+        "a die added to a kept term becomes its own term",
+        dice.addDie("4d6kh3", 6) === "4d6kh3+1d6"
+      );
+      // Dice before the modifier, so the pool reads the way people
+      // write it rather than 8d6+3+4d4.
+      check(
+        "a new die goes in front of the modifier, not after it",
+        dice.addDie("8d6+3", 4) === "8d6+1d4+3"
+      );
+      check(
+        "the ceilings hold, and refuse rather than clamp",
+        dice.addDie(`${dice.MAX_DICE}d6`, 6) === `${dice.MAX_DICE}d6` &&
+          dice.addDie(`${dice.MAX_DICE - 1}d6`, 4) === `${dice.MAX_DICE - 1}d6+1d4`
+      );
+      // Not a die at all is refused. An odd-but-real die is not: the
+      // TRAY only offers the standard seven, but the notation has
+      // always accepted anything with two or more faces, and addDie
+      // must not be the thing that quietly narrows that.
+      check(
+        "a size that is not a die is refused, an unusual one is not",
+        dice.addDie("2d6", 0) === "2d6" &&
+          dice.addDie("2d6", 1) === "2d6" &&
+          dice.addDie("2d6", dice.MAX_SIDES + 1) === "2d6" &&
+          dice.addDie("2d6", 2.5) === "2d6" &&
+          dice.addDie("2d6", 7) === "2d6+1d7"
+      );
+      // A half-typed box is somebody mid-thought, not an error.
+      check(
+        "clicking a die on unreadable text leaves the text alone",
+        dice.addDie("2d6+", 6) === "2d6+" && dice.addDie("gibberish", 6) === "gibberish"
+      );
+
+      check(
+        "the modifier collapses to one term and can go negative",
+        dice.adjustFlat("2d6", 3) === "2d6+3" &&
+          dice.adjustFlat("2d6+3", 2) === "2d6+5" &&
+          dice.adjustFlat("2d6+3", -5) === "2d6-2" &&
+          dice.adjustFlat("2d6-2", -1) === "2d6-3"
+      );
+      // "+0" is a modifier that looks like it is doing something.
+      check(
+        "a modifier nudged back to zero disappears",
+        dice.adjustFlat("2d6+3", -3) === "2d6" &&
+          dice.adjustFlat("2d6-1", 1) === "2d6"
+      );
+      check(
+        "the modifier alone is a roll, and emptying it empties the pool",
+        dice.adjustFlat("", 3) === "3" && dice.adjustFlat("3", -3) === ""
+      );
+      check(
+        "the flat total is readable back out of a notation",
+        dice.flatOf("8d6+4d4+3") === 3 &&
+          dice.flatOf("1d20-2") === -2 &&
+          dice.flatOf("8d6") === 0 &&
+          dice.flatOf("nonsense") === 0
+      );
+      // Switching to Advantage must not eat the +5 you just set.
+      check(
+        "swapping the dice keeps the modifier",
+        dice.adjustFlat("2d20kh1", dice.flatOf("1d20+5")) === "2d20kh1+5"
+      );
+
+      // ---- reading a mixed roll back ----
+      // "8d6+4d4" is twelve faces in one list, and the grouping is
+      // the only thing that says which four were the d4s.
+      check(
+        "the faces group by the term that threw them",
+        (() => {
+          const r = dice.roll("2d6+3d4", seq(face(5, 6), face(2, 6), face(1, 4), face(4, 4), face(3, 4)));
+          const g = dice.groupDice(dice.allDice(r));
+          return (
+            g.length === 2 &&
+            g[0].label === "2d6" &&
+            g[0].subtotal === 7 &&
+            g[1].label === "3d4" &&
+            g[1].subtotal === 8
+          );
+        })()
+      );
+      // Two terms of the SAME die stay two groups — they differ by
+      // their keep, and merging them would show one handful of five.
+      check(
+        "same-sided terms stay apart when they are different terms",
+        (() => {
+          const r = dice.roll("2d6+3d6", seq(face(5, 6), face(2, 6), face(1, 6), face(4, 6), face(3, 6)));
+          return dice.groupDice(dice.allDice(r)).length === 2;
+        })()
+      );
+      // A dropped die belongs to its group but not to its subtotal.
+      check(
+        "a group's subtotal excludes the dice the keep dropped",
+        (() => {
+          const r = dice.roll("4d6kh3", seq(face(2, 6), face(5, 6), face(3, 6), face(6, 6)));
+          const g = dice.groupDice(dice.allDice(r));
+          return g.length === 1 && g[0].dice.length === 4 && g[0].subtotal === 14;
+        })()
+      );
+      // Rows stored before dice carried a term index: falls back to
+      // runs of one size rather than to one undifferentiated row.
+      check(
+        "rows written before term indexes still group by die size",
+        (() => {
+          const old = [
+            { sides: 6, value: 4, kept: true },
+            { sides: 6, value: 2, kept: true },
+            { sides: 4, value: 3, kept: true },
+          ];
+          const g = dice.groupDice(old);
+          return g.length === 2 && g[0].label === "2d6" && g[1].label === "1d4";
+        })()
+      );
+      check("no dice is no groups", dice.groupDice([]).length === 0);
+
+      check(
+        "the one-line description shows dropped dice and the total",
+        dice.describe(dice.roll("2d6+3", seq(face(4, 6), face(5, 6)))) ===
+          "2d6+3 → 4, 5 +3 = 12" &&
+          dice
+            .describe(dice.roll("2d20kh1", seq(face(4, 20), face(17, 20))))
+            .includes("(4)")
+      );
+    }
+
+    // ---- what dddice is asked to draw ------------------------------
+    // The 3D dice are decoration, which is exactly why this needs
+    // testing: our own log shows the right total whatever the canvas
+    // does, so a percentile split into the wrong two dice, or a
+    // dropped die drawn as a counting one, is wrong on the table and
+    // right on the screen beside it. Nobody would file that.
+    {
+      const map = await import(
+        pathToFileURL(join(compile("components/dddiceMap.ts"), "dddiceMap.js"))
+          .href
+      );
+      const die = (sides, value, kept = true) => ({ sides, value, kept });
+
+      check(
+        "an ordinary die goes over as its own mesh and face",
+        (() => {
+          const out = map.toDddiceRoll([die(20, 17), die(6, 4)]);
+          return (
+            out.length === 2 &&
+            out[0].type === "d20" &&
+            out[0].value === 17 &&
+            out[1].type === "d6" &&
+            out[1].value === 4
+          );
+        })()
+      );
+      check(
+        "a dropped die is drawn, and marked as not counting",
+        (() => {
+          const out = map.toDddiceRoll([die(20, 18), die(20, 3, false)]);
+          return (
+            out.length === 2 &&
+            out[0].is_dropped === undefined &&
+            out[1].is_dropped === true
+          );
+        })()
+      );
+
+      // The percentile split. dddice has no d100 mesh — it is a tens
+      // die and a units die — and both ends of the range are where a
+      // reasonable-looking `v % 10` goes wrong.
+      check(
+        "a d100 splits into a tens and a units die that sum back",
+        (() => {
+          for (let v = 1; v <= 100; v++) {
+            const { tens, ones } = map.splitPercentile(v);
+            if (tens + ones !== v) return false;
+            // The units die has faces 1-10, never 0. The tens die has
+            // 0, 10 … 90, never 100.
+            if (ones < 1 || ones > 10) return false;
+            if (tens < 0 || tens > 90 || tens % 10 !== 0) return false;
+          }
+          return true;
+        })()
+      );
+      check(
+        "the awkward percentile cases land where a table would read them",
+        (() => {
+          const eq = (v, t, o) => {
+            const s = map.splitPercentile(v);
+            return s.tens === t && s.ones === o;
+          };
+          return eq(73, 70, 3) && eq(100, 90, 10) && eq(5, 0, 5) && eq(10, 0, 10);
+        })()
+      );
+      check(
+        "a d100 goes over as two dice, tens first, carrying its display",
+        (() => {
+          const out = map.toDddiceRoll([die(100, 73)]);
+          return (
+            out.length === 2 &&
+            out[0].type === "d10x" &&
+            out[0].value_to_display === 70 &&
+            out[1].type === "d10" &&
+            out[1].value === 3
+          );
+        })()
+      );
+
+      // Nothing rather than something wrong: half a fireball on the
+      // table disagrees with the log, and the log is the real answer.
+      check(
+        "a pool past the room's limit is not drawn at all",
+        (() => {
+          const many = Array.from({ length: 26 }, () => die(6, 3));
+          return (
+            map.toDddiceRoll(many) === null &&
+            map.toDddiceRoll(many.slice(0, 25)).length === 25
+          );
+        })()
+      );
+      // A percentile die costs TWO against that limit, which is why
+      // the count is taken after the mapping rather than before.
+      check(
+        "a percentile die counts as the two dice it becomes",
+        map.toDddiceRoll(Array.from({ length: 13 }, () => die(100, 50))) === null
+      );
+      check(
+        "a die dddice has no mesh for cancels the whole throw",
+        map.toDddiceRoll([die(6, 3), die(7, 5)]) === null &&
+          map.toDddiceRoll([]) === null
+      );
+      check(
+        "the theme rides along on every die when one is set",
+        map
+          .toDddiceRoll([die(100, 42), die(6, 1)], "dddice-bees")
+          .every((d) => d.theme === "dddice-bees")
+      );
+    }
+
+    // ---- reading a dddice failure back ------------------------------
+    // Getting this wrong is invisible in the worst way: the dice keep
+    // working and only the DIAGNOSTIC breaks. It shipped printing a
+    // rejected roll as "{}" — the SDK had handed over an object with
+    // no message and no status, and the actual complaint was sitting
+    // in the response body. Every round trip that costs is a round
+    // trip spent asking what happened.
+    {
+      const err = await import(
+        pathToFileURL(
+          join(compile("components/dddiceError.ts"), "dddiceError.js")
+        ).href
+      );
+
+      check(
+        "a status is found whether it is on the error or its response",
+        err.statusOf({ status: 409 }) === 409 &&
+          err.statusOf({ response: { status: 422 } }) === 422 &&
+          err.statusOf(new Error("nope")) === null &&
+          err.statusOf(null) === null
+      );
+      check(
+        "an ordinary Error speaks for itself",
+        err.reason(new Error("Request failed")) === "Request failed"
+      );
+      check(
+        "a message and a status are reported together",
+        err.reason({ message: "Request failed", response: { status: 409 } }) ===
+          "Request failed — HTTP 409"
+      );
+      // The one that mattered: a rejection whose complaint is only in
+      // the body. This is what printed as "{}".
+      check(
+        "a validation body is read rather than shown as an empty object",
+        (() => {
+          const out = err.reason({
+            response: {
+              status: 422,
+              data: {
+                message: "The given data was invalid.",
+                errors: { "dice.0.theme": ["The theme field is required."] },
+              },
+            },
+          });
+          return (
+            out.includes("The given data was invalid.") &&
+            out.includes("dice.0.theme") &&
+            out.includes("The theme field is required.") &&
+            out.includes("422")
+          );
+        })()
+      );
+      check(
+        "a plain-text body is used, and not at unbounded length",
+        (() => {
+          const out = err.reason({ response: { status: 500, data: "x".repeat(900) } });
+          return out.includes("HTTP 500") && out.length < 300;
+        })()
+      );
+      // An SDK error class with nothing on it still has a name, and
+      // "RollError" beats "no reason given" by a wide margin.
+      check(
+        "a nameless failure still names its own class",
+        (() => {
+          class RollError {}
+          return err.reason(new RollError()) === "RollError";
+        })()
+      );
+      check(
+        "nothing at all still produces a sentence, never [object Object]",
+        (() => {
+          for (const bad of [{}, null, undefined, 0, []]) {
+            const out = err.reason(bad);
+            if (typeof out !== "string" || out === "" || out.includes("[object")) {
+              return false;
+            }
+          }
+          return true;
+        })()
+      );
+      check("a string is its own reason", err.reason("boom") === "boom");
+      // The body is printed VERBATIM when its shape is not one of the
+      // recognised ones. Three messages in a row identified this
+      // failure as "422" and nothing else, each because it assumed a
+      // shape and dropped what did not fit. A reader that only
+      // understands what it expects goes blind exactly when needed.
+      check(
+        "an unrecognised body is dumped rather than discarded",
+        (() => {
+          const out = err.reason({
+            message: "Request failed with status code 422",
+            response: { status: 422, data: { detail: "dice.0.value invalid" } },
+          });
+          return out.includes("dice.0.value invalid") && out.includes("422");
+        })()
+      );
+      check(
+        "the dump is bounded and skips a body with nothing in it",
+        (() => {
+          const big = err.reason({
+            response: { status: 422, data: { junk: "y".repeat(2000) } },
+          });
+          const empty = err.reason({
+            message: "Request failed",
+            response: { status: 422, data: {} },
+          });
+          return (
+            big.length < 400 &&
+            big.includes("422") &&
+            empty === "Request failed — HTTP 422"
+          );
+        })()
+      );
+    }
+
+    // ---- the room's background art ----------------------------------
+    {
+      const map2 = await import(
+        pathToFileURL(join(compile("components/dddiceMap.ts"), "dddiceMap.js"))
+          .href
+      );
+      check(
+        "a stored path becomes an address, however it was written",
+        map2.backgroundUrl("/bg/x.webp") === "https://dddice.com/bg/x.webp" &&
+          map2.backgroundUrl("bg/x.webp") === "https://dddice.com/bg/x.webp" &&
+          map2.backgroundUrl("//bg/x.webp") === "https://dddice.com/bg/x.webp"
+      );
+      check(
+        "an absolute URL is left alone",
+        map2.backgroundUrl("https://cdn.dddice.com/a.webp") ===
+          "https://cdn.dddice.com/a.webp"
+      );
+      check(
+        "a room with no background asks for no image",
+        map2.backgroundUrl(null) === null &&
+          map2.backgroundUrl(undefined) === null &&
+          map2.backgroundUrl("   ") === null
+      );
+    }
+
     // ---- the Moonbrook session import holds to its sources ----------
     // The records in scripts/import-moonbrook-sessions.mjs were merged
     // from the OneNote session pages and the Discord scheduling

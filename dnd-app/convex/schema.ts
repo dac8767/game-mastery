@@ -1482,4 +1482,74 @@ export default defineSchema({
     /** A palette id, checked server-side. See todoProjects.color. */
     color: v.string(),
   }).index("by_campaign", ["campaignId"]),
+
+  /* ---- dice ---- */
+
+  /**
+   * The table's roll log.
+   *
+   * The dice are thrown on the SERVER (convex/dice.ts) and the faces
+   * stored, so the log is a record rather than a claim — a client that
+   * rolled for itself could post a 20 every time.
+   *
+   * `secret` is the DM's private roll. It is filtered out of listRolls
+   * for everyone else rather than hidden in the UI, so a player cannot
+   * learn that a roll happened at all.
+   */
+  diceRolls: defineTable({
+    campaignId: v.id("campaigns"),
+    userId: v.id("users"),
+    /** Normalised notation, as re-written by the parser. */
+    notation: v.string(),
+    /** What the roll was for — "Stealth", "Fireball". Optional. */
+    label: v.optional(v.string()),
+    /**
+     * Every face rolled, dropped ones included: seeing the 2 you threw
+     * away is half the point of 4d6kh3.
+     */
+    dice: v.array(
+      v.object({
+        sides: v.number(),
+        value: v.number(),
+        kept: v.boolean(),
+        /**
+         * Which term threw it. "8d6+4d4" is twelve faces in one list
+         * and nothing else says where the d6s stop. Optional because
+         * rows written before this field exist; groupDice falls back
+         * to runs of one die size for those.
+         */
+        t: v.optional(v.number()),
+      })
+    ),
+    /**
+     * The flat modifier, all of it, signed. Stored rather than re-read
+     * out of the notation so the log needs no parser of its own — and
+     * without it the "+3" of "8d6+4d4+3" appears nowhere on screen.
+     */
+    mod: v.optional(v.number()),
+    total: v.number(),
+    secret: v.boolean(),
+  }).index("by_campaign", ["campaignId"]),
+
+  /**
+   * The campaign's dddice room, for the 3D dice.
+   *
+   * The passcode is here because a private room needs one to join and
+   * the players' browsers are the things joining. It reaches a browser
+   * only through a query that checks campaign membership first — the
+   * same rule as everything else the server shapes. It is not an
+   * account credential: it grants throwing dice in one room.
+   *
+   * No API key is stored. Each browser mints its own dddice guest
+   * account, so Derek's key never leaves his machine.
+   */
+  diceRooms: defineTable({
+    campaignId: v.id("campaigns"),
+    /** The room's slug, from its dddice URL. */
+    slug: v.string(),
+    passcode: v.optional(v.string()),
+    /** Theme slug for the dice, e.g. "dddice-bees". */
+    theme: v.optional(v.string()),
+    enabled: v.boolean(),
+  }).index("by_campaign", ["campaignId"]),
 });

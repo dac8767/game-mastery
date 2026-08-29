@@ -8,7 +8,7 @@
  * the app. Nothing else in the toolchain checks it.
  */
 
-import { read, requirePattern } from "./lib.mjs";
+import { read, requirePattern, stripComments } from "./lib.mjs";
 
 export const dmVisibility = {
   name: "dm-visibility",
@@ -715,6 +715,139 @@ export const dmVisibility = {
             "than served a filtered one"
         );
       }
+    }
+
+    // ---- convex/dice.ts --------------------------------------------
+    // Two separate things have to hold, and both fail silently.
+    //
+    // The DM's secret roll must be ABSENT from a player's data, not
+    // hidden in the UI — the same rule as a dmOnly channel. A player
+    // who can see that a roll happened has learned something the DM
+    // chose not to tell them, whatever the number was.
+    //
+    // And the dice must be thrown on the SERVER. A mutation that
+    // accepts a total is a mutation that accepts a 20 every time, and
+    // a shared roll nobody could have chosen is the entire point of
+    // rolling in the open.
+    {
+      const dice = read("convex", "dice.ts");
+      const fnBody = (name) => {
+        const at = dice.indexOf(`export const ${name} = `);
+        if (at === -1) throw new Error(`no ${name} in convex/dice.ts`);
+        const next = dice.indexOf("\nexport const ", at + 1);
+        return dice.slice(at, next === -1 ? undefined : next);
+      };
+
+      requirePattern(
+        problems,
+        fnBody("listRolls"),
+        /\.filter\(\s*\(r\) => !r\.secret \|\| \(isDm && r\.userId === userId\)\s*\)/,
+        "dice.listRolls must drop secret rolls server-side — a player must " +
+          "not learn that the DM rolled at all"
+      );
+      // Filtered BEFORE the names are resolved and the rows are
+      // shaped, so a secret roll cannot leak through a field added
+      // later to the returned object.
+      {
+        const body = fnBody("listRolls");
+        const filtered = body.indexOf("const visible");
+        const returned = body.indexOf("return {");
+        if (filtered === -1 || returned === -1 || filtered > returned) {
+          problems.push(
+            "dice.listRolls no longer filters before it shapes its return " +
+              "value — every field is derived from the filtered set"
+          );
+        }
+        if (/rolls: recent\.map|recent\.map\(\(r\) => \({/.test(body)) {
+          problems.push(
+            "dice.listRolls maps over the unfiltered rows — secret rolls " +
+              "would reach every player"
+          );
+        }
+      }
+
+      const rollDice = fnBody("rollDice");
+      // Only the DM rolls in secret, and the flag is ANDed with that
+      // rather than taken from the client.
+      requirePattern(
+        problems,
+        rollDice,
+        /const secret = Boolean\(args\.secret\) && isDm;/,
+        "dice.rollDice takes the client's secret flag at face value — a " +
+          "player could hide their own rolls from the table"
+      );
+      // The notation is the only thing the client is trusted with.
+      requirePattern(
+        problems,
+        rollDice,
+        /const parsed = parseRoll\(args\.notation\)/,
+        "dice.rollDice does not re-parse the notation server-side"
+      );
+      requirePattern(
+        problems,
+        rollDice,
+        /rollParsed\(parsed, Math\.random\)/,
+        "dice.rollDice does not roll on the server — a client that supplies " +
+          "its own result supplies its own natural 20"
+      );
+      for (const arg of ["total", "dice", "values", "result", "userId"]) {
+        if (new RegExp(`^\\s*${arg}: v\\.`, "m").test(
+          rollDice.slice(0, rollDice.indexOf("handler:"))
+        )) {
+          problems.push(
+            `dice.rollDice accepts a ${arg} argument — the roll and the ` +
+              "roller must both come from the server, never from the caller"
+          );
+        }
+      }
+
+      // ---- the 3D dice must never carry a secret roll --------------
+      // dddice broadcasts a throw to every participant in the room.
+      // A hidden roll whose privacy depends on another client honouring
+      // an is_hidden flag is not hidden — so a secret roll is never
+      // SENT. The guard is on the component that decides what to draw.
+      {
+        const roller = stripComments(read("components", "DiceRoller.tsx"));
+        if (!/latest\.mine && !latest\.secret/.test(roller)) {
+          problems.push(
+            "the 3D canvas is not gated on both `mine` and `!secret` — a " +
+              "secret roll sent to the dddice room is a roll every player's " +
+              "browser receives"
+          );
+        }
+        const canvas = stripComments(read("components", "DiceCanvas.tsx"));
+        if (/is_hidden/.test(canvas)) {
+          problems.push(
+            "DiceCanvas reaches for dddice's is_hidden — a secret roll is " +
+              "kept private by not being sent, not by asking nicely"
+          );
+        }
+        // The DM's own dddice key must never become a shared secret.
+        const diceSrc = read("convex", "dice.ts");
+        if (/apiKey|api_key|\bsecretKey\b/i.test(diceSrc)) {
+          problems.push(
+            "convex/dice.ts stores a dddice API key — every browser mints " +
+              "its own guest account precisely so no key is shared"
+          );
+        }
+        if (!/await requireMember\(ctx, args\.campaignId\)/.test(fnBody("getRoom"))) {
+          problems.push(
+            "dice.getRoom is not gated on requireMember — the room passcode " +
+              "would be readable by anyone with a campaign id"
+          );
+        }
+        if (!/await requireDm\(ctx, args\.campaignId\)/.test(fnBody("setRoom"))) {
+          problems.push("dice.setRoom is not DM-gated");
+        }
+      }
+
+      requirePattern(
+        problems,
+        fnBody("clearRolls"),
+        /await requireDm\(ctx, args\.campaignId\)/,
+        "dice.clearRolls is not DM-gated — one player could wipe the " +
+          "table's shared record of a roll they did not like"
+      );
     }
 
     return problems;

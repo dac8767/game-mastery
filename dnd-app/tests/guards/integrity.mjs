@@ -5809,6 +5809,388 @@ export const integrity = {
       }
     }
 
+    // ---- the dice roller never rolls -------------------------------
+    // The client parses, to grey out a bad notation and say what the
+    // box means. It must never THROW. A browser that produced its own
+    // faces for instant feedback would disagree with the log the
+    // moment the server's row arrived, and the version that stopped
+    // disagreeing would be the one that had stopped asking the server.
+    {
+      const roller = stripComments(read("components", "DiceRoller.tsx"));
+
+      if (/Math\.random|\brollParsed\b|\bfrom "@\/components\/diceModel"[\s\S]{0,120}\broll\b\s*[,}]/.test(
+        roller
+      )) {
+        problems.push(
+          "DiceRoller reaches for a random source or a roller — the dice " +
+            "are thrown in convex/dice.ts and nowhere else"
+        );
+      }
+      if (!/useMutation\(api\.dice\.rollDice\)/.test(roller)) {
+        problems.push(
+          "DiceRoller does not call the rollDice mutation — nothing else " +
+            "can produce a roll the rest of the table sees"
+        );
+      }
+      // The preview is the reason to parse here at all. Without it the
+      // import is dead weight and the Roll button stops knowing when
+      // the notation is nonsense.
+      if (!/parseRoll\(notation\)/.test(roller)) {
+        problems.push(
+          "DiceRoller no longer parses the draft — the Roll button cannot " +
+            "tell a typo from a formula, and the preview is a lie"
+        );
+      }
+      // Counted, not merely found. Roll and Hidden Roll carry the
+      // same guard, so testing for one of them passes while the other
+      // is throwing unparseable pools at the server.
+      {
+        const gated = (roller.match(/disabled=\{!parsed \|\| busy\}/g) ?? [])
+          .length;
+        const buttons = (roller.match(/void throwDice\(parsed\.notation/g) ?? [])
+          .length;
+        if (buttons === 0) {
+          problems.push("no roll button calls throwDice — parser out of date?");
+        } else if (gated !== buttons) {
+          problems.push(
+            `${buttons} button(s) roll the pool but ${gated} are disabled on ` +
+              "an unparseable one — the ungated one throws a typo at the server"
+          );
+        }
+      }
+
+      // One answer to "is this a crit", used by the log and by the
+      // roller. Two would drift, and the one on screen is the one
+      // people cheer at.
+      const model = read("components", "diceModel.ts");
+      if (!/export function critOf\(result: RollResult\)[^}]*critOfDice\(allDice\(result\)\)/.test(
+        model
+      )) {
+        problems.push(
+          "critOf no longer delegates to critOfDice — the log reads a " +
+            "stored row and the roller reads a fresh throw, and two " +
+            "implementations of the crit rule will disagree"
+        );
+      }
+      if (!/critOfDice\(roll\.dice\)/.test(roller)) {
+        problems.push(
+          "the roll log does not use critOfDice — a second crit rule in " +
+            "the component is a crit rule nothing tests"
+        );
+      }
+
+      // Every class the component renders has a rule behind it. A
+      // renamed selector unstyles the tool silently: the markup is
+      // still correct, so nothing throws and nothing is missing —
+      // it simply looks like an unstyled list.
+      const diceCss = read("app", "globals.css");
+      // A rule of its OWN, at the start of a line. Searching for the
+      // class anywhere passes on ".dice-tray-die svg" after the rule
+      // that sizes .dice-tray-die has been renamed away — the class is
+      // still "mentioned" and the button is still unstyled.
+      for (const cls of [
+        "dice",
+        "dice-stage",
+        "dice-felt",
+        "dice-felt-read",
+        "dice-canvas-wrap",
+        "dice-canvas",
+        "dice-canvas-bg",
+        "dice-canvas-note",
+        "dice-setup",
+        "dice-setup-note",
+        "dice-setup-go",
+        "dice-nothing",
+        "dice-pool",
+        "dice-formula",
+        "dice-error",
+        "dice-mods",
+        "dice-chip",
+        "dice-actions",
+        "dice-roll-btn",
+        "dice-hidden-btn",
+        "dice-clear",
+        "dice-tray",
+        "dice-tray-die",
+        "dice-notation",
+        "dice-log",
+        "dice-log-head",
+        "dice-roll",
+        "dice-roll-head",
+        "dice-by",
+        "dice-for",
+        "dice-at",
+        "dice-roll-body",
+        "dice-groups",
+        "dice-group",
+        "dice-group-label",
+        "dice-face",
+        "dice-notation-read",
+        "dice-total",
+        "dice-crit",
+        "dice-rolling",
+      ]) {
+        if (!new RegExp(`^\\.${cls}\\s*[,{]`, "m").test(diceCss)) {
+          problems.push(
+            `DiceRoller renders .${cls}, which globals.css gives no rule of ` +
+              "its own — a descendant selector elsewhere is not the same thing"
+          );
+        }
+      }
+      // The one class deliberately styled only in context: a bare
+      // .dice-label would leak onto any other label named that.
+      if (!/\.dice-actions \.dice-label\s*\{/.test(diceCss)) {
+        problems.push(
+          "the roll label input has no .dice-actions .dice-label rule"
+        );
+      }
+
+      // The canvas must say WHAT failed and WHY.
+      //
+      // Its first version reported every failure as "Couldn't reach
+      // dddice" — the same sentence for a missing WebGL context, a
+      // rate-limited guest signup and a wrong passcode. Three
+      // different fixes behind one message, and the only way to tell
+      // them apart was to read the source. A diagnostic that cannot
+      // diagnose is worse than none, because it looks like one.
+      {
+        const canvasSrc = read("components", "DiceCanvas.tsx");
+        if (!/\bstep = /.test(canvasSrc) || !/failed while \$\{step\}/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas no longer names the step it failed on — every " +
+              "dddice failure reads the same and none of them is actionable"
+          );
+        }
+        // BOTH failure paths. Connecting and rolling fail separately —
+        // the roll one shipped with a bare .catch(() => …) that threw
+        // the reason away, which is the same mistake as the message it
+        // was written beside.
+        // console.WARN, deliberately. Next's dev overlay turns a
+        // console.error into a full-screen blocking card, and this
+        // component is decoration — its failure changes no number on
+        // screen, so it must not present as a fatal one.
+        if ((canvasSrc.match(/console\.warn\(/g) ?? []).length < 2) {
+          problems.push(
+            "DiceCanvas has a failure path that swallows its error — the " +
+              "connection and the roll can each fail, and both have to say why"
+          );
+        }
+        if (/console\.error\(/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas logs with console.error — Next's dev overlay makes " +
+              "that a full-screen blocking card for a decorative failure"
+          );
+        }
+        if (/\.catch\(\(\) =>/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas discards a rejection with .catch(() => …) — the " +
+              "reason is the only actionable part of a dddice failure"
+          );
+        }
+        // A die with no theme has no mesh. The DM may leave it blank,
+        // so something must fill it in.
+        // The USE, not the declaration. A ref that is still assigned
+        // and never read looks exactly like a working fallback.
+        if (!/theme \?\? fallbackThemeRef\.current/.test(canvasSrc)) {
+          problems.push(
+            "the DM's blank theme does not fall back to the account's own — " +
+              "a die with no theme has no mesh, and dddice refuses the roll"
+          );
+        }
+        // Already a participant is the state the join exists to
+        // reach. Treating 409 as a failure made the integration work
+        // exactly once per browser and then refuse to start — a worse
+        // bug than never working, because it reads as intermittent.
+        if (!/statusOf\(e\) !== 409/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas treats a 409 from room.join as a failure — it means " +
+              "the guest is already a participant, which is success"
+          );
+        }
+        // The canvas is a panel in a page, not a full-screen room. Orbit
+        // controls turn a scroll aimed at the page into a camera flight
+        // past the dice.
+        if (!/controlsEnabled = false/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas leaves the orbit controls on — the scroll wheel " +
+              "flies the camera past the dice instead of scrolling the page"
+          );
+        }
+        // Two sources, not one. Every die needs a theme or the roll is
+        // refused with a 422, and a fresh guest account's dice box can
+        // be EMPTY — which is how the first fallback found nothing and
+        // sent themeless dice.
+        if (!/diceBox\.list\(\)/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas no longer reads the dice box — the fallback theme " +
+              "would have to be a hard-coded slug, which stops existing"
+          );
+        }
+        if (!/api\/1\.0\/theme/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas has no theme catalogue fallback — a guest with an " +
+              "empty dice box then sends themeless dice, which are refused"
+          );
+        }
+        // Found in the catalogue is not the same as owned. Rolling a
+        // theme the account does not hold trades one 422 for another
+        // and presents as the same bug.
+        if (!/api\/1\.0\/dice-box/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas takes a theme from the catalogue without adding it " +
+              "to the dice box — the account would be rolling dice it does " +
+              "not own"
+          );
+        }
+        // A slug from a docs example is a slug that stops existing, and
+        // its failure is indistinguishable from having no theme at all.
+        // The package name is not a theme slug: "dddice-js" is the
+        // import, and matching it made this fail on correct code.
+        if (/["'`]dddice-(?!js["'`])[a-z]/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas hard-codes a dddice theme slug — themes are read " +
+              "from the account and the catalogue, never guessed"
+          );
+        }
+        // The screen gets dddice's own words, not a house sentence
+        // that replaces them. reason() lives in its own module so the
+        // unit guard can exercise it — it shipped printing a rejected
+        // roll as "{}" — so this checks the canvas USES it rather than
+        // that the canvas defines it.
+        if (!/\breason\(e\)/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas does not report through reason() — an SDK rejection " +
+              "is not always an Error, and String(e) on one is \"[object Object]\""
+          );
+        }
+        if (!/from "@\/components\/dddiceError"/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas no longer imports the error readers — a copy of that " +
+              "parsing inside the component is a copy nothing tests"
+          );
+        }
+        // The number must not beat the dice to the screen. Convex
+        // answers in milliseconds; the animation takes seconds.
+        // The CALL, not the prop. A declared onSettled that is never
+        // reached looks exactly like a working one — this is the third
+        // time a check here has matched a declaration and passed on
+        // code that does nothing.
+        if (!/\.then\(\(\) => waitForDice\(engineRef, settled\)\)/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas does not wait for the dice to stop after throwing " +
+              "them — the total then appears seconds before the throw it is " +
+              "supposed to be reading"
+          );
+        }
+        if (!/if \(engine\.isDiceThrowing\)/.test(canvasSrc)) {
+          problems.push(
+            "the settle wait does not consult isDiceThrowing, so it is a " +
+              "fixed delay wearing the costume of a real one"
+          );
+        }
+        // Every wait has a way out, and the way out has to be REACHED.
+        if (!/waited > FINISH_BY \|\| \(!started && waited > START_BY\)/.test(canvasSrc)) {
+          problems.push(
+            "the wait for the dice to settle is uncapped — a dropped socket " +
+              "or a throttled background tab would withhold the result for good"
+          );
+        }
+        // A refused roll never animates, so nothing else would ever
+        // release the result waiting on it.
+        // Comments stripped: this looks at the SHAPE of the code, and
+        // an explanatory comment between two statements is not a gap
+        // between them. Left in, it made this fail on correct code.
+        if (!/rejected the roll[\s\S]{0,80}settled\(\);/.test(
+          stripComments(canvasSrc)
+        )) {
+          problems.push(
+            "a rejected roll does not release the held result — the log " +
+              "would sit at \"Rolling…\" for a throw that never happened"
+          );
+        }
+        {
+          const roller2 = stripComments(read("components", "DiceRoller.tsx"));
+          if (!/rolling === null|held === id \? null : held/.test(roller2)) {
+            problems.push(
+              "DiceRoller never releases a held roll — the log would stop at " +
+                "\"Rolling…\" and never show the number"
+            );
+          }
+          if (!/has3d && drawId/.test(roller2)) {
+            problems.push(
+              "DiceRoller holds rolls without checking there are 3D dice to " +
+                "wait for — a table with no dddice room would wait for nothing"
+            );
+          }
+        }
+
+        // The renderer does not draw the room's artwork, so the canvas
+        // has to fetch and paint it.
+        if (!/setBackground\(backgroundUrl\(/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas does not resolve the room's background — the " +
+              "renderer never draws it, so nothing else will"
+          );
+        }
+      }
+
+      // Every die the tray offers has a shape drawn for it. DiceIcon
+      // returns null for a size it does not know, so a mismatch here
+      // renders an EMPTY button — clickable, correct, invisible.
+      {
+        const icons = read("components", "DiceIcon.tsx");
+        const model = read("components", "diceModel.ts");
+        const listed = /STANDARD_DICE = \[([^\]]*)\]/.exec(model);
+        if (!listed) {
+          problems.push("no STANDARD_DICE in diceModel.ts — parser out of date?");
+        } else {
+          // Sliced rather than matched: the map's own type annotation
+          // contains an arrow, and a regex reaching for the first "="
+          // stops inside it.
+          const at = icons.indexOf("const SHAPES");
+          const end = at === -1 ? -1 : icons.indexOf("};", at);
+          if (at === -1 || end === -1) {
+            problems.push("no SHAPES map in DiceIcon.tsx — parser out of date?");
+          } else {
+            const shapes = icons.slice(at, end);
+            for (const sides of listed[1].split(",").map((n) => n.trim()).filter(Boolean)) {
+              if (!new RegExp(`(^|[^0-9])${sides}:`).test(shapes)) {
+                problems.push(
+                  `the tray offers a d${sides} and DiceIcon has no shape for ` +
+                    "it — the button renders empty rather than failing"
+                );
+              }
+            }
+          }
+        }
+      }
+
+      // The artwork is the felt now that nothing is printed over it.
+      // Fading it reads as a washed-out picture rather than a choice.
+      {
+        const bg = /\.dice-canvas-bg\s*\{([^}]*)\}/.exec(diceCss);
+        if (!bg) {
+          problems.push("no .dice-canvas-bg rule — the room's art is not drawn");
+        } else if (/opacity/.test(bg[1])) {
+          problems.push(
+            "the room's artwork is faded — it was held back only while the " +
+              "total was printed across it, and that moved to the log"
+          );
+        }
+      }
+
+      // The dropped die has to stay legible as a dropped die.
+      const dropped = /\.dice-face\.dropped\s*\{([^}]*)\}/.exec(diceCss);
+      if (!dropped) {
+        problems.push("no .dice-face.dropped rule — a dropped die reads as a kept one");
+      } else if (!/line-through/.test(dropped[1])) {
+        problems.push(
+          "a dropped die is no longer struck through — 4d6kh3 renders as " +
+            "four dice that all counted"
+        );
+      }
+    }
+
     return problems;
   },
 };

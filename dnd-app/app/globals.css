@@ -9638,3 +9638,576 @@ button.cal-day:hover {
     order: -1;
   }
 }
+
+/* ---------- Dice roller ---------- */
+
+/* A table, not a form. The stage takes the room; the log is a rail
+   beside it. Everything the hand touches — tray, chips, Roll — sits
+   along the bottom where a hand already is. */
+.dice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20rem;
+  gap: 0.75rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.dice-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 0;
+  padding: 0.9rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+/* Where the dice land. Takes all the leftover height so the result is
+   the biggest thing on the screen — that is the whole point of a dice
+   roller, and the first version gave it a table row. */
+.dice-felt {
+  position: relative;
+  flex: 1;
+  min-height: 8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: auto;
+}
+
+/* The 3D canvas fills the felt; the readable result sits ON it, so
+   losing dddice loses the dice and never the number. */
+.dice-canvas-wrap {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* The room's own artwork, behind the dice.
+
+   At full strength, because nothing is printed over it any more: the
+   result moved to the log, so the felt is the artwork and the dice,
+   the way dddice's own room looks. It was held at 0.4 while the total
+   was drawn across it, and that reads as a washed-out picture rather
+   than as a deliberate one. */
+.dice-canvas-bg {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+}
+
+.dice-canvas {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.dice-canvas-note {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0.4rem;
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.76rem;
+  text-align: center;
+}
+
+/* Above the canvas, and not swallowing clicks meant for the dice —
+   dddice's own controls (pick up, re-roll) live on that surface. */
+.dice-felt-read {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  pointer-events: none;
+}
+
+.dice-nothing {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.dice-pool {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.6rem;
+}
+
+/* The pool at the size of the thing you are about to throw. */
+.dice-formula {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 1.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.dice-formula.empty {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.dice-formula.bad {
+  color: var(--bloodied);
+}
+
+.dice-error {
+  margin: 0;
+  text-align: center;
+}
+
+.dice-mods {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.3rem;
+}
+
+.dice-chip {
+  min-width: 2.6rem;
+  padding: 0.3rem 0.5rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.dice-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.dice-chip.wide {
+  min-width: 3.4rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.dice-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* The one button the whole screen is arranged around. */
+.dice-roll-btn {
+  padding: 0.55rem 1.6rem;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 9px;
+  color: var(--bg);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.dice-roll-btn:disabled,
+.dice-hidden-btn:disabled,
+.dice-clear:disabled {
+  opacity: 0.45;
+}
+
+.dice-hidden-btn {
+  padding: 0.55rem 0.9rem;
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: 9px;
+  color: var(--text-dim);
+  font-size: 0.88rem;
+}
+
+.dice-hidden-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.dice-actions .dice-label {
+  flex: 1;
+  min-width: 0;
+  padding: 0.45rem 0.55rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.86rem;
+}
+
+.dice-clear {
+  padding: 0.45rem 0.6rem;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-dim);
+}
+
+/* The tray. Seven shapes, sized to be picked up rather than read. */
+.dice-tray {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem;
+  padding-top: 0.2rem;
+}
+
+.dice-tray-die {
+  width: 3.4rem;
+  height: 3.4rem;
+  padding: 0.25rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--accent);
+  line-height: 0;
+}
+
+.dice-tray-die svg,
+.dice-tray-die img {
+  width: 100%;
+  height: 100%;
+}
+
+/* A rendered die is a picture of a solid object; it needs to sit in
+   the button the way the drawn outline does rather than fill it. */
+.dice-tray-die img {
+  object-fit: contain;
+}
+
+.dice-tray-die:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.dice-tray-die:active {
+  transform: translateY(1px);
+}
+
+.dice-notation {
+  width: 100%;
+  padding: 0.4rem 0.55rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.dice-notation:focus {
+  outline: none;
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* ---- the log rail ---- */
+
+.dice-log {
+  padding: 0.75rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.dice-log-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.dice-log-title {
+  font-weight: 600;
+}
+
+.dice-setup {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+  padding: 0.6rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.dice-setup-note {
+  margin: 0 0 0.2rem;
+  color: var(--text-dim);
+  font-size: 0.76rem;
+}
+
+.dice-setup input {
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.dice-setup-go {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.2rem;
+}
+
+/* ---- one roll, in the log and on the felt ---- */
+
+.dice-roll {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-inset);
+}
+
+.dice-roll + .dice-roll {
+  margin-top: 0.4rem;
+}
+
+.dice-roll.mine {
+  border-color: var(--accent-soft);
+}
+
+.dice-roll.secret {
+  border-style: dashed;
+}
+
+/* The same roll, on the felt: no card of its own, just bigger. */
+.dice-roll.big {
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  text-align: center;
+}
+
+.dice-roll.big .dice-roll-head {
+  justify-content: center;
+  font-size: 0.85rem;
+}
+
+.dice-roll.big .dice-at {
+  margin-left: 0;
+}
+
+.dice-roll.big .dice-roll-body {
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.dice-roll.big /* A roll whose dice are still in the air. Same height as the row it
+   replaces, so the log does not jump when the number arrives. */
+.dice-rolling {
+  display: flex;
+  align-items: center;
+  min-height: 1.9rem;
+  margin: 0.35rem 0 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.dice-groups {
+  justify-content: center;
+}
+
+.dice-roll.big .dice-face {
+  min-width: 2.2rem;
+  padding: 0.3rem 0.45rem;
+  font-size: 1.1rem;
+}
+
+.dice-roll.big .dice-notation-read {
+  margin-left: 0;
+  font-size: 0.85rem;
+}
+
+.dice-roll.big .dice-total {
+  font-size: 3.2rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.dice-roll.big .dice-crit {
+  font-size: 0.9rem;
+}
+
+.dice-roll-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.dice-by {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.dice-for {
+  font-style: italic;
+}
+
+/* Pushed to the far end so the times line up down the log. */
+.dice-at {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.dice-roll-body {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+/* A roll whose dice are still in the air. Same height as the row it
+   replaces, so the log does not jump when the number arrives. */
+.dice-rolling {
+  display: flex;
+  align-items: center;
+  min-height: 1.9rem;
+  margin: 0.35rem 0 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.dice-groups {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+/* One term's dice, held together. The gap inside a group is smaller
+   than the gap between groups — that difference is the only thing
+   telling you which four of the twelve faces were the d4s. */
+.dice-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.dice-group-label {
+  color: var(--text-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+}
+
+.dice-face {
+  min-width: 1.6rem;
+  padding: 0.15rem 0.3rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* A die the keep threw away. Struck through rather than hidden: seeing
+   the 2 you dropped is half the point of 4d6kh3 — which means it has
+   to stay READABLE. Dimmed by colour alone; an opacity on top of that
+   drew a struck-through "1" as a smudge.
+
+   No background, so it sinks into the card rather than sitting on it.
+   Keeping --bg-raised made the dropped die the LIGHTEST chip in the
+   row on parchment, which reads as emphasis — the opposite of what a
+   discarded die should say. */
+.dice-face.dropped {
+  background: none;
+  color: var(--text-dim);
+  border-style: dashed;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.dice-face.flat {
+  border-style: dashed;
+  color: var(--text-dim);
+}
+
+.dice-notation-read {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.dice-total {
+  min-width: 2.2rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--accent);
+}
+
+.crit-high .dice-total {
+  color: var(--healthy);
+}
+
+.crit-low .dice-total {
+  color: var(--bloodied);
+}
+
+.dice-crit {
+  margin: 0.3rem 0 0;
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.crit-high .dice-crit {
+  color: var(--healthy);
+}
+
+.crit-low .dice-crit {
+  color: var(--bloodied);
+}
+
+/* Side by side needs the width. Stacked, the stage stays on top so the
+   dice are still the first thing under your thumb, and the PAGE
+   scrolls rather than each panel keeping a scrollbar of its own. */
+@media (max-width: 900px) {
+  .dice {
+    grid-template-columns: minmax(0, 1fr);
+    flex: initial;
+    min-height: auto;
+  }
+
+  .dice-log {
+    overflow-y: visible;
+  }
+
+  .dice-actions {
+    flex-wrap: wrap;
+  }
+}

@@ -116,7 +116,7 @@ const TODO_CHILDREN: NavItem[] = [
 
 export const TOOL_ITEMS: NavItem[] = [
   { id: "chat", label: "Chat", icon: "◌", art: "speech", slug: "chat" },
-  { id: "dice", label: "Dice Roller", icon: "⚄", art: "d20" },
+  { id: "dice", label: "Dice Roller", icon: "⚄", art: "d20", slug: "dice" },
   { id: "combat", label: "Combat Tracker", icon: "⚔" },
   { id: "notebook", label: "Notebook", icon: "✎", art: "notepad", slug: "notebook" },
   {
