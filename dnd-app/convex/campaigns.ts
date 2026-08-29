@@ -7,6 +7,10 @@ import {
   requireMember,
   requireUser,
 } from "./auth";
+// Relative, not "@/": the Convex tsconfig does not carry the app's path
+// alias. One definition of "absent means active", shared with the
+// screens, rather than the same comparison written out in each.
+import { isActive } from "../components/rosterModel";
 
 /**
  * Campaigns, membership, and characters.
@@ -158,11 +162,13 @@ export const campaignCards = query({
           /**
            * The party as the DM entered it. A character with no player
            * at all is the DM's own sheet and is not somebody at the
-           * table, so it is left off the card's roster.
+           * table, so it is left off the card's roster — and so is
+           * anybody marked inactive, which is what the card is for:
+           * this is who you are playing with now, not who ever played.
            */
           party: await Promise.all(
             characters
-              .filter((ch) => ch.playerId || ch.playerName)
+              .filter((ch) => (ch.playerId || ch.playerName) && isActive(ch))
               .map(async (ch) => ({
                 _id: ch._id,
                 name: ch.name,
@@ -787,6 +793,30 @@ export const setCharacterPortrait = mutation({
   },
 });
 
+/**
+ * DM: mark somebody as still at the table, or no longer.
+ *
+ * Its own mutation rather than a field on upsertCharacter, because the
+ * roster's name fields call that on every blur without passing this
+ * one. Convex patches only the keys it is given, so that would be safe
+ * today — but it is safe by omission, and the day somebody spreads a
+ * full character into the call, renaming a player silently un-retires
+ * them. A separate mutation cannot be got wrong that way.
+ *
+ * DM-only, like deleteCharacter and for the same reason: who is still
+ * in the campaign is the DM's call, not something a player settles by
+ * editing their own sheet.
+ */
+export const setCharacterActive = mutation({
+  args: { characterId: v.id("characters"), active: v.boolean() },
+  handler: async (ctx, args) => {
+    const character = await ctx.db.get(args.characterId);
+    if (!character) throw new Error("Character not found");
+    await requireDm(ctx, character.campaignId);
+    await ctx.db.patch(args.characterId, { active: args.active });
+  },
+});
+
 export const listCharacters = query({
   args: { campaignId: v.id("campaigns") },
   handler: async (ctx, args) => {
@@ -798,9 +828,15 @@ export const listCharacters = query({
     // Strip DM notes for players, and resolve the portrait: a storage
     // id is useless to the browser, and the shaping belongs here rather
     // than in every screen that draws a character.
+    //
+    // `active` is NORMALISED here rather than passed through. The
+    // stored field is absent on every row that predates it, and a
+    // screen writing `c.active ? …` against that would retire the whole
+    // party. Callers get a real boolean and cannot make that mistake.
     return await Promise.all(
       characters.map(async (c) => ({
         ...(isDm ? c : { ...c, notes: undefined }),
+        active: isActive(c),
         portraitUrl: c.portraitId ? await ctx.storage.getUrl(c.portraitId) : null,
       }))
     );

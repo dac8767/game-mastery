@@ -17,6 +17,11 @@ import { Id } from "@/convex/_generated/dataModel";
  * `playerId` is exactly what a new account claims — which is why those
  * are two fields and not one. A claimed row keeps the same character,
  * the same portrait and the same history; it gains an owner.
+ *
+ * Somebody who leaves the game is marked INACTIVE, not removed. Their
+ * name comes off the campaign card and out of the fields that suggest
+ * players, and everything else stays: they are still in the log of the
+ * nights they played, and Remove would take that with them.
  */
 
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
@@ -29,6 +34,7 @@ export function CampaignRoster({
   const characters = useQuery(api.campaigns.listCharacters, { campaignId });
   const upsert = useMutation(api.campaigns.upsertCharacter);
   const remove = useMutation(api.campaigns.deleteCharacter);
+  const setActive = useMutation(api.campaigns.setCharacterActive);
 
   const [playerName, setPlayerName] = useState("");
   const [name, setName] = useState("");
@@ -49,13 +55,35 @@ export function CampaignRoster({
         When player sign-up arrives, each person claims the character already
         waiting for them, keeping its portrait and history.
       </p>
+      <p className="settings-note">
+        Set somebody to <strong>Inactive</strong> when they leave the game.
+        They come off the campaign card and stop being suggested when you
+        fill in who was at a session, but the roster keeps them and past
+        sessions still name them. Remove deletes the character outright.
+      </p>
 
       {characters === undefined ? (
         <p className="settings-note">Loading the roster…</p>
+      ) : party.length === 0 ? (
+        <p className="settings-note">Nobody on the roster yet.</p>
       ) : (
         <ul className="roster">
+          {/* A header, because this is a table and the two name fields
+              are only distinguishable by which column they are in. It
+              sits on the same grid as the rows so the columns line up
+              rather than nearly line up. */}
+          <li className="roster-row roster-head" aria-hidden="true">
+            <span />
+            <span>Character</span>
+            <span>Player</span>
+            <span>Status</span>
+            <span />
+          </li>
           {party.map((c) => (
-            <li key={c._id} className="roster-row">
+            <li
+              key={c._id}
+              className={`roster-row${c.active ? "" : " inactive"}`}
+            >
               <RosterPortrait
                 campaignId={campaignId}
                 characterId={c._id}
@@ -63,24 +91,24 @@ export function CampaignRoster({
                 portraitPath={c.portraitPath ?? null}
                 name={c.name}
               />
-              <div className="roster-names">
+              <input
+                className="roster-field roster-character"
+                defaultValue={c.name}
+                aria-label="Character name"
+                onBlur={(e) => {
+                  const next = e.target.value.trim();
+                  if (!next || next === c.name) return;
+                  void upsert({
+                    characterId: c._id,
+                    campaignId,
+                    name: next,
+                    maxHp: c.maxHp,
+                  });
+                }}
+              />
+              <span className="roster-player-cell">
                 <input
-                  className="roster-character"
-                  defaultValue={c.name}
-                  aria-label="Character name"
-                  onBlur={(e) => {
-                    const next = e.target.value.trim();
-                    if (!next || next === c.name) return;
-                    void upsert({
-                      characterId: c._id,
-                      campaignId,
-                      name: next,
-                      maxHp: c.maxHp,
-                    });
-                  }}
-                />
-                <input
-                  className="roster-player"
+                  className="roster-field roster-player"
                   defaultValue={c.playerName ?? ""}
                   placeholder="Player's name"
                   aria-label="Player name"
@@ -97,22 +125,34 @@ export function CampaignRoster({
                     });
                   }}
                 />
-              </div>
-              <span className="roster-state">
-                {c.playerId ? (
-                  <span className="badge player">Claimed</span>
-                ) : (
-                  <span className="settings-note">Unclaimed</span>
+                {/* Only when it IS claimed. "Unclaimed" was a word on
+                    every row of a roster that is mostly unclaimed, which
+                    says nothing; the account is the exception worth
+                    marking. */}
+                {c.playerId && (
+                  <span className="badge player" title="Has an account">
+                    Claimed
+                  </span>
                 )}
               </span>
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => void remove({ characterId: c._id })}
-                title={`Remove ${c.name}`}
+              <select
+                className="roster-active"
+                aria-label={`Is ${c.name} still at the table?`}
+                value={c.active ? "active" : "inactive"}
+                onChange={(e) =>
+                  void setActive({
+                    characterId: c._id,
+                    active: e.target.value === "active",
+                  })
+                }
               >
-                Remove
-              </button>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+              <RemoveCharacter
+                name={c.name}
+                onRemove={() => void remove({ characterId: c._id })}
+              />
             </li>
           ))}
         </ul>
@@ -162,6 +202,48 @@ export function CampaignRoster({
 
       {error && <p className="form-error">{error}</p>}
     </section>
+  );
+}
+
+/**
+ * Remove, in two clicks.
+ *
+ * Deleting a character takes its portrait and its place in the party
+ * with it and there is no undo, and this button sits an inch from the
+ * Active dropdown that people now have a reason to click. One misclick
+ * should not be able to do that. The second click is the confirmation —
+ * a modal for a roster row would be heavier than the action deserves,
+ * but a bare Remove is lighter than it deserves.
+ *
+ * The armed state resets on blur, so a row left half-confirmed and
+ * forgotten is not still armed when you come back to the screen.
+ */
+function RemoveCharacter({
+  name,
+  onRemove,
+}: {
+  name: string;
+  onRemove: () => void;
+}) {
+  const [armed, setArmed] = useState(false);
+
+  return (
+    <button
+      type="button"
+      className={`text-button roster-remove${armed ? " armed" : ""}`}
+      title={armed ? `Delete ${name} for good` : `Remove ${name}`}
+      onBlur={() => setArmed(false)}
+      onClick={() => {
+        if (!armed) {
+          setArmed(true);
+          return;
+        }
+        setArmed(false);
+        onRemove();
+      }}
+    >
+      {armed ? "Sure?" : "Remove"}
+    </button>
   );
 }
 

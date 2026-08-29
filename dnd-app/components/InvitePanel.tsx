@@ -9,6 +9,7 @@ import {
   expiryText,
   inviteUrl,
 } from "@/components/inviteModel";
+import { isActive } from "@/components/rosterModel";
 
 /**
  * The DM's invite links.
@@ -48,8 +49,12 @@ export function InvitePanel({
 
   // Characters nobody has claimed — the only ones worth handing out.
   // A claimed sheet already has an account behind it, and offering it
-  // again would be offering somebody else's character.
-  const unclaimed = (characters ?? []).filter((c) => c.playerId === undefined);
+  // again would be offering somebody else's character. A retired one is
+  // not on offer either: the whole point of inviting somebody to a
+  // character is that they are going to play it.
+  const unclaimed = (characters ?? []).filter(
+    (c) => c.playerId === undefined && isActive(c)
+  );
 
   return (
     <section className="settings-block">

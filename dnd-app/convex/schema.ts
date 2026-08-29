@@ -187,6 +187,16 @@ export default defineSchema({
     portraitId: v.optional(v.id("_storage")),
     portraitPath: v.optional(v.string()),
     notes: v.optional(v.string()), // DM-visible only
+    /**
+     * Still at the table. ABSENT MEANS ACTIVE — every row predates the
+     * field — so read it through isActive() in components/rosterModel,
+     * never as a truthiness test. `false` is the only meaningful value.
+     *
+     * Not a delete: someone who left is still in the session log for
+     * the nights they played, and their character keeps its portrait
+     * and its history. The flag only stops the name being offered.
+     */
+    active: v.optional(v.boolean()),
   })
     .index("by_campaign", ["campaignId"])
     .index("by_player", ["playerId"]),

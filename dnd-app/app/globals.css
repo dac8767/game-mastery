@@ -6177,14 +6177,52 @@ button.cal-day:hover {
   gap: 0.5rem;
 }
 
+/* One grid shared by the header and every row, so the two name columns
+   line up instead of nearly lining up. They were a stack of two inputs
+   inside a flex row before, which meant every row was two full-width
+   boxes and the whole block read as a form rather than a roster. */
 .roster-row {
-  display: flex;
+  display: grid;
+  /* The last two are FIXED rather than `auto`. Each row is its own grid
+     container — a grid does not span sibling <li>s — so an auto column
+     is sized by that row's own content, and the header ended up
+     labelling columns that every row below it had drawn somewhere
+     else. Fixed widths are the same number in every row, which is what
+     makes these line up into a table. */
+  grid-template-columns:
+    2.4rem minmax(6rem, 1.3fr) minmax(6rem, 1fr) 6.4rem 4.6rem;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 0.6rem;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
   background: var(--bg-inset);
   border: 1px solid var(--border);
   border-radius: 8px;
+}
+
+.roster-head {
+  padding-top: 0;
+  padding-bottom: 0.15rem;
+  background: none;
+  border-color: transparent;
+  font-size: 0.7rem;
+  font-variant: small-caps;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+/* Retired, not gone. Dim rather than hidden — the DM still edits these
+   rows — and the left edge marks it, so a scan down the list finds who
+   has left without reading five dropdowns. */
+.roster-row.inactive {
+  opacity: 0.55;
+  /* In --text-dim, not --border: a marker the same colour as the edge
+     it sits beside is not a marker. */
+  box-shadow: inset 3px 0 0 var(--text-dim);
+}
+
+.roster-row.inactive:hover,
+.roster-row.inactive:focus-within {
+  opacity: 1;
 }
 
 .roster-portrait {
@@ -6215,25 +6253,75 @@ button.cal-day:hover {
   font-size: 1rem;
 }
 
-.roster-names {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  flex: 1;
+/* The house inline-edit treatment, the one .record-title uses: a name
+   reads as a name, and becomes a field under the pointer. These carried
+   NO styling at all before, which meant the browser's own control — a
+   white box in a dark theme, in a font that is not the app's. */
+.roster-field {
+  width: 100%;
   min-width: 0;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.roster-field:hover:not(:disabled) {
+  border-color: var(--border);
+  background: var(--bg-raised);
+}
+
+.roster-field:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  background: var(--bg-raised);
+}
+
+/* A claimed row's player name is the account's, not something to type
+   over. It reads as the fact it is rather than as a dead input. */
+.roster-field:disabled {
+  color: var(--text-dim);
+  cursor: default;
+}
+
+.roster-field::placeholder {
+  color: var(--text-dim);
+  opacity: 0.7;
 }
 
 .roster-character {
   font-weight: 600;
 }
 
-.roster-player {
-  font-size: 0.82rem;
+.roster-player-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
 }
 
-.roster-state {
-  flex: none;
-  font-size: 0.75rem;
+.roster-active {
+  padding: 0.25rem 0.4rem;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.roster-remove {
+  font-size: 0.78rem;
+}
+
+/* Armed, and saying so. The colour is the app's damage red, which is
+   what it means everywhere else in this app. */
+.roster-remove.armed {
+  color: var(--bloodied);
+  font-weight: 600;
 }
 
 .roster-add {
@@ -6241,11 +6329,50 @@ button.cal-day:hover {
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
+  margin-top: 0.75rem;
 }
 
+/* Unstyled before, so these were the browser's own boxes: white, in a
+   font that is not the app's, next to a gold Add button. */
 .roster-add input {
   flex: 1;
   min-width: 10rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.roster-add input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* Narrow: the two name columns stack under the portrait and the two
+   controls sit on their own line. The header would be labelling
+   columns that no longer exist, so it goes. */
+@media (max-width: 620px) {
+  .roster-row {
+    grid-template-columns: 2.4rem minmax(0, 1fr) auto;
+  }
+
+  .roster-head {
+    display: none;
+  }
+
+  .roster-player-cell {
+    grid-column: 2 / -1;
+  }
+
+  /* Its own line, but not the width of it: a dropdown stretched across
+     the column reads as the row's main control rather than a state. */
+  .roster-active {
+    grid-column: 2;
+    justify-self: start;
+  }
 }
 
 @media (max-width: 700px) {

@@ -14,6 +14,11 @@
  */
 
 import { ColumnDef } from "@/components/npcColumns";
+// Relative, not "@/", because this one survives compilation. The line
+// above is a TYPE import and tsc erases it; these are values, and the
+// unit guard imports the emitted JavaScript, where "@/" is not a thing
+// Node can resolve.
+import { isActive, retiredPlayerIds, type Rostered } from "./rosterModel";
 
 export const SESSION_COLUMNS: ColumnDef[] = [
   {
@@ -256,10 +261,17 @@ export function sessionPatch(
  * values. A guest who played one night is still attendance, and a field
  * that refused them would be worse than the one that made you type
  * everybody.
+ *
+ * Anybody the DM has marked inactive is left out of both sources. That
+ * is what the flag is for — the person who left at session 30 should
+ * not be the first suggestion when you write up session 60 — and it is
+ * only the SUGGESTIONS that lose them. A name already typed on a past
+ * session stays typed, because the field is free text and this list
+ * never validated it.
  */
 export function campaignPlayers(
-  members: { displayName?: string | null }[] | null | undefined,
-  characters: { playerName?: string | null }[] | null | undefined
+  members: { userId?: string | null; displayName?: string | null }[] | null | undefined,
+  characters: Rostered[] | null | undefined
 ): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
@@ -272,8 +284,15 @@ export function campaignPlayers(
     out.push(name);
   };
 
-  for (const m of members ?? []) add(m.displayName);
-  for (const c of characters ?? []) add(c.playerName);
+  const retired = retiredPlayerIds(characters);
+  for (const m of members ?? []) {
+    if (m.userId && retired.has(m.userId)) continue;
+    add(m.displayName);
+  }
+  for (const c of characters ?? []) {
+    if (!isActive(c)) continue;
+    add(c.playerName);
+  }
 
   return out.sort((a, b) => a.localeCompare(b));
 }

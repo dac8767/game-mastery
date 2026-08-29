@@ -5210,6 +5210,195 @@ export const integrity = {
       }
     }
 
+    // ---- who is still at the table ---------------------------------
+    //
+    // "Inactive" is one optional boolean read in five places, and every
+    // way it fails is quiet. Absent means ACTIVE, so a truthiness test
+    // retires the whole party and nothing throws. A filter dropped from
+    // one of the lists puts somebody who left back on the campaign card
+    // — a name that is supposed to be missing, which is the hardest
+    // kind of wrong to notice. And the mutation is DM-only by
+    // convention, which the compiler has no opinion about.
+    {
+      const model = stripComments(read("components", "rosterModel.ts"));
+      const isActiveBody = blockAfter(
+        model,
+        /export function isActive\([^)]*\):\s*boolean\s*(?=\{)/,
+        "isActive in rosterModel.ts"
+      );
+      if (!/!==\s*false/.test(isActiveBody)) {
+        problems.push(
+          "rosterModel.isActive does not test `!== false` — every character " +
+            "in the database predates the field, so anything else retires " +
+            "the entire party and does it silently"
+        );
+      }
+
+      const schema = read("convex", "schema.ts");
+      const charBlock = blockAfter(
+        schema,
+        /characters:\s*defineTable\(/,
+        "characters table in schema.ts"
+      );
+      if (!topLevelKeys(charBlock, "characters schema").includes("active")) {
+        problems.push(
+          "the characters table has no `active` field, so nothing the " +
+            "roster writes there is stored"
+        );
+      }
+
+      const camp = stripComments(read("convex", "campaigns.ts"));
+      if (!/from "\.\.\/components\/rosterModel"/.test(camp)) {
+        problems.push(
+          "convex/campaigns.ts no longer imports rosterModel — the backend " +
+            "and the screens would each decide what `active` means"
+        );
+      }
+
+      // The FILTER, not the file. `isActive` appearing somewhere in
+      // campaigns.ts says nothing about whether the card's party list
+      // is the one consulting it.
+      const partyFilter = camp.slice(
+        camp.indexOf("party: await Promise.all("),
+        camp.indexOf(".map(async (ch) => ({")
+      );
+      if (!partyFilter || !/isActive\(/.test(partyFilter)) {
+        problems.push(
+          "campaignCards does not filter the card's party on isActive — " +
+            "somebody who left the game is still on the front door"
+        );
+      }
+
+      // Bounded by the next export, not by the comment banner that
+      // follows it: `camp` has had its comments stripped, so a banner
+      // is not there to be found and the slice would run to the end of
+      // the file — past every invite function, any one of which could
+      // later satisfy the check by accident.
+      const listChars = camp.slice(
+        camp.indexOf("export const listCharacters"),
+        camp.indexOf("export const createInvite")
+      );
+      if (!/active:\s*isActive\(/.test(listChars)) {
+        problems.push(
+          "listCharacters does not normalise `active` — it would hand the " +
+            "screens a field that is `undefined` on every existing row, " +
+            "which each of them then has to get right separately"
+        );
+      }
+
+      const setActive = camp.slice(
+        camp.indexOf("export const setCharacterActive"),
+        camp.indexOf("export const listCharacters")
+      );
+      if (!setActive) {
+        problems.push(
+          "campaigns.setCharacterActive is gone — the roster's Active " +
+            "control has nothing to call"
+        );
+      } else if (!/await requireDm\(/.test(setActive)) {
+        problems.push(
+          "campaigns.setCharacterActive is not gated on requireDm — who is " +
+            "still in the campaign would be a player's call"
+        );
+      }
+
+      // Both sources, or the name comes back through the other one: the
+      // account and the DM-typed player name are two ways to the same
+      // person, and dropping one is not dropping them.
+      // Sliced to the next top-level export rather than brace-matched:
+      // this function's PARAMETERS are object types, and the first `{`
+      // after its name opens one of those, not its body.
+      const cols = stripComments(read("components", "sessionColumns.ts"));
+      const playersAt = cols.indexOf("export function campaignPlayers");
+      if (playersAt === -1) {
+        throw new Error("campaignPlayers is gone from sessionColumns.ts");
+      }
+      const playersEnd = cols.indexOf("\nexport ", playersAt + 1);
+      const players = cols.slice(
+        playersAt,
+        playersEnd === -1 ? cols.length : playersEnd
+      );
+      for (const [fn, why] of [
+        ["retiredPlayerIds(", "the accounts whose every sheet is retired"],
+        ["isActive(", "the DM-typed names on inactive characters"],
+      ]) {
+        if (!players.includes(fn)) {
+          problems.push(
+            `campaignPlayers does not call ${fn}) — ${why} would still be ` +
+              "suggested when you fill in who was at a session"
+          );
+        }
+      }
+
+      const invite = stripComments(read("components", "InvitePanel.tsx"));
+      const unclaimed = /const unclaimed = [^;]+;/.exec(invite)?.[0] ?? "";
+      if (!/isActive\(/.test(unclaimed)) {
+        problems.push(
+          "InvitePanel offers retired characters to claim — the point of " +
+            "inviting somebody to a character is that they will play it"
+        );
+      }
+
+      // The screen: the control has to exist, and it has to be wired to
+      // the mutation rather than to local state that goes nowhere.
+      const roster = stripComments(read("components", "CampaignRoster.tsx"));
+      if (!/api\.campaigns\.setCharacterActive/.test(roster)) {
+        problems.push(
+          "CampaignRoster never calls setCharacterActive, so nothing on " +
+            "the screen can mark anybody inactive"
+        );
+      }
+      const selectAt = roster.indexOf("<select");
+      if (selectAt === -1) {
+        throw new Error("CampaignRoster no longer renders a <select>");
+      }
+      const control = roster.slice(
+        selectAt,
+        roster.indexOf("</select>", selectAt)
+      );
+      if (!/setActive\(/.test(control)) {
+        problems.push(
+          "the roster's <select> does not call the mutation — it would " +
+            "change what it shows and save nothing"
+        );
+      }
+
+      // Every class the roster asks for, and each one matched as a RULE
+      // OF ITS OWN: `^.name` followed by `,` or `{`, at the start of a
+      // line. Merely finding the name in the stylesheet is not enough,
+      // because these all have :hover and :focus rules too — rename the
+      // base rule and the name is still there, in a rule that only ever
+      // applies to a control you are already touching.
+      const css = read("app", "globals.css");
+      const ownRule = (sel) =>
+        new RegExp(`^${sel.replace(/\./g, "\\.")}\\s*[,{]`, "m").test(css);
+      for (const cls of [
+        "roster-row",
+        "roster-head",
+        "roster-field",
+        "roster-player-cell",
+        "roster-active",
+        "roster-remove",
+      ]) {
+        if (!roster.includes(cls)) {
+          problems.push(`CampaignRoster no longer renders .${cls}`);
+        }
+        if (!ownRule(`.${cls}`)) {
+          problems.push(
+            `.${cls} has no rule of its own in globals.css — the roster ` +
+              "falls back to the browser's own controls, which is what it " +
+              "looked like before it was styled at all"
+          );
+        }
+      }
+      if (!ownRule(".roster-row.inactive")) {
+        problems.push(
+          "nothing styles .roster-row.inactive, so a retired row looks " +
+            "exactly like a current one"
+        );
+      }
+    }
+
     return problems;
   },
 };

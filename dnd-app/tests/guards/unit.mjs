@@ -5618,6 +5618,128 @@ export const unit = {
         sc.campaignPlayers(undefined, undefined).length === 0
       );
 
+      // ---- and who it stops offering ------------------------------
+      //
+      // Somebody who left at session 30 should not be the first
+      // suggestion when you write up session 60. Both sources have to
+      // drop them or the name comes back through the other one.
+      check(
+        "an inactive character's player is not offered",
+        sc
+          .campaignPlayers(
+            [],
+            [{ playerName: "Ana" }, { playerName: "Bo", active: false }]
+          )
+          .join() === "Ana"
+      );
+      check(
+        "nor through the account, when every sheet they own is retired",
+        sc
+          .campaignPlayers(
+            [{ userId: "u1", displayName: "Bo" }],
+            [{ playerId: "u1", playerName: "Bo", active: false }]
+          ).length === 0
+      );
+      // Retiring a character and rolling a new one is the most ordinary
+      // thing in a long campaign, and it is not leaving.
+      // Both orders, because "does this player have a live sheet" is a
+      // fold over their rows and a fold that keeps the LAST answer
+      // instead of ORing them is right half the time — which is the
+      // half a single fixture would have picked.
+      //
+      // The sheets carry NO playerName, so "Bo" can only have come
+      // through the account. With one on each row, the character loop
+      // would supply the name whatever the fold decided, and the test
+      // would pass while testing nothing.
+      for (const order of [
+        [false, true],
+        [true, false],
+      ]) {
+        check(
+          `one live sheet keeps a player on the list (${order.join(",")})`,
+          sc
+            .campaignPlayers(
+              [{ userId: "u1", displayName: "Bo" }],
+              order.map((active) => ({ playerId: "u1", active }))
+            )
+            .join() === "Bo"
+        );
+      }
+
+      // ---- and the predicate underneath it ------------------------
+      // Tested directly as well as through campaignPlayers, because
+      // the two loops there can cover for each other: a name dropped
+      // by one is put back by the other, and the union comes out
+      // right while neither half is.
+      const rm = await import(
+        pathToFileURL(
+          join(compile("components/rosterModel.ts"), "rosterModel.js")
+        ).href
+      );
+      check(
+        "absent means active, and so does an explicit true",
+        rm.isActive({}) && rm.isActive({ active: true })
+      );
+      check("only false is inactive", rm.isActive({ active: false }) === false);
+      check(
+        "an account whose every sheet is retired is retired",
+        rm.retiredPlayerIds([{ playerId: "u1", active: false }]).has("u1")
+      );
+      for (const order of [
+        [false, true],
+        [true, false],
+      ]) {
+        check(
+          `one live sheet and the account is not retired (${order.join(",")})`,
+          rm.retiredPlayerIds(
+            order.map((active) => ({ playerId: "u1", active }))
+          ).size === 0
+        );
+      }
+      check(
+        "a sheet with no account retires nobody",
+        rm.retiredPlayerIds([{ active: false }]).size === 0
+      );
+      check(
+        "and neither does a list that has not loaded",
+        rm.retiredPlayerIds(undefined).size === 0
+      );
+      // There is nowhere to mark such a person inactive — the roster IS
+      // the character list — so having no character must not read as
+      // having left.
+      check(
+        "a member with no character at all is still offered",
+        sc
+          .campaignPlayers([{ userId: "u9", displayName: "Cy" }], [])
+          .join() === "Cy"
+      );
+      // Every row in the database predates the field. A truthiness test
+      // here would retire the entire party the day it shipped.
+      check(
+        "a character from before the field existed is active",
+        sc.campaignPlayers([], [{ playerName: "Dot" }]).join() === "Dot" &&
+          sc
+            .campaignPlayers(
+              [{ userId: "u2", displayName: "Eli" }],
+              [{ playerId: "u2", playerName: "Eli" }]
+            )
+            .join() === "Eli"
+      );
+      check(
+        "and one marked active explicitly is too",
+        sc
+          .campaignPlayers([], [{ playerName: "Fay", active: true }])
+          .join() === "Fay"
+      );
+      // The flag hides suggestions; it is not a rule about names. A
+      // guest who played one night is still attendance, and a name
+      // already typed on a past session is untouched by any of this.
+      check(
+        "an inactive character with no player name changes nothing",
+        sc.campaignPlayers([{ displayName: "Gus" }], [{ active: false }])
+          .join() === "Gus"
+      );
+
       // Toggling one name off a line of five is where the stored array
       // and the typed line have to agree exactly.
       check(
