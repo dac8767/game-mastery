@@ -5,11 +5,24 @@
  *   node scripts/import-moonbrook-sessions.mjs <campaignId>
  *
  * The records were merged from the OneNote session pages and the
- * Discord #scheduling channel. Dates follow the manually typed `Date:`
- * field on each OneNote page; the three sessions Discord knows about
- * but OneNote never numbered ride between their neighbours as .5
- * numbers (27.5, 31.5, 46.5). The OneNote page content lands as each
- * session's DM notes page.
+ * Discord #scheduling channel, and the OneNote page content lands as
+ * each session's DM notes page.
+ *
+ * THE NUMBERING HERE IS DEREK'S, read back out of the app after he
+ * corrected it: 53 sessions, 1 through 53, whole numbers only. An
+ * earlier version of this file parked the three games Discord knew
+ * about but OneNote never numbered on .5 numbers; he folded those in
+ * and renumbered everything after them, and dated the session OneNote
+ * left blank (2022-10-07). That numbering is now the record. Anything
+ * added here later goes in by date and takes the number that falls
+ * out of it — never renumber to suit this file.
+ *
+ * Which is why both passes match on the DATE. Matching on the number
+ * is what broke the last run: the summaries were written by number
+ * against a campaign that had just been renumbered, so each one
+ * landed on the wrong night. A campaign runs one game on a given day,
+ * so the date is the identity that survives a renumbering; the number
+ * is a label the DM is free to change.
  *
  * A `description` is what HAPPENED IN THE GAME, in a sentence or two —
  * "The party fights the bandits outside of town. One bandit dies." No
@@ -17,14 +30,14 @@
  * evening, not about Moonbrook, and the columns beside it already
  * carry the ones worth keeping. Nineteen sessions left no record of
  * their events in either source and carry NO description rather than
- * an invented one; everything known about where a date or a number
- * came from lives in that session's DM notes under "Source note".
+ * an invented one; everything known about where a date came from
+ * lives in that session's DM notes under "Source note".
  *
  * Two passes, both in convex/sessions.ts and both safe to repeat:
- * `importRecords` creates the sessions that are missing and skips the
- * numbers already there, then `setDescriptions` writes these
- * descriptions onto whichever records exist. So this lands the same
- * way whether or not an earlier version already ran.
+ * `importRecords` creates the sessions missing from the campaign and
+ * skips any number or date already there, then `setDescriptions`
+ * writes the summaries onto the matching dates — clearing the field
+ * on the sessions that have no summary, so nothing stale survives.
  */
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
@@ -233,7 +246,7 @@ export const MOONBROOK_SESSIONS = [
   },
   {
     number: 18,
-    date: undefined,
+    date: "2022-10-07",
     players: [],
     xp: 2300,
     description:
@@ -246,7 +259,7 @@ export const MOONBROOK_SESSIONS = [
       "<h4>House items</h4>" +
       "<ul><li>Baern house items:</li><li>Reya house items:</li><li>Raynar house items:</li></ul>" +
       "<h4>Source note</h4>" +
-      "<p>The OneNote page carries no date. The XP total (23,300) places this between session 17 (2022-09-07) and session 19 (2022-11-09); the Discord channel opens 2022-09-22 with failed scheduling, so Wednesday 2022-09-21 is the likeliest night. Its content — the ministers, the feast, the townie roster — is duplicated onto the session 19 page.</p>",
+      "<p>The OneNote page carries no date; the date here is Derek's. The XP total (23,300) places this between the 2022-09-07 and 2022-11-09 games, and its content — the ministers, the feast, the townie roster — is duplicated onto the OneNote page for 2022-11-09.</p>",
   },
   {
     number: 19,
@@ -347,17 +360,17 @@ export const MOONBROOK_SESSIONS = [
       "A standard dungeon crawl, one of two run back to back.",
   },
   {
-    number: 27.5,
+    number: 28,
     date: "2023-05-17",
     players: [...minus(AFTER_GAIGE, "Julie", "Steph"), "Drew"],
     description:
       "A standard dungeon crawl, one of two run back to back.",
     dmNotes:
       "<h4>Source note</h4>" +
-      "<p>Discord documents this session; OneNote never made a page for it, so it was never numbered. It rides here as 27.5. Described in Discord as one of two “standard dungeon crawls” alongside session 27.</p>",
+      "<p>Discord documents this game; OneNote never made a page for it. Discord describes it and the game before it as two “standard dungeon crawls” run back to back.</p>",
   },
   {
-    number: 28,
+    number: 29,
     date: "2023-07-02",
     players: minus(AFTER_GAIGE, "Steph"),
     description:
@@ -371,17 +384,17 @@ export const MOONBROOK_SESSIONS = [
       "<p>Bring back baby elks.</p><p>Gruumsh · Jawar</p>",
   },
   {
-    number: 29,
+    number: 30,
     date: "2023-07-22",
     players: minus(AFTER_GAIGE, "Scott"),
   },
   {
-    number: 30,
+    number: 31,
     date: "2023-08-16",
     players: AFTER_GAIGE,
   },
   {
-    number: 31,
+    number: 32,
     date: "2023-08-27",
     players: minus(AFTER_GAIGE, "Steph"),
     description:
@@ -397,15 +410,15 @@ export const MOONBROOK_SESSIONS = [
       "<p>Source: Port Nyanzaru — Merchant Prince's Villa — <code>https://www.dndbeyond.com/sources/toa/port-nyanzaru#MerchantPrincesVilla</code></p>",
   },
   {
-    number: 31.5,
+    number: 33,
     date: "2023-09-04",
     players: minus(AFTER_GAIGE, "Steph"),
     dmNotes:
       "<h4>Source note</h4>" +
-      "<p>Discord documents this session; OneNote never made a page for it, so it was never numbered. It rides here as 31.5. No record survives of what happened in the game.</p>",
+      "<p>Discord documents this game; OneNote never made a page for it, so no record survives of what happened in it.</p>",
   },
   {
-    number: 32,
+    number: 34,
     date: "2023-09-06",
     players: minus(AFTER_GAIGE, "Steph"),
     description:
@@ -421,26 +434,26 @@ export const MOONBROOK_SESSIONS = [
       "<ol><li>Sylora</li><li>Leshanna</li><li>Zanny</li><li>Daisy</li><li>Jed and Zaralynn Grady</li></ol>",
   },
   {
-    number: 33,
+    number: 35,
     date: "2023-09-12",
     players: minus(AFTER_GAIGE, "Steph"),
     description:
       "Gronn's story arc comes to its end.",
   },
   {
-    number: 34,
+    number: 36,
     date: "2023-11-05",
     players: AFTER_ANDREW,
     description:
       "The party investigates the empty houses of the town, among them the magician's and the tech griffon house.",
   },
   {
-    number: 35,
+    number: 37,
     date: "2023-11-19",
     players: minus(AFTER_GAIGE, "Steph"),
   },
   {
-    number: 36,
+    number: 38,
     date: "2024-01-20",
     players: AFTER_ANDREW,
     description:
@@ -453,12 +466,12 @@ export const MOONBROOK_SESSIONS = [
       "</blockquote>",
   },
   {
-    number: 37,
+    number: 39,
     date: "2024-02-25",
     players: minus(AFTER_GAIGE, "Scott", "Steph"),
   },
   {
-    number: 38,
+    number: 40,
     date: "2024-03-31",
     players: AFTER_ANDREW,
     description:
@@ -482,12 +495,12 @@ export const MOONBROOK_SESSIONS = [
       "<p><b>Expert miners (deep gnomes):</b> Roywyn (F), Kipper (M), Fonkin (M), Brocc (M). Geologist: Ellywick (F).</p>",
   },
   {
-    number: 39,
+    number: 41,
     date: "2024-06-02",
     players: minus(AFTER_ANDREW, "Scott"),
   },
   {
-    number: 40,
+    number: 42,
     date: "2024-06-09",
     players: minus(AFTER_ANDREW, "Scott"),
     description:
@@ -498,7 +511,7 @@ export const MOONBROOK_SESSIONS = [
       "<p>Robe of Lies.</p><p>5 prisoners.</p>",
   },
   {
-    number: 41,
+    number: 43,
     date: "2024-07-21",
     players: AFTER_ANDREW,
     description:
@@ -509,7 +522,7 @@ export const MOONBROOK_SESSIONS = [
       "<h4>To do</h4><ul><li>Map</li><li>Bean options</li></ul>",
   },
   {
-    number: 42,
+    number: 44,
     date: "2024-10-12",
     players: AFTER_GAIGE,
     description:
@@ -520,7 +533,7 @@ export const MOONBROOK_SESSIONS = [
       "<p>Goth ro blades — Lord of Blades.</p>",
   },
   {
-    number: 43,
+    number: 45,
     date: "2024-10-13",
     players: AFTER_GAIGE,
     description:
@@ -528,17 +541,17 @@ export const MOONBROOK_SESSIONS = [
     dmNotes: "<p>Battle pt 1.</p>",
   },
   {
-    number: 44,
+    number: 46,
     date: "2024-10-14",
     players: [],
     description:
       "The orc battle is fought to its end.",
     dmNotes:
       "<p>Battle pt 2.</p><h4>Source note</h4>" +
-      "<p>Conflict between the sources. OneNote has this page dated 10/14/24, but Discord planned and confirmed a two-day Orc Weekend only — 10/12 and 10/13 — called the Monday a rest day, and carries no messages at all on 10/14. Pages 43 and 44 were both created at the same timestamp mid-session on 10/13. This may be an unused stub for a battle that finished on the Sunday.</p>",
+      "<p>Conflict between the sources. OneNote has a page dated 10/14/24 reading “Battle pt 2,” but Discord planned and confirmed a two-day Orc Weekend only — 10/12 and 10/13 — called the Monday a rest day, and carries no messages at all on 10/14. The OneNote pages for 10/13 and 10/14 were both created at the same timestamp, mid-game on the Sunday. This may be an unused stub for a battle that finished on the Sunday.</p>",
   },
   {
-    number: 45,
+    number: 47,
     date: "2024-12-14",
     players: minus(AFTER_ANDREW, "Steph"),
     xp: 0,
@@ -554,31 +567,29 @@ export const MOONBROOK_SESSIONS = [
       "<p>The tenets of faith will show you the path, but falter in faith and incur the lord's wrath.</p>",
   },
   {
-    number: 46,
+    number: 48,
     date: "2025-03-16",
     players: AFTER_ANDREW,
-    dmNotes:
-      "<h4>Source note</h4>" +
-      "<p>No OneNote page survives for this session. The number is inferred by working backward from the session 48 page, and holds only if the 2025-04-20 refresh was never numbered.</p>",
+    dmNotes: "<h4>Source note</h4><p>No OneNote page survives for this game; it is documented in Discord only.</p>",
   },
   {
-    number: 46.5,
+    number: 49,
     date: "2025-04-20",
     players: minus(AFTER_ANDREW, "Steph"),
     dmNotes:
       "<h4>Source note</h4>" +
-      "<p>An informal “session 0” refresh, documented in Discord only and never numbered — the party talked through where each character's story needed to go before the end. It rides here as 46.5.</p>",
+      "<p>An informal “session 0” refresh, documented in Discord only — the party talked through where each character's story needed to go before the end of the campaign.</p>",
   },
   {
-    number: 47,
+    number: 50,
     date: "2025-05-03",
     players: minus(AFTER_GAIGE, "Steph"),
     dmNotes:
       "<h4>Source note</h4>" +
-      "<p>No OneNote page survives for this session; the number is inferred. Derek ran it without prep.</p>",
+      "<p>No OneNote page survives for this game; it is documented in Discord only. Derek ran it without prep.</p>",
   },
   {
-    number: 48,
+    number: 51,
     date: "2025-06-01",
     players: minus(AFTER_ANDREW, "Steph"),
     description:
@@ -597,12 +608,12 @@ export const MOONBROOK_SESSIONS = [
       "<p>The OneNote page was created 2025-05-26 for the Memorial Day game, which slipped a week; the date here is the night it was actually played, from Discord.</p>",
   },
   {
-    number: 49,
+    number: 52,
     date: "2025-09-14",
     players: WITH_CAPRICA,
   },
   {
-    number: 50,
+    number: 53,
     date: "2025-11-23",
     players: minus(WITH_CAPRICA, "Scott"),
   },
@@ -662,21 +673,28 @@ function main() {
     console.log(`${span}: imported`);
   }
 
-  // Pass two: the summaries, onto whatever is there — including the
-  // records an earlier run of this script created.
-  const entries = MOONBROOK_SESSIONS.filter((r) => r.description).map((r) => ({
-    number: r.number,
-    description: r.description,
+  // Pass two: the summaries, keyed by DATE onto whatever is there —
+  // including records an earlier run created and the DM has since
+  // renumbered. EVERY session is sent, the ones with no summary as an
+  // empty string, so a withdrawn summary clears the old text rather
+  // than leaving it behind for want of anything to overwrite it.
+  const entries = MOONBROOK_SESSIONS.map((r) => ({
+    date: r.date,
+    description: r.description ?? "",
   }));
   let written = 0;
+  let cleared = 0;
+  let missing = 0;
   for (let at = 0; at < entries.length; at += 20) {
     const chunk = entries.slice(at, at + 20);
     const out = call(
       "sessions:setDescriptions",
       { campaignId, entries: chunk },
-      `summaries from session ${chunk[0].number}`
+      `summaries from ${chunk[0].date}`
     );
     written += out?.written ?? 0;
+    cleared += out?.cleared ?? 0;
+    missing += out?.missing ?? 0;
   }
   console.log("summaries: written");
 
@@ -684,8 +702,17 @@ function main() {
     `\n${campaignName ?? "Campaign"}: ${created} session${
       created === 1 ? "" : "s"
     } created, ${skipped} already there and left alone, ` +
-      `${written} summar${written === 1 ? "y" : "ies"} updated.`
+      `${written} summar${written === 1 ? "y" : "ies"} written, ` +
+      `${cleared} cleared.`
   );
+  if (missing > 0) {
+    console.log(
+      `\n${missing} of these dates matched no session in the campaign. ` +
+        "That means a date was corrected in the app but not here — the " +
+        "records in this file are keyed by date, so fix the date here " +
+        "and run it again."
+    );
+  }
 }
 
 if (

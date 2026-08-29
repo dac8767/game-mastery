@@ -4157,12 +4157,14 @@ export const integrity = {
             "that writes into any campaign with nobody signed in"
         );
       }
+      const script = read("scripts", "import-moonbrook-sessions.mjs");
       const at = src.indexOf("importRecords");
       const body = at === -1 ? "" : src.slice(at, at + 2600);
-      if (!/taken\.has\(r\.number\)/.test(body)) {
+      if (!/taken\.has\(r\.number\)/.test(body) || !/dated\.has\(r\.date\)/.test(body)) {
         problems.push(
-          "importRecords no longer skips existing session numbers — " +
-            "rerunning the import would duplicate every session"
+          "importRecords no longer skips sessions already in the " +
+            "campaign by number AND by date — rerunning it against a " +
+            "renumbered campaign would duplicate every session"
         );
       }
       if (!/sanitizeBoxHtml\(r\.dmNotes\)/.test(body)) {
@@ -4184,14 +4186,39 @@ export const integrity = {
         );
       }
       const descAt = src.indexOf("setDescriptions");
-      const descBody = descAt === -1 ? "" : src.slice(descAt, descAt + 1400);
-      if (!/patch\(row\._id, \{ description: e\.description \}\)/.test(descBody)) {
+      const descBody = descAt === -1 ? "" : src.slice(descAt, descAt + 1800);
+      if (!/patch\(row\._id, \{ description: next \}\)/.test(descBody)) {
         problems.push(
           "setDescriptions patches something other than the summary — " +
-            "it must leave date, players and XP exactly as they are"
+            "it must leave number, date, players and XP exactly as they are"
         );
       }
-      const script = read("scripts", "import-moonbrook-sessions.mjs");
+      // Keyed on the DATE. Matching on the number is what put every
+      // summary on the wrong night the first time this ran against a
+      // renumbered campaign — the number is a label the DM may change,
+      // the date is which game it was.
+      if (!/byDate\.get\(e\.date\)/.test(descBody)) {
+        problems.push(
+          "setDescriptions no longer matches sessions by date — " +
+            "renumbering the campaign would land every summary on the " +
+            "wrong session"
+        );
+      }
+      // An emptied summary has to CLEAR the field, or a withdrawn one
+      // leaves its old text standing for want of a replacement.
+      if (!/trim\(\) === "" \? undefined/.test(descBody)) {
+        problems.push(
+          "setDescriptions cannot clear a summary — a session whose " +
+            "summary was withdrawn would keep the old text forever"
+        );
+      }
+      // And the script has to SEND the empty ones for that to matter.
+      if (!/description: r\.description \?\? ""/.test(script)) {
+        problems.push(
+          "the Moonbrook import skips sessions with no summary — the " +
+            "stale text on those sessions would never be cleared"
+        );
+      }
       for (const fn of ["sessions:importRecords", "sessions:setDescriptions"]) {
         if (!script.includes(fn)) {
           problems.push(

@@ -6937,9 +6937,23 @@ export const unit = {
           join(process.cwd(), "scripts/import-moonbrook-sessions.mjs")
         ).href
       );
+      // Derek's numbering, read back out of the app after he corrected
+      // it: 53 whole numbers, 1 through 53, no gaps and no halves. An
+      // earlier version parked three games on .5 numbers; he folded
+      // them in, and this is now the record rather than something this
+      // file gets to re-derive.
       check(
-        "every session in the merge is a record, each number once",
-        R.length === 53 && new Set(R.map((r) => r.number)).size === 53
+        "the numbering is 1 through 53, whole numbers, in date order",
+        R.length === 53 &&
+          R.every((r, i) => r.number === i + 1) &&
+          R.every((r) => Number.isInteger(r.number))
+      );
+      // Both import passes match on the date, so a record without one
+      // is a record that can never be found again.
+      check(
+        "every session carries a date, and no two share one",
+        R.every((r) => typeof r.date === "string" && r.date) &&
+          new Set(R.map((r) => r.date)).size === R.length
       );
       // The one figure both sources agree on: XP tracking ran to
       // session 23 and stood at 36,200 there.
@@ -6955,7 +6969,6 @@ export const unit = {
         (() => {
           let last = "";
           for (const r of [...R].sort((a, b) => a.number - b.number)) {
-            if (r.date === undefined) continue;
             if (!/^\d{4}-\d{2}-\d{2}$/.test(r.date)) return false;
             if (r.date < last) return false;
             last = r.date;

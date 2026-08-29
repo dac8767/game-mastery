@@ -223,10 +223,12 @@ export const createSession = mutation({
  * invokes this through `npx convex run` in batches.
  *
  * INTERNAL, not public: it writes into a campaign with no signed-in
- * caller, which only the deployment's own tooling may do. Existing
- * session NUMBERS are skipped, never overwritten — a record typed by
- * hand outranks anything a merge document says — so running it twice
- * is safe: the second run reports every record as skipped.
+ * caller, which only the deployment's own tooling may do. A session
+ * already in the campaign under that NUMBER or that DATE is skipped,
+ * never overwritten — a record corrected by hand outranks anything a
+ * merge document says — so running it twice is safe: the second run
+ * reports every record as skipped. The date half of that test is what
+ * stops a renumbered campaign from being imported into twice.
  *
  * `dmNotes` lands as the session's DM page, through the same
  * sanitizer every stored page goes through. The DM side stays behind
@@ -256,15 +258,17 @@ export const importRecords = internalMutation({
       .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
       .take(MAX_SESSIONS);
     const taken = new Set(existing.map((s) => s.number));
+    const dated = new Set(existing.flatMap((s) => (s.date ? [s.date] : [])));
 
     let created = 0;
     let skipped = 0;
     for (const r of args.records) {
-      if (taken.has(r.number)) {
+      if (taken.has(r.number) || (r.date !== undefined && dated.has(r.date))) {
         skipped++;
         continue;
       }
       taken.add(r.number);
+      if (r.date !== undefined) dated.add(r.date);
       const sessionId = await ctx.db.insert("sessions", {
         campaignId: args.campaignId,
         number: r.number,
@@ -295,15 +299,24 @@ export const importRecords = internalMutation({
  * has to reach records imported by an earlier run, which the
  * skip-if-present rule there deliberately will not do.
  *
- * Only `description` is touched, and only on numbers it is handed —
- * date, players and XP are left exactly as they are.
+ * Keyed on the DATE, never the number. Session numbers are the DM's
+ * to change — renumbering after a correction is normal, and it has
+ * already happened once — and a summary matched by number lands on
+ * whatever now holds that number, silently describing the wrong
+ * night. A campaign runs one game on a given day, so the date is the
+ * identity that survives renumbering.
+ *
+ * An empty description CLEARS the field: a session whose summary was
+ * withdrawn has to lose the old text, not keep it forever because
+ * there is nothing to overwrite it with.
+ *
+ * Only `description` is touched — number, date, players and XP are
+ * left exactly as they are.
  */
 export const setDescriptions = internalMutation({
   args: {
     campaignId: v.id("campaigns"),
-    entries: v.array(
-      v.object({ number: v.number(), description: v.string() })
-    ),
+    entries: v.array(v.object({ date: v.string(), description: v.string() })),
   },
   handler: async (ctx, args) => {
     const campaign = await ctx.db.get(args.campaignId);
@@ -313,21 +326,26 @@ export const setDescriptions = internalMutation({
       .query("sessions")
       .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
       .take(MAX_SESSIONS);
-    const byNumber = new Map(existing.map((s) => [s.number, s]));
+    const byDate = new Map(
+      existing.flatMap((s) => (s.date ? [[s.date, s] as const] : []))
+    );
 
     let written = 0;
+    let cleared = 0;
     let missing = 0;
     for (const e of args.entries) {
-      const row = byNumber.get(e.number);
+      const row = byDate.get(e.date);
       if (!row) {
         missing++;
         continue;
       }
-      if (row.description === e.description) continue;
-      await ctx.db.patch(row._id, { description: e.description });
-      written++;
+      const next = e.description.trim() === "" ? undefined : e.description;
+      if (row.description === next) continue;
+      await ctx.db.patch(row._id, { description: next });
+      if (next === undefined) cleared++;
+      else written++;
     }
-    return { campaign: campaign.name, written, missing };
+    return { campaign: campaign.name, written, cleared, missing };
   },
 });
 
