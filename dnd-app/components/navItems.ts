@@ -80,6 +80,11 @@ export const TOOL_ITEMS: NavItem[] = [
     dmOnly: true,
   },
   { id: "scheduler", label: "Scheduler", icon: "⏱", slug: "scheduler" },
+  // No slug: reserved, not built. The sidebar greys it and the ribbon
+  // leaves it out entirely, which is how this app holds a place for a
+  // tool without offering a door that 404s. See TOOLS.md — whose list
+  // it is has to be decided before the table is written.
+  { id: "todo", label: "To-Do", icon: "☑" },
 ];
 
 /**

@@ -339,6 +339,31 @@ Status    Nav entry exists. No component.
 Reads     lookup (items) — a shop's stock comes from the item library
 ```
 
+### todo — To-Do
+```
+Will own  components/TodoTool.tsx, components/todoModel.ts
+          convex/todo.ts
+          app/campaign/[campaignId]/todo/
+Tables    todos
+Branch    claude/tool-todo
+Status    Reserved. Nothing built.
+Note      Decide WHOSE list it is before writing the table, because it
+          changes every query in the tool. Three readings, and they are
+          not compatible:
+
+            the DM's prep     campaign-scoped, dmOnly — "statblock for
+                              the lich", "map the sewers"
+            the party's       campaign-scoped, shared — quest hooks and
+                              open threads everyone can see
+            each person's     per-user, campaign-scoped — Derek's list
+                              and Julie's list are different lists
+
+          The first is closest to how the DM Screen's notes already
+          work and is the safest default; the third is the one that is
+          painful to retrofit, because it puts userId in the index and
+          nothing above it can be reused. Ask before building.
+```
+
 ### vtt — Virtual tabletop
 ```
 Will own  components/Vtt*.tsx, components/vttModel.ts
