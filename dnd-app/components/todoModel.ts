@@ -1,3 +1,7 @@
+// Relative, not "@/": convex/todo.ts imports this module, and the
+// Convex tsconfig does not carry the app's path alias.
+import { safeBoxHref } from "./boxHtml";
+
 /**
  * The DM's prep list: ordering, and what a due date means today.
  *
@@ -196,3 +200,76 @@ export function todayISO(now: Date = new Date()): string {
 /** The longest a task may be. Past this it is a note, not a task. */
 export const MAX_TEXT = 300;
 export const MAX_NOTES = 2000;
+
+/* ---------------------------------------------------------------- */
+/* Links: where an item came from                                     */
+/* ---------------------------------------------------------------- */
+
+/**
+ * A link back to whatever produced this item.
+ *
+ * The point of the tool, eventually: highlight a line in a session's
+ * notes, tag it as a to-do, and the item carries a way back to the
+ * sentence that caused it. A task you cannot trace is a task you
+ * rewrite from memory.
+ *
+ * `tool` is the nav item's id — "sessions", "npcs" — which is what
+ * names the source on screen and groups links from one place. `href`
+ * is where clicking goes.
+ */
+export interface TodoLink {
+  tool: string;
+  label: string;
+  href: string;
+}
+
+/** Past this an item is a hub, not a task. */
+export const MAX_LINKS = 8;
+export const MAX_LINK_LABEL = 80;
+
+/**
+ * Links, cleaned and deduplicated.
+ *
+ * Every href goes through `safeHref`, which is the app's one rule for
+ * an internal link — the same one the notebook's pasted HTML uses.
+ * These arrive from OTHER TOOLS rather than from a person typing, so
+ * the temptation is to trust them; a tool with a bug is exactly as
+ * capable of writing "javascript:" into a field as a person is.
+ *
+ * Deduplicated by href, because tagging the same sentence twice is a
+ * thing that happens and two identical chips are not information.
+ */
+export function normalizeLinks(
+  links: readonly Partial<TodoLink>[] | undefined
+): TodoLink[] {
+  if (!Array.isArray(links)) return [];
+
+  const out: TodoLink[] = [];
+  const seen = new Set<string>();
+
+  for (const link of links) {
+    const href = safeHref(String(link?.href ?? ""));
+    if (href === null || seen.has(href)) continue;
+
+    const tool = String(link?.tool ?? "").trim().slice(0, 40);
+    const label = String(link?.label ?? "").trim().slice(0, MAX_LINK_LABEL);
+    // A chip with no words is a chip nobody can aim at.
+    if (label === "") continue;
+
+    seen.add(href);
+    out.push({ tool, label, href });
+    if (out.length >= MAX_LINKS) break;
+  }
+  return out;
+}
+
+/**
+ * An internal link, or null.
+ *
+ * Kept identical to boxHtml's safeBoxHref on purpose — and imported
+ * from it rather than restated, so there is ONE answer in this app to
+ * "is this a link we will follow" and it cannot drift into two.
+ */
+export function safeHref(raw: string): string | null {
+  return safeBoxHref(raw);
+}

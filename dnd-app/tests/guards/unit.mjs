@@ -7249,6 +7249,75 @@ export const unit = {
           td.addDays("2028-02-28", 1) === "2028-02-29" &&
           td.addDays("2026-09-05", -7) === "2026-08-29"
       );
+      // ---- links back to where an item came from ----
+      // These arrive from other TOOLS rather than from a person
+      // typing, which is exactly why they are cleaned: a tool with a
+      // bug writes "javascript:" into a field as readily as a person
+      // does, and "it came from our own code" is not a check.
+      {
+        const ok = td.normalizeLinks([
+          { tool: "sessions", label: "Session 54", href: "/campaign/x/sessions" },
+        ]);
+        check(
+          "a good link survives intact",
+          ok.length === 1 &&
+            ok[0].tool === "sessions" &&
+            ok[0].label === "Session 54" &&
+            ok[0].href === "/campaign/x/sessions"
+        );
+      }
+      check(
+        "anything that is not an internal link is dropped",
+        td.normalizeLinks([
+          { tool: "x", label: "js", href: "javascript:alert(1)" },
+          { tool: "x", label: "off-site", href: "https://example.com/a" },
+          { tool: "x", label: "protocol-relative", href: "//example.com/a" },
+          { tool: "x", label: "relative", href: "sessions" },
+          { tool: "x", label: "spaced", href: "/a b" },
+          { tool: "x", label: "quoted", href: "/a\"b" },
+        ]).length === 0
+      );
+      check(
+        "a link with no words is dropped, because a chip needs a handle",
+        td.normalizeLinks([
+          { tool: "sessions", label: "   ", href: "/campaign/x/sessions" },
+          { tool: "sessions", href: "/campaign/x/other" },
+        ]).length === 0
+      );
+      // Tagging the same sentence twice happens, and two identical
+      // chips are not information.
+      check(
+        "the same address only appears once",
+        td.normalizeLinks([
+          { tool: "sessions", label: "Session 54", href: "/a" },
+          { tool: "sessions", label: "Session 54 again", href: "/a" },
+          { tool: "npcs", label: "Kelja", href: "/b" },
+        ]).length === 2
+      );
+      check(
+        "an item cannot become a hub of links",
+        (() => {
+          const many = Array.from({ length: 30 }, (_, i) => ({
+            tool: "npcs",
+            label: `n${i}`,
+            href: `/n/${i}`,
+          }));
+          return td.normalizeLinks(many).length === td.MAX_LINKS;
+        })()
+      );
+      check(
+        "a long label is cut rather than allowed to run the row",
+        td.normalizeLinks([
+          { tool: "x", label: "y".repeat(500), href: "/a" },
+        ])[0].label.length === td.MAX_LINK_LABEL
+      );
+      check(
+        "no links at all is an empty list, never a crash",
+        td.normalizeLinks(undefined).length === 0 &&
+          td.normalizeLinks([]).length === 0 &&
+          td.normalizeLinks([{}]).length === 0
+      );
+
       // ---- and again, somewhere that is not UTC ----
       //
       // This sandbox runs in UTC, which makes it exactly the wrong

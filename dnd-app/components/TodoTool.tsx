@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import Link from "next/link";
 import {
   MAX_TEXT,
   dueState,
@@ -12,6 +13,7 @@ import {
   sortTodos,
   todayISO,
 } from "@/components/todoModel";
+import { NAV_ITEM_BY_ID } from "@/components/navItems";
 
 /**
  * The DM's prep list.
@@ -130,9 +132,13 @@ export function TodoTool({ campaignId }: { campaignId: Id<"campaigns"> }) {
 
       {error && <p className="form-error nb-error">{error}</p>}
 
+      {/* The count row is hidden on an empty list. It used to say
+          "Nothing outstanding." directly above "Nothing here yet.",
+          which is one fact told twice in two voices. */}
+      {sorted.length > 0 && (
       <div className="todo-count">
         {openCount === 0 ? (
-          <span>Nothing outstanding.</span>
+          <span>All done — {doneCount} finished.</span>
         ) : (
           <span>
             {openCount} to do{doneCount > 0 && `, ${doneCount} done`}
@@ -152,6 +158,7 @@ export function TodoTool({ campaignId }: { campaignId: Id<"campaigns"> }) {
           </button>
         )}
       </div>
+      )}
 
       <ul className="todo-list">
         {sorted.map((item) => {
@@ -228,6 +235,29 @@ export function TodoTool({ campaignId }: { campaignId: Id<"campaigns"> }) {
                 {item.notes && <p className="todo-notes">{item.notes}</p>}
               </div>
 
+              {/* Where this came from. Eventually most of these are
+                  written by other tools — tag a line in a session's
+                  notes and the item arrives carrying a way back to
+                  it — so the chip names the TOOL and the thing, and
+                  clicking goes there. */}
+              {item.links.length > 0 && (
+                <span className="todo-links">
+                  {item.links.map((link) => (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      className="todo-link"
+                      title={`${NAV_ITEM_BY_ID.get(link.tool)?.label ?? "Link"}: ${link.label}`}
+                    >
+                      <span className="todo-link-icon" aria-hidden="true">
+                        {NAV_ITEM_BY_ID.get(link.tool)?.icon ?? "↗"}
+                      </span>
+                      {link.label}
+                    </Link>
+                  ))}
+                </span>
+              )}
+
               {item.due && (
                 <span className={`todo-due${state ? ` ${state}` : ""}`}>
                   {DUE_LABEL[state ?? ""] ?? item.due}
@@ -251,9 +281,7 @@ export function TodoTool({ campaignId }: { campaignId: Id<"campaigns"> }) {
       </ul>
 
       {sorted.length === 0 && (
-        <p className="centered-note">
-          Nothing here yet. Add the first thing you keep forgetting.
-        </p>
+        <p className="centered-note">Nothing here yet.</p>
       )}
     </div>
   );

@@ -5454,6 +5454,9 @@ export const integrity = {
         "todo-edit",
         "todo-notes",
         "todo-due",
+        "todo-links",
+        "todo-link",
+        "todo-link-icon",
         "todo-del",
       ]) {
         if (!new RegExp(`^\\.${cls}\\s*[,{]`, "m").test(todoCss)) {
@@ -5464,6 +5467,44 @@ export const integrity = {
       }
       // Only lateness is coloured. Everything coloured is nothing
       // coloured, and a list where every row shouts stops being read.
+      // One empty state, not two. The count row said "Nothing
+      // outstanding." directly above "Nothing here yet." — one fact
+      // told twice, in two voices.
+      if (!/\{sorted\.length > 0 && \(\s*<div className="todo-count">/.test(todoSrc)) {
+        problems.push(
+          "the count row is not hidden on an empty list — it repeats the " +
+            "empty-state line directly above it"
+        );
+      }
+      // Links come from other TOOLS, so they are cleaned server-side.
+      // A tool with a bug writes a bad URL as readily as a person.
+      {
+        const todoConvex = read("convex", "todo.ts");
+        // BOTH writers, by their call sites. Looking for the name
+        // anywhere passed on an addTodo that stored links raw, because
+        // linkTodo still called it — the same declaration-versus-use
+        // hole that has now bitten four times in this suite.
+        if (!/const links = normalizeLinks\(args\.links\);/.test(todoConvex)) {
+          problems.push(
+            "todo.addTodo stores links without normalizeLinks — the href " +
+              "check is the app's one rule for a link it will follow"
+          );
+        }
+        if (!/normalizeLinks\(\[\.\.\.existing, args\.link\]\)/.test(todoConvex)) {
+          problems.push(
+            "todo.linkTodo does not normalise the new link against the " +
+              "existing ones — the same address would be added twice"
+          );
+        }
+        const model = read("components", "todoModel.ts");
+        if (!/safeBoxHref\(raw\)/.test(model)) {
+          problems.push(
+            "todoModel restates the internal-link rule instead of using " +
+              "safeBoxHref — two answers to that question will drift"
+          );
+        }
+      }
+
       // `color:` at the start of a declaration, because "border-color:"
       // contains the substring and made this pass on a rule that had
       // lost the text colour and kept only the outline.

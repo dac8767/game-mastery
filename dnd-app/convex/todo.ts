@@ -3,12 +3,21 @@ import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 import { requireDm } from "./auth";
 import {
+  MAX_LINKS,
   MAX_NOTES,
   MAX_TEXT,
   isDate,
+  normalizeLinks,
   orderAfter,
   orderBefore,
 } from "../components/todoModel";
+
+/** One link, as it crosses the wire. */
+const linkValidator = v.object({
+  tool: v.string(),
+  label: v.string(),
+  href: v.string(),
+});
 
 /**
  * The DM's prep list.
@@ -44,7 +53,12 @@ const MAX_ITEMS = 300;
 async function ownedTodo(
   ctx: MutationCtx,
   todoId: Id<"todos">
-): Promise<{ _id: Id<"todos">; campaignId: Id<"campaigns">; order: number }> {
+): Promise<{
+  _id: Id<"todos">;
+  campaignId: Id<"campaigns">;
+  order: number;
+  links?: { tool: string; label: string; href: string }[];
+}> {
   const row = await ctx.db.get(todoId);
   if (!row) throw new Error("That item is gone.");
   await requireDm(ctx, row.campaignId);
@@ -70,6 +84,7 @@ export const listTodos = query({
       due: r.due ?? null,
       notes: r.notes ?? null,
       doneAt: r.doneAt ?? null,
+      links: r.links ?? [],
     }));
   },
 });
@@ -87,6 +102,12 @@ export const addTodo = mutation({
     text: v.string(),
     due: v.optional(v.string()),
     notes: v.optional(v.string()),
+    /**
+     * Where this came from, when another tool is the one adding it.
+     * Cleaned server-side — the caller is trusted to be in the app,
+     * not to have got its own URLs right.
+     */
+    links: v.optional(v.array(linkValidator)),
     /** Put it at the top rather than the bottom. */
     atTop: v.optional(v.boolean()),
   },
@@ -117,6 +138,8 @@ export const addTodo = mutation({
       ? orderBefore(open.length ? Math.min(...open) : undefined)
       : orderAfter(open.length ? Math.max(...open) : undefined);
 
+    const links = normalizeLinks(args.links);
+
     return await ctx.db.insert("todos", {
       campaignId: args.campaignId,
       text,
@@ -124,6 +147,7 @@ export const addTodo = mutation({
       order,
       due,
       notes: trimTo(args.notes, MAX_NOTES),
+      links: links.length ? links : undefined,
     });
   },
 });
@@ -198,6 +222,43 @@ export const reorderTodos = mutation({
       if (!Number.isFinite(move.order)) continue;
       await ctx.db.patch(move.todoId, { order: move.order });
     }
+  },
+});
+
+/**
+ * Attach a link to an item that already exists.
+ *
+ * Separate from addTodo because the two cases are different: a tool
+ * that CREATES a task knows its source up front, and a person tagging
+ * a second sentence onto an existing task does not. Re-linking the
+ * same href is a no-op rather than a duplicate chip.
+ */
+export const linkTodo = mutation({
+  args: { todoId: v.id("todos"), link: linkValidator },
+  handler: async (ctx, args) => {
+    const row = await ownedTodo(ctx, args.todoId);
+    const existing = row.links ?? [];
+    // Normalised TOGETHER, so the new link is deduplicated against
+    // what is already there rather than only against itself.
+    const links = normalizeLinks([...existing, args.link]);
+    if (links.length === existing.length && existing.length >= MAX_LINKS) {
+      throw new Error("That item has all the links it can hold.");
+    }
+    await ctx.db.patch(args.todoId, {
+      links: links.length ? links : undefined,
+    });
+  },
+});
+
+/** Drop one link by its address. */
+export const unlinkTodo = mutation({
+  args: { todoId: v.id("todos"), href: v.string() },
+  handler: async (ctx, args) => {
+    const row = await ownedTodo(ctx, args.todoId);
+    const links = (row.links ?? []).filter((l) => l.href !== args.href);
+    await ctx.db.patch(args.todoId, {
+      links: links.length ? links : undefined,
+    });
   },
 });
 

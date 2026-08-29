@@ -9069,6 +9069,46 @@ button.cal-day:hover {
   font-size: 0.8rem;
 }
 
+/* Where the item came from. Sits between the text and the due pill:
+   the text says what to do, this says why, and the date says when. */
+.todo-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.25rem;
+  flex: none;
+  max-width: 14rem;
+}
+
+.todo-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  padding: 0.1rem 0.45rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  text-decoration: none;
+  /* One line, ellipsised: a chip is a handle, not the sentence it
+     points at. The title attribute carries the whole thing. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.todo-link:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.todo-link-icon {
+  flex: none;
+  opacity: 0.75;
+}
+
 .todo-due {
   flex: none;
   padding: 0.1rem 0.4rem;

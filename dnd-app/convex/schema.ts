@@ -1373,5 +1373,23 @@ export default defineSchema({
     notes: v.optional(v.string()),
     /** When it was ticked, so finished items sort newest-first. */
     doneAt: v.optional(v.number()),
+    /**
+     * Where this came from.
+     *
+     * The eventual point: tag a line in a session's notes as a to-do
+     * and the item carries a way back to the sentence that caused it.
+     * `tool` is the nav item's id, so the chip can say "Sessions"
+     * without storing the word.
+     *
+     * `href` is validated against the app's one internal-link rule on
+     * the way in — these arrive from other TOOLS rather than from a
+     * person typing, and a tool with a bug writes a bad URL just as
+     * readily as a person does.
+     */
+    links: v.optional(
+      v.array(
+        v.object({ tool: v.string(), label: v.string(), href: v.string() })
+      )
+    ),
   }).index("by_campaign", ["campaignId"]),
 });
