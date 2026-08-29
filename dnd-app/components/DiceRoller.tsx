@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { DiceIcon } from "@/components/DiceIcon";
+import { DiceCanvas } from "@/components/DiceCanvas";
 import {
   STANDARD_DICE,
   addDie,
@@ -47,13 +48,16 @@ const MOD_STEPS = [1, 3, 5];
 
 export function DiceRoller({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const view = useQuery(api.dice.listRolls, { campaignId });
+  const table = useQuery(api.dice.getRoom, { campaignId });
   const rollDice = useMutation(api.dice.rollDice);
   const clearRolls = useMutation(api.dice.clearRolls);
+  const setRoom = useMutation(api.dice.setRoom);
 
   const [notation, setNotation] = useState("");
   const [label, setLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [setup, setSetup] = useState(false);
 
   const isDm = view?.isDm ?? false;
 
@@ -63,6 +67,21 @@ export function DiceRoller({ campaignId }: { campaignId: Id<"campaigns"> }) {
 
   /** The roll everyone is looking at: the last one to land. */
   const latest = view?.rolls[0];
+
+  /**
+   * What the 3D canvas should throw — MY last roll and only mine.
+   * dddice broadcasts a throw to the whole room, so a table where
+   * every browser announced the same roll would draw it six times.
+   * A secret roll is not sent at all: a hidden roll whose privacy
+   * depends on another client honouring a flag is not hidden.
+   */
+  const toDraw = useMemo(
+    () =>
+      latest && latest.mine && !latest.secret
+        ? { id: latest._id, dice: latest.dice }
+        : null,
+    [latest]
+  );
 
   async function throwDice(what: string, secret: boolean) {
     if (busy) return;
@@ -100,11 +119,21 @@ export function DiceRoller({ campaignId }: { campaignId: Id<"campaigns"> }) {
             it — the same thing everyone at a real table looks at when
             the dice stop. */}
         <div className="dice-felt">
-          {latest ? (
-            <RollFace roll={latest} big />
-          ) : (
-            <p className="dice-nothing">Nothing thrown yet.</p>
+          {table?.room && (
+            <DiceCanvas
+              slug={table.room.slug}
+              passcode={table.room.passcode}
+              theme={table.room.theme}
+              roll={toDraw}
+            />
           )}
+          <div className="dice-felt-read">
+            {latest ? (
+              <RollFace roll={latest} big />
+            ) : (
+              <p className="dice-nothing">Nothing thrown yet.</p>
+            )}
+          </div>
         </div>
 
         {/* The pool, at the size of the thing you are about to throw. */}
@@ -235,6 +264,15 @@ export function DiceRoller({ campaignId }: { campaignId: Id<"campaigns"> }) {
       <section className="dice-log">
         <header className="dice-log-head">
           <span className="dice-log-title">Rolls</span>
+          {isDm && (
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => setSetup((v) => !v)}
+            >
+              {table?.room ? "3D dice" : "Add 3D dice"}
+            </button>
+          )}
           {isDm && view.rolls.length > 0 && (
             <button
               type="button"
@@ -253,6 +291,21 @@ export function DiceRoller({ campaignId }: { campaignId: Id<"campaigns"> }) {
             </button>
           )}
         </header>
+
+        {isDm && setup && (
+          <DddiceSetup
+            room={table?.room ?? null}
+            onSave={(slug, passcode, theme, enabled) => {
+              void setRoom({ campaignId, slug, passcode, theme, enabled })
+                .then(() => setSetup(false))
+                .catch((e: unknown) =>
+                  setError(
+                    e instanceof Error ? e.message : "Couldn't save that."
+                  )
+                );
+            }}
+          />
+        )}
 
         {view.rolls.length === 0 && (
           <p className="centered-note">No rolls yet.</p>
@@ -349,5 +402,80 @@ function RollFace({ roll, big = false }: { roll: LoggedRoll; big?: boolean }) {
         </p>
       )}
     </article>
+  );
+}
+
+/**
+ * The DM's dddice settings.
+ *
+ * A room slug and, for a private room, its passcode. No API key: every
+ * browser makes its own dddice guest account, so there is no
+ * credential of the DM's to type here and none to leak.
+ *
+ * The passcode does reach the players' browsers — a private room needs
+ * it to join, and the players are the ones joining. It goes only to
+ * campaign members, through a query that checks that first.
+ */
+function DddiceSetup({
+  room,
+  onSave,
+}: {
+  room: { slug: string; passcode: string | null; theme: string | null } | null;
+  onSave: (
+    slug: string,
+    passcode: string | undefined,
+    theme: string | undefined,
+    enabled: boolean
+  ) => void;
+}) {
+  const [slug, setSlug] = useState(room?.slug ?? "");
+  const [passcode, setPasscode] = useState(room?.passcode ?? "");
+  const [theme, setTheme] = useState(room?.theme ?? "");
+
+  return (
+    <form
+      className="dice-setup"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSave(slug, passcode || undefined, theme || undefined, slug !== "");
+      }}
+    >
+      <p className="dice-setup-note">
+        Paste your dddice room link. Everyone at the table joins as a
+        guest — no keys to share.
+      </p>
+      <input
+        value={slug}
+        onChange={(e) => setSlug(e.target.value)}
+        placeholder="dddice.com/room/XXXXXXX"
+        aria-label="dddice room"
+      />
+      <input
+        value={passcode}
+        onChange={(e) => setPasscode(e.target.value)}
+        placeholder="Passcode (private rooms only)"
+        aria-label="Room passcode"
+      />
+      <input
+        value={theme}
+        onChange={(e) => setTheme(e.target.value)}
+        placeholder="Theme, e.g. dddice-bees (optional)"
+        aria-label="Dice theme"
+      />
+      <div className="dice-setup-go">
+        <button type="submit" className="npc-btn primary">
+          Save
+        </button>
+        {room && (
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => onSave(room.slug, undefined, undefined, false)}
+          >
+            Turn off
+          </button>
+        )}
+      </div>
+    </form>
   );
 }

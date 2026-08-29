@@ -73,9 +73,25 @@ the DM rolled at all.
 log (reading a stored row) and a fresh throw. Two implementations
 would drift, and that one is on screen when people cheer.
 
-Open: dddice for 3D dice. `IDiceRoll.value` lets an external RNG set
-the face, so Convex stays authoritative and dddice only draws. Secret
-rolls would not be sent to it at all.
+3D dice come from dddice (`dddice-js`), and it DRAWS only — every die
+is sent with its face already set. Remove the canvas and every number
+on screen is unchanged, which is also the failure model: no WebGL, no
+network, a refused room, a pool over the room's limit all leave the
+2D log exactly as it was.
+
+No dddice API key is stored anywhere. Each browser mints its own guest
+account (`api.user.guest()`) into localStorage. The room passcode IS
+stored, and reaches a browser only through `getRoom`, which checks
+campaign membership first — it grants rolling dice in one room, not
+account access.
+
+A secret roll is never sent to dddice at all. Their `is_hidden` would
+make privacy depend on every other client honouring a flag.
+
+dddice has no d100 mesh: a percentile is a `d10x` plus a `d10`, and
+73 is a 70 and a 3 — with 100 as 90+10 and 5 as 0+5, since the units
+die has no zero face. Rooms default to a 25-dice limit and a
+percentile die costs two.
 
 ### combat — Combat Tracker
 ```

@@ -172,3 +172,79 @@ export const clearRolls = mutation({
     return rows.length;
   },
 });
+
+/* ---------------------------------------------------------------- */
+/* The dddice room                                                    */
+/* ---------------------------------------------------------------- */
+
+/**
+ * Where the 3D dice are thrown, if anywhere.
+ *
+ * Members only. The passcode is what a browser needs to join a private
+ * room, so it has to reach the table — but only the table, which is
+ * why this goes through requireMember rather than being public. It is
+ * not an account credential; it grants rolling dice in one room, and
+ * dddice's own share links put the same thing in a URL.
+ *
+ * There is deliberately no API key in this table. Each browser mints
+ * its own dddice guest account, so the DM's key never leaves the DM's
+ * machine — and a guest key that leaks is a guest key.
+ */
+export const getRoom = query({
+  args: { campaignId: v.id("campaigns") },
+  handler: async (ctx, args) => {
+    const { isDm } = await requireMember(ctx, args.campaignId);
+
+    const room = await ctx.db
+      .query("diceRooms")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
+      .unique();
+
+    if (!room || !room.enabled) return { isDm, room: null };
+    return {
+      isDm,
+      room: {
+        slug: room.slug,
+        passcode: room.passcode ?? null,
+        theme: room.theme ?? null,
+      },
+    };
+  },
+});
+
+/** The DM's setting: which room the table's dice land in. */
+export const setRoom = mutation({
+  args: {
+    campaignId: v.id("campaigns"),
+    slug: v.string(),
+    passcode: v.optional(v.string()),
+    theme: v.optional(v.string()),
+    enabled: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    await requireDm(ctx, args.campaignId);
+
+    const slug = args.slug.trim();
+    // The slug is the tail of a dddice room URL. People paste the URL,
+    // so take one rather than rejecting it.
+    const fromUrl = /dddice\.com\/room\/([A-Za-z0-9_-]+)/.exec(slug);
+    const clean = (fromUrl ? fromUrl[1] : slug).slice(0, 64);
+
+    const existing = await ctx.db
+      .query("diceRooms")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
+      .unique();
+
+    const row = {
+      campaignId: args.campaignId,
+      slug: clean,
+      passcode: args.passcode?.trim() || undefined,
+      theme: args.theme?.trim() || undefined,
+      enabled: args.enabled && clean !== "",
+    };
+
+    if (existing) await ctx.db.patch(existing._id, row);
+    else await ctx.db.insert("diceRooms", row);
+    return row.enabled;
+  },
+});

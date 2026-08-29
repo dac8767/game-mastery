@@ -8,7 +8,7 @@
  * the app. Nothing else in the toolchain checks it.
  */
 
-import { read, requirePattern } from "./lib.mjs";
+import { read, requirePattern, stripComments } from "./lib.mjs";
 
 export const dmVisibility = {
   name: "dm-visibility",
@@ -695,6 +695,46 @@ export const dmVisibility = {
             `dice.rollDice accepts a ${arg} argument — the roll and the ` +
               "roller must both come from the server, never from the caller"
           );
+        }
+      }
+
+      // ---- the 3D dice must never carry a secret roll --------------
+      // dddice broadcasts a throw to every participant in the room.
+      // A hidden roll whose privacy depends on another client honouring
+      // an is_hidden flag is not hidden — so a secret roll is never
+      // SENT. The guard is on the component that decides what to draw.
+      {
+        const roller = stripComments(read("components", "DiceRoller.tsx"));
+        if (!/latest\.mine && !latest\.secret/.test(roller)) {
+          problems.push(
+            "the 3D canvas is not gated on both `mine` and `!secret` — a " +
+              "secret roll sent to the dddice room is a roll every player's " +
+              "browser receives"
+          );
+        }
+        const canvas = stripComments(read("components", "DiceCanvas.tsx"));
+        if (/is_hidden/.test(canvas)) {
+          problems.push(
+            "DiceCanvas reaches for dddice's is_hidden — a secret roll is " +
+              "kept private by not being sent, not by asking nicely"
+          );
+        }
+        // The DM's own dddice key must never become a shared secret.
+        const diceSrc = read("convex", "dice.ts");
+        if (/apiKey|api_key|\bsecretKey\b/i.test(diceSrc)) {
+          problems.push(
+            "convex/dice.ts stores a dddice API key — every browser mints " +
+              "its own guest account precisely so no key is shared"
+          );
+        }
+        if (!/await requireMember\(ctx, args\.campaignId\)/.test(fnBody("getRoom"))) {
+          problems.push(
+            "dice.getRoom is not gated on requireMember — the room passcode " +
+              "would be readable by anyone with a campaign id"
+          );
+        }
+        if (!/await requireDm\(ctx, args\.campaignId\)/.test(fnBody("setRoom"))) {
+          problems.push("dice.setRoom is not DM-gated");
         }
       }
 

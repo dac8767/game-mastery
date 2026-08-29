@@ -8820,6 +8820,7 @@ button.cal-day:hover {
    the biggest thing on the screen — that is the whole point of a dice
    roller, and the first version gave it a table row. */
 .dice-felt {
+  position: relative;
   flex: 1;
   min-height: 8rem;
   display: flex;
@@ -8830,6 +8831,41 @@ button.cal-day:hover {
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: auto;
+}
+
+/* The 3D canvas fills the felt; the readable result sits ON it, so
+   losing dddice loses the dice and never the number. */
+.dice-canvas-wrap {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.dice-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.dice-canvas-note {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0.4rem;
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.76rem;
+  text-align: center;
+}
+
+/* Above the canvas, and not swallowing clicks meant for the dice —
+   dddice's own controls (pick up, re-roll) live on that surface. */
+.dice-felt-read {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  pointer-events: none;
 }
 
 .dice-nothing {
@@ -9031,6 +9067,39 @@ button.cal-day:hover {
 
 .dice-log-title {
   font-weight: 600;
+}
+
+.dice-setup {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+  padding: 0.6rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.dice-setup-note {
+  margin: 0 0 0.2rem;
+  color: var(--text-dim);
+  font-size: 0.76rem;
+}
+
+.dice-setup input {
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.dice-setup-go {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.2rem;
 }
 
 /* ---- one roll, in the log and on the felt ---- */

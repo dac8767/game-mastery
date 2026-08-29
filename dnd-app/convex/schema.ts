@@ -1381,4 +1381,26 @@ export default defineSchema({
     total: v.number(),
     secret: v.boolean(),
   }).index("by_campaign", ["campaignId"]),
+
+  /**
+   * The campaign's dddice room, for the 3D dice.
+   *
+   * The passcode is here because a private room needs one to join and
+   * the players' browsers are the things joining. It reaches a browser
+   * only through a query that checks campaign membership first — the
+   * same rule as everything else the server shapes. It is not an
+   * account credential: it grants throwing dice in one room.
+   *
+   * No API key is stored. Each browser mints its own dddice guest
+   * account, so Derek's key never leaves his machine.
+   */
+  diceRooms: defineTable({
+    campaignId: v.id("campaigns"),
+    /** The room's slug, from its dddice URL. */
+    slug: v.string(),
+    passcode: v.optional(v.string()),
+    /** Theme slug for the dice, e.g. "dddice-bees". */
+    theme: v.optional(v.string()),
+    enabled: v.boolean(),
+  }).index("by_campaign", ["campaignId"]),
 });

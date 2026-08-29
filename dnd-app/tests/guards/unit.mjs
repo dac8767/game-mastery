@@ -7284,6 +7284,116 @@ export const unit = {
       );
     }
 
+    // ---- what dddice is asked to draw ------------------------------
+    // The 3D dice are decoration, which is exactly why this needs
+    // testing: our own log shows the right total whatever the canvas
+    // does, so a percentile split into the wrong two dice, or a
+    // dropped die drawn as a counting one, is wrong on the table and
+    // right on the screen beside it. Nobody would file that.
+    {
+      const map = await import(
+        pathToFileURL(join(compile("components/dddiceMap.ts"), "dddiceMap.js"))
+          .href
+      );
+      const die = (sides, value, kept = true) => ({ sides, value, kept });
+
+      check(
+        "an ordinary die goes over as its own mesh and face",
+        (() => {
+          const out = map.toDddiceRoll([die(20, 17), die(6, 4)]);
+          return (
+            out.length === 2 &&
+            out[0].type === "d20" &&
+            out[0].value === 17 &&
+            out[1].type === "d6" &&
+            out[1].value === 4
+          );
+        })()
+      );
+      check(
+        "a dropped die is drawn, and marked as not counting",
+        (() => {
+          const out = map.toDddiceRoll([die(20, 18), die(20, 3, false)]);
+          return (
+            out.length === 2 &&
+            out[0].is_dropped === undefined &&
+            out[1].is_dropped === true
+          );
+        })()
+      );
+
+      // The percentile split. dddice has no d100 mesh — it is a tens
+      // die and a units die — and both ends of the range are where a
+      // reasonable-looking `v % 10` goes wrong.
+      check(
+        "a d100 splits into a tens and a units die that sum back",
+        (() => {
+          for (let v = 1; v <= 100; v++) {
+            const { tens, ones } = map.splitPercentile(v);
+            if (tens + ones !== v) return false;
+            // The units die has faces 1-10, never 0. The tens die has
+            // 0, 10 … 90, never 100.
+            if (ones < 1 || ones > 10) return false;
+            if (tens < 0 || tens > 90 || tens % 10 !== 0) return false;
+          }
+          return true;
+        })()
+      );
+      check(
+        "the awkward percentile cases land where a table would read them",
+        (() => {
+          const eq = (v, t, o) => {
+            const s = map.splitPercentile(v);
+            return s.tens === t && s.ones === o;
+          };
+          return eq(73, 70, 3) && eq(100, 90, 10) && eq(5, 0, 5) && eq(10, 0, 10);
+        })()
+      );
+      check(
+        "a d100 goes over as two dice, tens first, carrying its display",
+        (() => {
+          const out = map.toDddiceRoll([die(100, 73)]);
+          return (
+            out.length === 2 &&
+            out[0].type === "d10x" &&
+            out[0].value_to_display === 70 &&
+            out[1].type === "d10" &&
+            out[1].value === 3
+          );
+        })()
+      );
+
+      // Nothing rather than something wrong: half a fireball on the
+      // table disagrees with the log, and the log is the real answer.
+      check(
+        "a pool past the room's limit is not drawn at all",
+        (() => {
+          const many = Array.from({ length: 26 }, () => die(6, 3));
+          return (
+            map.toDddiceRoll(many) === null &&
+            map.toDddiceRoll(many.slice(0, 25)).length === 25
+          );
+        })()
+      );
+      // A percentile die costs TWO against that limit, which is why
+      // the count is taken after the mapping rather than before.
+      check(
+        "a percentile die counts as the two dice it becomes",
+        map.toDddiceRoll(Array.from({ length: 13 }, () => die(100, 50))) === null
+      );
+      check(
+        "a die dddice has no mesh for cancels the whole throw",
+        map.toDddiceRoll([die(6, 3), die(7, 5)]) === null &&
+          map.toDddiceRoll([]) === null
+      );
+      check(
+        "the theme rides along on every die when one is set",
+        map
+          .toDddiceRoll([die(100, 42), die(6, 1)], "dddice-bees")
+          .every((d) => d.theme === "dddice-bees")
+      );
+    }
+
     // ---- the Moonbrook session import holds to its sources ----------
     // The records in scripts/import-moonbrook-sessions.mjs were merged
     // from the OneNote session pages and the Discord scheduling
