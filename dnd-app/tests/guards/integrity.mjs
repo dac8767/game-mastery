@@ -5163,12 +5163,51 @@ export const integrity = {
         // against a literal here, so this says "they still agree"
         // rather than "they are still these two values".
         const icon = read("app", "icon.svg");
+
+        /* It has to PARSE, and that is not the same as containing the
+           right strings. This icon shipped once with the accent
+           variable's real name written in its comment — two hyphens,
+           which XML forbids inside a comment body — and the file was
+           unparseable while every check below it passed happily,
+           because they all read it as text. The browser drew nothing
+           and said nothing. */
+        for (const problem of xmlProblems(icon)) {
+          problems.push(`app/icon.svg is not well-formed XML: ${problem}`);
+        }
+
+        // TEN faces, because that is how many an icosahedron shows when
+        // you look down a face axis — it is the die's actual geometry
+        // rather than a number picked to be strict. Fewer paths means
+        // somebody flattened it back into a silhouette, which is what
+        // it was before and what it was replaced for.
         const paths = (icon.match(/<path\b/g) ?? []).length;
-        if (paths < 2) {
+        if (paths < 10) {
           problems.push(
-            `app/icon.svg draws ${paths} <path> — the die is a silhouette ` +
-              "with its top face cut back out, and one shape alone is a " +
-              "gold blob"
+            `app/icon.svg draws ${paths} <path> — a d20 seen face-on shows ` +
+              "ten faces, and fewer is a hexagon with lines on it"
+          );
+        }
+        /* Lit, not flat: every FACE its own shade.
+           Counted off the <path> elements rather than off the file, so
+           the ground rect is not one of them — and compared against the
+           number of faces rather than against a floor, because "at
+           least six different colours" passed a die whose top three
+           faces had all been set to the same gold. Ten faces, ten
+           shades, or it is a hexagon with lines on it again. */
+        const faceFills = [...icon.matchAll(/<path\b[^>]*\bfill="(#[0-9a-f]{3,8})"/gi)]
+          .map((m) => m[1].toLowerCase());
+        const shades = new Set(faceFills);
+        if (shades.size < faceFills.length) {
+          problems.push(
+            `app/icon.svg draws ${faceFills.length} faces in ${shades.size} ` +
+              "colours — each face catches the light differently, and two " +
+              "sharing a shade read as one bigger face"
+          );
+        }
+        if (shades.size < 10) {
+          problems.push(
+            `app/icon.svg has ${shades.size} face shades — a d20 seen ` +
+              "face-on shows ten, and a flat one is not a die"
           );
         }
         const gold = /--accent:\s*(#[0-9a-f]{3,8})/i.exec(
@@ -5196,11 +5235,19 @@ export const integrity = {
                 "icon has drifted from the palette"
             );
           }
-          if (fills(ground) < 2) {
+          if (fills(ground) < 1) {
             problems.push(
-              `app/icon.svg fills ${fills(ground)} shapes with ${ground}, ` +
-                "the theme colour — it needs two, the ground the gold sits " +
-                "on and the top face cut back out of the die"
+              `app/icon.svg does not fill anything with ${ground}, the theme ` +
+                "colour — the die would sit on whatever the tab strip is"
+            );
+          }
+          // The seams between faces, in the ground colour. Without them
+          // the ten triangles run together into one gold shape at any
+          // size where the shading is subtle.
+          if (!new RegExp(`stroke="${ground}"`, "i").test(icon)) {
+            problems.push(
+              "app/icon.svg draws no seams between the faces — they would " +
+                "run together into one gold shape"
             );
           }
         }
@@ -5788,15 +5835,48 @@ export const integrity = {
         shellSub.indexOf('className={`nav-caret'),
         shellSub.indexOf("</button>", shellSub.indexOf('className={`nav-caret'))
       );
-      if (!caret || !/onToggleExpand\(item\.id\)/.test(caret)) {
+      if (!caret || !/onToggleFold\(item\.id\)/.test(caret)) {
         problems.push(
-          "the sidebar's caret does not call onToggleExpand — it would open " +
+          "the sidebar's caret does not call onToggleFold — it would open " +
             "and shut without the state surviving a click to another screen"
         );
       }
-      if (!/toggleItemExpanded\(layout, itemId\)/.test(shellSub)) {
+      if (!/toggleItemCollapsed\(layout, itemId\)/.test(shellSub)) {
         problems.push(
-          "AppShell does not write the open state through toggleItemExpanded"
+          "AppShell does not write the fold through toggleItemCollapsed"
+        );
+      }
+      // The tray belongs to the tool you are IN. Both halves — the
+      // caret is not drawn elsewhere, and the tray is not opened
+      // elsewhere — because either one alone puts a tool's insides in
+      // the sidebar of every screen in the app.
+      if (!/const open = kids\.length > 0 && here && !folded\?\.has\(item\.id\)/.test(shellSub)) {
+        problems.push(
+          "the sub-screen tray is not gated on being inside the tool — its " +
+            "sections would hang under it from every screen in the app"
+        );
+      }
+      if (!/kids\.length > 0 && here && onToggleFold/.test(shellSub)) {
+        problems.push(
+          "the caret is drawn outside the tool it belongs to"
+        );
+      }
+      // Segment-matched, not startsWith alone: /todo must not light up
+      // for a /todolist that ships later.
+      if (!/pathname === href \|\| pathname\.startsWith\(`\$\{href\}\/`\)/.test(shellSub)) {
+        problems.push(
+          "\"inside this tool\" is not matched on a path segment — a longer " +
+            "slug that merely starts the same would count as being in it"
+        );
+      }
+      // reconcileSidebar runs on EVERY render before the sidebar is
+      // drawn, so an item flag it does not carry through is a flag that
+      // is written and then thrown away between saving and reading.
+      const layoutSub = stripComments(read("components", "sidebarLayout.ts"));
+      if (!/if \(it\?\.collapsed\) next\.collapsed = true;/.test(layoutSub)) {
+        problems.push(
+          "reconcileSidebar drops an item's `collapsed` — every render " +
+            "reconciles first, so the fold would never survive being saved"
         );
       }
       for (const cls of ["nav-row", "nav-caret", "nav-sub"]) {
@@ -6194,6 +6274,100 @@ export const integrity = {
     return problems;
   },
 };
+
+/**
+ * The ways a hand-written SVG stops being XML.
+ *
+ * Node has no XML parser and this repo is not adding one for a favicon,
+ * so this checks the three things that actually go wrong in a file a
+ * person edits: a comment body containing a double hyphen, an
+ * unterminated attribute value, and tags that do not nest. All three
+ * are FATAL to a parser and invisible to any check that treats the file
+ * as text — which is exactly how the first one shipped.
+ *
+ * Returns a list of descriptions; empty means it is well-formed as far
+ * as these go.
+ */
+function xmlProblems(src) {
+  const found = [];
+  let i = 0;
+  const stack = [];
+
+  while (i < src.length) {
+    const lt = src.indexOf("<", i);
+    if (lt === -1) break;
+
+    if (src.startsWith("<!--", lt)) {
+      const end = src.indexOf("-->", lt + 4);
+      if (end === -1) {
+        found.push("a comment is never closed");
+        break;
+      }
+      const body = src.slice(lt + 4, end);
+      if (body.includes("--")) {
+        const at = body.indexOf("--");
+        found.push(
+          `a comment contains "--" (near "${body
+            .slice(Math.max(0, at - 20), at + 12)
+            .replace(/\s+/g, " ")
+            .trim()}") — XML forbids it inside a comment, and the whole ` +
+            "file fails to parse"
+        );
+      }
+      i = end + 3;
+      continue;
+    }
+    // Declarations and CDATA are not this file's business; skip them.
+    if (src.startsWith("<?", lt) || src.startsWith("<!", lt)) {
+      const end = src.indexOf(">", lt);
+      if (end === -1) {
+        found.push("a declaration is never closed");
+        break;
+      }
+      i = end + 1;
+      continue;
+    }
+
+    // An ordinary tag. Walk it so a ">" inside a quoted attribute does
+    // not end it early — which is how an unterminated quote shows up.
+    let j = lt + 1;
+    let quote = null;
+    while (j < src.length) {
+      const c = src[j];
+      if (quote) {
+        if (c === quote) quote = null;
+      } else if (c === '"' || c === "'") {
+        quote = c;
+      } else if (c === ">") {
+        break;
+      }
+      j++;
+    }
+    if (j >= src.length) {
+      found.push("a tag or an attribute value is never closed");
+      break;
+    }
+
+    const inner = src.slice(lt + 1, j);
+    const name = (inner.match(/^\/?\s*([A-Za-z_][\w.:-]*)/) ?? [])[1];
+    if (name) {
+      if (inner.startsWith("/")) {
+        const open = stack.pop();
+        if (open !== name) {
+          found.push(
+            `</${name}> closes <${open ?? "nothing"}> — the tags do not nest`
+          );
+        }
+      } else if (!inner.trimEnd().endsWith("/")) {
+        stack.push(name);
+      }
+    }
+    i = j + 1;
+  }
+
+  if (stack.length > 0) found.push(`<${stack.join(">, <")}> never closed`);
+  return found;
+}
 
 /**
  * Hook calls an earlier return can skip.

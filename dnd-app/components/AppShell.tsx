@@ -22,7 +22,7 @@ import {
   SidebarLayout,
   defaultSidebar,
   reconcileSidebar,
-  toggleItemExpanded,
+  toggleItemCollapsed,
   toggleSectionCollapsed,
   visibleSidebar,
 } from "@/components/sidebarLayout";
@@ -49,19 +49,20 @@ function NavList({
   base,
   pathname,
   isDm,
-  expanded,
-  onToggleExpand,
+  folded,
+  onToggleFold,
 }: {
   items: NavItem[];
   base: string;
   pathname: string;
   isDm: boolean;
   /**
-   * Which parents are open, by id. Absent for a child list — a
-   * sub-screen with sub-screens of its own is a menu, not a sidebar.
+   * Which parents the reader has folded away, by id. Absent for a
+   * child list — a sub-screen with sub-screens of its own is a menu,
+   * not a sidebar.
    */
-  expanded?: Set<string>;
-  onToggleExpand?: (id: string) => void;
+  folded?: Set<string>;
+  onToggleFold?: (id: string) => void;
 }) {
   return (
     <ul className="nav-list">
@@ -82,8 +83,20 @@ function NavList({
            than inside the child list, because a parent whose every
            child is dmOnly must not draw a caret onto an empty tray. */
         const kids = (item.children ?? []).filter((c) => isDm || !c.dmOnly);
-        const open = kids.length > 0 && Boolean(expanded?.has(item.id));
-        /* The caret opens the tray; the label still navigates. Two
+        /* Inside the tool, or on one of its own screens. The whole tray
+           hangs off this: a tool's sections are only ever shown while
+           you are in it, so the sidebar stays the length of the app
+           rather than the length of the app plus every tool's insides.
+           Matched on the path SEGMENT, not with startsWith — /todo must
+           not light up for a /todolist that shipped later. */
+        const here =
+          pathname === href || pathname.startsWith(`${href}/`);
+        /* Open unless folded away. A tool you are standing in shows you
+           its screens without being asked; the caret is for the person
+           who wants them out of the way, which is why the saved flag is
+           `collapsed` and absent means open. */
+        const open = kids.length > 0 && here && !folded?.has(item.id);
+        /* The caret folds the tray; the label still navigates. Two
            targets on one row, so "show me what is in here" and "take me
            to the front of it" stay separate questions — collapsing them
            into one is how you end up unable to look without going. */
@@ -100,7 +113,7 @@ function NavList({
                 <NavIcon icon={item.icon} art={item.art} />
                 <span className="nav-label">{item.label}</span>
               </Link>
-              {kids.length > 0 && onToggleExpand && (
+              {kids.length > 0 && here && onToggleFold && (
                 <button
                   type="button"
                   className={`nav-caret${open ? " open" : ""}`}
@@ -109,7 +122,7 @@ function NavList({
                     open ? `Hide ${item.label}'s screens` : `Show ${item.label}'s screens`
                   }
                   title={open ? "Hide these" : "Show these"}
-                  onClick={() => onToggleExpand(item.id)}
+                  onClick={() => onToggleFold(item.id)}
                 >
                   <span aria-hidden="true">{open ? "▾" : "▸"}</span>
                 </button>
@@ -221,22 +234,22 @@ export function AppShell({
   };
 
   /**
-   * A tool's own screens, open or shut. Saved for the reason the folds
-   * above are: navigating remounts this shell.
+   * The tools whose own screens this person has folded away. Saved for
+   * the reason the section folds are: navigating remounts this shell.
    */
-  const expandedIds = useMemo(
+  const foldedIds = useMemo(
     () =>
       new Set(
         layout.sections
           .flatMap((s) => s.items)
-          .filter((i) => i.expanded)
+          .filter((i) => i.collapsed)
           .map((i) => i.id)
       ),
     [layout]
   );
 
-  const toggleExpand = (itemId: string) => {
-    void saveSettings({ sidebar: toggleItemExpanded(layout, itemId) });
+  const toggleItemFold = (itemId: string) => {
+    void saveSettings({ sidebar: toggleItemCollapsed(layout, itemId) });
   };
 
   /**
@@ -375,8 +388,8 @@ export function AppShell({
                      labelled sub-screens, so the caret is not offered
                      while it is collapsed — the tool's own front page
                      is one click away and has the same list on it. */
-                  expanded={collapsed ? undefined : expandedIds}
-                  onToggleExpand={collapsed ? undefined : toggleExpand}
+                  folded={collapsed ? undefined : foldedIds}
+                  onToggleFold={collapsed ? undefined : toggleItemFold}
                 />
               )}
             </div>

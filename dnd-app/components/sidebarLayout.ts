@@ -17,19 +17,23 @@ export interface SidebarItem {
   id: string;
   hidden: boolean;
   /**
-   * Open, showing the item's own sub-screens beneath it.
+   * Folded up, hiding the item's own sub-screens.
    *
-   * Only meaningful on an item that HAS children; on any other it is a
-   * flag nothing reads. Saved rather than held in component state for
-   * the same reason a section's fold is: walking from one screen to
-   * another remounts the whole shell, so a useState would snap shut on
-   * every click of the thing it just opened.
+   * The same word and the same polarity as a SECTION's collapsed,
+   * deliberately: absent means open, and a tool you are standing in
+   * shows you its screens without being asked. The flag only exists
+   * for the person who wants them out of the way.
    *
-   * Optional and absent-means-shut, because it is the rarer state and
-   * because a validator that demanded it would reject every sidebar
-   * saved before sub-items existed.
+   * Only meaningful on an item that HAS children, and only while you
+   * are inside that tool — the caret is not offered anywhere else, so
+   * this cannot be set on an item you are not looking at.
+   *
+   * Saved rather than held in component state for the same reason a
+   * section's fold is: walking from one screen to another remounts the
+   * whole shell, so a useState would snap shut on every click of the
+   * thing it just opened.
    */
-  expanded?: boolean;
+  collapsed?: boolean;
 }
 
 export interface SidebarSection {
@@ -124,10 +128,17 @@ export function reconcileSidebar(
       const id = String(it?.id ?? "");
       if (!valid.has(id) || seen.has(id)) continue;
       seen.add(id);
-      items.push({
+      const next: SidebarItem = {
         id,
         hidden: ALWAYS_VISIBLE.includes(id) ? false : Boolean(it?.hidden),
-      });
+      };
+      // Carried through, like a section's flags above. Rebuilding the
+      // item from id and hidden alone DROPPED this — and since every
+      // render reconciles before drawing, the fold was thrown away
+      // between saving it and reading it back. Nothing failed; the
+      // caret simply never stayed shut.
+      if (it?.collapsed) next.collapsed = true;
+      items.push(next);
     }
     const title = String(section?.title ?? "")
       .trim()
@@ -256,17 +267,17 @@ export function toggleSectionCollapsed(
 }
 
 /**
- * Open or shut one item's sub-screens.
+ * Fold one item's sub-screens away, or bring them back.
  *
- * `expanded` is deleted rather than set to false, so a shut item is
- * byte-identical to one nobody has ever opened. Two spellings of the
+ * `collapsed` is deleted rather than set to false, so an open item is
+ * byte-identical to one nobody has ever touched. Two spellings of the
  * same state is how a "did they change anything" comparison starts
  * answering yes for no reason.
  */
-export function setItemExpanded(
+export function setItemCollapsed(
   layout: SidebarLayout,
   id: string,
-  expanded: boolean
+  collapsed: boolean
 ): SidebarLayout {
   return {
     sections: layout.sections.map((s) => ({
@@ -274,22 +285,22 @@ export function setItemExpanded(
       items: s.items.map((i) => {
         if (i.id !== id) return i;
         const next: SidebarItem = { ...i };
-        if (expanded) next.expanded = true;
-        else delete next.expanded;
+        if (collapsed) next.collapsed = true;
+        else delete next.collapsed;
         return next;
       }),
     })),
   };
 }
 
-export function toggleItemExpanded(
+export function toggleItemCollapsed(
   layout: SidebarLayout,
   id: string
 ): SidebarLayout {
   const item = layout.sections
     .flatMap((s) => s.items)
     .find((i) => i.id === id);
-  return setItemExpanded(layout, id, !item?.expanded);
+  return setItemCollapsed(layout, id, !item?.collapsed);
 }
 
 export function toggleHidden(

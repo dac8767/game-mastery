@@ -583,12 +583,12 @@ export default defineSchema({
                 id: v.string(),
                 hidden: v.boolean(),
                 /**
-                 * Open, showing this item's own sub-screens beneath
-                 * it. Optional for the same reason the two above are:
-                 * a sidebar saved before sub-items existed has no
+                 * Folded away, hiding this item's own sub-screens.
+                 * Optional for the same reason the two above are: a
+                 * sidebar saved before sub-items existed has no
                  * opinion, and a required field would reject it.
                  */
-                expanded: v.optional(v.boolean()),
+                collapsed: v.optional(v.boolean()),
               })
             ),
           })

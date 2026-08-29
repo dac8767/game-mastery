@@ -1,33 +1,60 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
   <!--
-    The tab icon. Next's app/icon.svg file convention picks this up and
-    emits the <link rel="icon">, so nothing imports it and nothing
-    breaks if it goes missing — the icon just quietly stops being
-    there. tests/guards/integrity.mjs checks it exists for that reason.
+    The tab icon: an actual d20, not a hexagon with a triangle in it.
 
-    Same d20 as the sidebar's dice glyph (D20Icon in NavIcon.tsx), but
-    FILLED rather than stroked. A browser tab draws this at 16px, where
-    the nav icon's 1.5px outlines are one grey pixel and the die reads
-    as a smudge; solid gold on the candlelight ground keeps the
-    hexagonal silhouette at that size, which is the whole job.
+    Drawn as the real projection of an icosahedron down a face axis,
+    which is how a d20 looks sitting on a table showing its top face.
+    That view shows exactly TEN of the twenty faces, and the geometry is
+    not a guess:
 
-    The ground is painted rather than left transparent: a tab strip can
-    be light or dark and the gold has to sit on something. It is
-    candlelight's #141210 regardless of the person's chosen theme,
-    because a favicon cannot follow one.
+      the silhouette is a regular hexagon, flat-topped;
+      the front face is a triangle at the centre, turned 30 degrees from
+      the hexagon so its points aim at the hexagon's EDGES rather than
+      its corners, which is what the real solid does;
+      the front face's radius is the hexagon's divided by phi (0.618),
+      which falls out of the icosahedron's own coordinates;
+      nine more triangles fill the ring, three sharing the front face's
+      edges and six filling the corners.
+
+    Ten paths, ten faces, shaded from a light above and to the left.
+    That is what makes it read as a solid object rather than a badge.
+    The front face is the palette's accent exactly; the other nine are
+    tints and shades of it, so the whole thing is one colour lit.
+
+    Next's app/icon.svg convention picks this up by FILE NAME and emits
+    the link tag, so nothing imports it and a rename loses the icon
+    silently. tests/guards/integrity.mjs checks it for that reason,
+    including that its gold and its ground still agree with the accent
+    in globals.css and the theme colour in layout.tsx. An SVG cannot
+    read a CSS variable, so these are hard-coded copies of both.
+
+    NOTE: no double hyphen anywhere in this comment. XML forbids one
+    inside a comment body, and writing the accent variable's real name
+    here made the whole file fail to parse while every text-matching
+    check on it still passed. The guard now parses it as well.
+
+    At 16px the facets fall below a pixel and only the gold hexagon
+    survives, which is why the silhouette is drawn as large as the
+    rounded ground allows: the shape carries the tab strip, and the
+    faceting is the reward at 32px and up.
   -->
   <rect width="32" height="32" rx="7" fill="#141210" />
-  <!-- Outer silhouette, then the top face punched back out in the
-       ground colour. Two solid shapes rather than an outline. -->
-  <path fill="#c9a227" d="M16 3.5 27 10v12l-11 6.5L5 22V10Z" />
-  <path fill="#141210" d="M16 9.75 22.9 21.5H9.1Z" />
-  <!-- The three edges running off the face to the far vertices. They
-       disappear at 16px, which is fine: they are what makes it a die
-       rather than a badge at 32px and up. -->
-  <path
-    stroke="#141210"
-    stroke-width="1.6"
-    stroke-linecap="round"
-    d="M16 9.75V3.5M9.1 21.5 16 28.5M22.9 21.5 16 28.5"
-  />
+  <g stroke="#141210" stroke-width="0.3" stroke-linejoin="round">
+    <!-- Top, catching the most light. -->
+    <path fill="#efc95a" d="M16 8.83 10.2 5.95 21.8 5.95Z" />
+    <!-- The upper ring. -->
+    <path fill="#dcb63e" d="M16 8.83 4.4 16 10.2 5.95Z" />
+    <path fill="#d8ae33" d="M22.21 19.58 16 8.83 21.8 5.95Z" />
+    <!-- The face you are looking at, in the accent itself. -->
+    <path fill="#c9a227" d="M16 8.83 22.21 19.58 9.79 19.58Z" />
+    <!-- The two sides. -->
+    <path fill="#b5901f" d="M22.21 19.58 21.8 5.95 27.6 16Z" />
+    <path fill="#ab8a22" d="M16 8.83 9.79 19.58 4.4 16Z" />
+    <!-- The lower ring, in shadow. -->
+    <path fill="#97771a" d="M22.21 19.58 27.6 16 21.8 26.05Z" />
+    <path fill="#8d7118" d="M9.79 19.58 10.2 26.05 4.4 16Z" />
+    <path fill="#7d6315" d="M9.79 19.58 22.21 19.58 21.8 26.05Z" />
+    <!-- The bottom, furthest from the light. -->
+    <path fill="#6b5411" d="M9.79 19.58 21.8 26.05 10.2 26.05Z" />
+  </g>
 </svg>

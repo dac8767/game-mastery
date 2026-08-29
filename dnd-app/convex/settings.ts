@@ -118,8 +118,8 @@ export const sidebarValidator = v.object({
         v.object({
           id: v.string(),
           hidden: v.boolean(),
-          /** Open, showing the item's sub-screens. See SidebarItem. */
-          expanded: v.optional(v.boolean()),
+          /** Folded away, hiding the item's sub-screens. See SidebarItem. */
+          collapsed: v.optional(v.boolean()),
         })
       ),
     })
