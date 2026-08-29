@@ -37,8 +37,11 @@ export function CampaignList() {
   return (
     <div className="page">
       <header className="page-header">
+        {/* A heading, not the app's name. The wordmark lives on the
+            sign-in screen; here you are already in, and what this page
+            needs to say is what the list below it is. */}
         <h1>
-          <span className="wordmark">Table View</span>
+          <span className="page-title">Your Campaigns:</span>
         </h1>
         <div className="page-header-actions">
           <button

@@ -1,4 +1,4 @@
-/* Table View — dark theme built for a dim room and a bright map. */
+/* Game Mastery — dark theme built for a dim room and a bright map. */
 
 :root {
   --bg: #141210;
@@ -72,7 +72,11 @@ button {
   margin: 0;
 }
 
-.page-header .wordmark {
+/* Renamed from .wordmark, which is what it used to be: the page said
+   the app's name where it now says what the page is. Same treatment —
+   the gold small-caps is the house style for a page's first line, not
+   something only a brand mark is allowed to wear. */
+.page-header .page-title {
   color: var(--accent);
   font-variant: small-caps;
   letter-spacing: 0.08em;

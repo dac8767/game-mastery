@@ -5102,6 +5102,114 @@ export const integrity = {
       }
     }
 
+    // ---- the shell's identity: tab name, tab icon, page heading -----
+    //
+    // Three things nothing else can see fail. The icon is picked up by
+    // FILE NAME — Next's app/icon.* convention emits the <link> — so no
+    // import points at it and renaming or moving it costs you the icon
+    // with nothing anywhere saying so. The title is a bare string in
+    // metadata. And the heading's class is a string in one file that
+    // has to match a rule in another.
+    {
+      if (!exists("app", "icon.svg")) {
+        problems.push(
+          "app/icon.svg is gone — Next picks the tab icon up by file name, " +
+            "so a rename loses the icon without breaking a single import"
+        );
+      }
+
+      const layout = stripComments(read("app", "layout.tsx"));
+
+      if (exists("app", "icon.svg")) {
+        // An SVG cannot read a CSS variable, so the icon's two colours
+        // are hard-coded copies of the palette's. Change the gold in
+        // globals.css and the tab keeps the old one, in the one place
+        // nobody looks. Checked against the source of each rather than
+        // against a literal here, so this says "they still agree"
+        // rather than "they are still these two values".
+        const icon = read("app", "icon.svg");
+        const paths = (icon.match(/<path\b/g) ?? []).length;
+        if (paths < 2) {
+          problems.push(
+            `app/icon.svg draws ${paths} <path> — the die is a silhouette ` +
+              "with its top face cut back out, and one shape alone is a " +
+              "gold blob"
+          );
+        }
+        const gold = /--accent:\s*(#[0-9a-f]{3,8})/i.exec(
+          read("app", "globals.css")
+        )?.[1];
+        const ground = /themeColor:\s*"(#[0-9a-f]{3,8})"/i.exec(layout)?.[1];
+        if (!gold || !ground) {
+          problems.push(
+            "cannot find --accent in globals.css or themeColor in " +
+              "layout.tsx, so the tab icon's colours cannot be checked " +
+              "against the palette they were copied from"
+          );
+        } else {
+          // FILLS, counted — not "the colour appears somewhere". The
+          // ground colour is also the stroke that separates the die's
+          // edges, so merely finding the string proves nothing about
+          // either the ground or the face: dropping the face path, or
+          // setting the ground rect to fill="none", both leave the
+          // string in the file and the icon wrong.
+          const fills = (c) =>
+            (icon.match(new RegExp(`fill="${c}"`, "gi")) ?? []).length;
+          if (fills(gold) < 1) {
+            problems.push(
+              `app/icon.svg fills nothing with the accent ${gold} — the tab ` +
+                "icon has drifted from the palette"
+            );
+          }
+          if (fills(ground) < 2) {
+            problems.push(
+              `app/icon.svg fills ${fills(ground)} shapes with ${ground}, ` +
+                "the theme colour — it needs two, the ground the gold sits " +
+                "on and the top face cut back out of the die"
+            );
+          }
+        }
+      }
+      const titled = /title:\s*"([^"]+)"/.exec(layout);
+      if (!titled) {
+        problems.push(
+          "app/layout.tsx sets no metadata title — every tab then says the " +
+            "URL, because no page overrides it"
+        );
+      } else if (titled[1] !== "Game Mastery") {
+        problems.push(
+          `the browser tab says "${titled[1]}" rather than "Game Mastery"`
+        );
+      }
+
+      // The heading's class, checked from the JSX to the stylesheet.
+      // Matched as a rule of its own (`.page-title` immediately followed
+      // by `,` or `{`), so that a longer name it happens to prefix —
+      // .page-title-note — cannot stand in for it.
+      const listSrc = stripComments(read("components", "CampaignList.tsx"));
+      const heading =
+        /<h1>\s*<span className="([a-z-]+)">([^<]+)<\/span>/.exec(listSrc);
+      if (!heading) {
+        problems.push(
+          "CampaignList's <h1> is no longer a single classed <span> — the " +
+            "check below cannot tell what the front door says or how it is " +
+            "styled"
+        );
+      } else {
+        const [, cls, text] = heading;
+        if (!text.trim()) {
+          problems.push("the campaigns page's heading is empty");
+        }
+        const css = read("app", "globals.css");
+        if (!new RegExp(`\\.${cls}\\s*[,{]`).test(css)) {
+          problems.push(
+            `CampaignList's heading asks for .${cls}, which globals.css ` +
+              "does not define — the heading silently loses its styling"
+          );
+        }
+      }
+    }
+
     return problems;
   },
 };

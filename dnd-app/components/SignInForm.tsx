@@ -20,7 +20,7 @@ export function SignInForm() {
   return (
     <div className="signin-wrap">
       <div className="signin-card">
-        <h1>Table View</h1>
+        <h1>Game Mastery</h1>
         <p className="subtitle">Sign in to see the table.</p>
         <form
           onSubmit={async (event) => {

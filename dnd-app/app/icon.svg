@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!--
+    The tab icon. Next's app/icon.svg file convention picks this up and
+    emits the <link rel="icon">, so nothing imports it and nothing
+    breaks if it goes missing — the icon just quietly stops being
+    there. tests/guards/integrity.mjs checks it exists for that reason.
+
+    Same d20 as the sidebar's dice glyph (D20Icon in NavIcon.tsx), but
+    FILLED rather than stroked. A browser tab draws this at 16px, where
+    the nav icon's 1.5px outlines are one grey pixel and the die reads
+    as a smudge; solid gold on the candlelight ground keeps the
+    hexagonal silhouette at that size, which is the whole job.
+
+    The ground is painted rather than left transparent: a tab strip can
+    be light or dark and the gold has to sit on something. It is
+    candlelight's #141210 regardless of the person's chosen theme,
+    because a favicon cannot follow one.
+  -->
+  <rect width="32" height="32" rx="7" fill="#141210" />
+  <!-- Outer silhouette, then the top face punched back out in the
+       ground colour. Two solid shapes rather than an outline. -->
+  <path fill="#c9a227" d="M16 3.5 27 10v12l-11 6.5L5 22V10Z" />
+  <path fill="#141210" d="M16 9.75 22.9 21.5H9.1Z" />
+  <!-- The three edges running off the face to the far vertices. They
+       disappear at 16px, which is fine: they are what makes it a die
+       rather than a badge at 32px and up. -->
+  <path
+    stroke="#141210"
+    stroke-width="1.6"
+    stroke-linecap="round"
+    d="M16 9.75V3.5M9.1 21.5 16 28.5M22.9 21.5 16 28.5"
+  />
+</svg>

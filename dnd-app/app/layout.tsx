@@ -3,8 +3,14 @@ import { Providers } from "./providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Table View",
-  description: "D&D campaign player app — live map and combat tracker",
+  // The browser tab, everywhere. No page sets its own title, so this one
+  // string is what every tab says — which is the point: you find the tab
+  // by the app's name, not by whichever screen you left open in it.
+  //
+  // The tab's ICON is app/icon.svg. Next's file convention emits the
+  // <link rel="icon"> for it, which is why nothing here references it.
+  title: "Game Mastery",
+  description: "D&D campaign app — live map, combat tracker and DM tools",
 };
 
 export const viewport: Viewport = {
