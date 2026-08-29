@@ -17,9 +17,31 @@ boundaries were there; this file writes them down.
 
 ## How to start a chat
 
+**0. `git checkout claude/game-mastery-db-setup-jaeuln` — first, before
+anything else.**
+
+This is the trunk. Every branch below is cut from it, and it is where
+the app actually lives.
+
+`main` is NOT the app. It is the initial import from 17 July 2026 and
+is over 150 commits behind — no DM Screen, no Lookup, no pagination,
+and no copy of this file. A fresh session clones the default branch, so
+a chat that skips this step is reading a six-week-old skeleton and will
+correctly report that the thing it was asked to work on does not exist.
+That has already happened once.
+
+If this file is missing, you are on the wrong branch. That is the
+symptom, and step 0 is the fix.
+
+```bash
+cd dnd-app
+git fetch origin claude/game-mastery-db-setup-jaeuln
+git checkout claude/game-mastery-db-setup-jaeuln
+```
+
 1. Read `CLAUDE.md` (standing preferences, guard rules).
 2. Read this file. Find your tool. **Those files are yours.**
-3. Work on `claude/tool-<id>`, branched from the current working branch.
+3. Work on `claude/tool-<id>`, cut from the trunk named in step 0.
 4. Run `npm run guards` before pushing. Rebase, don't merge.
 5. Say in your final message whether you changed `convex/schema.ts`, so
    the paste blocks get run in the right order.
