@@ -249,6 +249,31 @@ Note    Session NUMBERS are the DM's to change; the importer matches on
         server for a player — see sessions.getNotes.
 ```
 
+### todo — To-Do
+```
+Owns    components/TodoTool.tsx, components/todoModel.ts
+        convex/todo.ts
+        app/campaign/[campaignId]/todo/
+Tables  todos
+Branch  claude/tool-todo
+```
+The DM's prep list, and DM-only in a stronger sense than the rest of
+the app. An NPC has a player-facing shape — the same row with the
+secrets stripped. This has none: "statblock for the lich" IS the
+spoiler. So every function refuses a non-DM caller rather than
+filtering rows, the QUERY included, and the dm-visibility guard fails
+on `requireMember` appearing anywhere in `convex/todo.ts`.
+
+The planned player-facing list is its OWN table and module, not a
+`visibility` flag here. A flag would turn every function in this tool
+into a question about who is asking.
+
+Items carry a sort key, not an index: a drag rewrites one row. The
+rare exhausted-gap case rewrites the list once rather than leaving two
+items with the same key. Dates are compared as strings — "YYYY-MM-DD"
+sorts in date order, so nothing here builds a Date and nothing here
+has a timezone.
+
 ### shell — App frame, settings, campaigns, auth
 ```
 Owns    components/AppShell.tsx, components/SettingsPanel.tsx,
@@ -337,31 +362,6 @@ Will own  components/ShopsTool.tsx
 Branch    claude/tool-shops
 Status    Nav entry exists. No component.
 Reads     lookup (items) — a shop's stock comes from the item library
-```
-
-### todo — To-Do
-```
-Will own  components/TodoTool.tsx, components/todoModel.ts
-          convex/todo.ts
-          app/campaign/[campaignId]/todo/
-Tables    todos
-Branch    claude/tool-todo
-Status    Reserved. Nothing built.
-Note      Decide WHOSE list it is before writing the table, because it
-          changes every query in the tool. Three readings, and they are
-          not compatible:
-
-            the DM's prep     campaign-scoped, dmOnly — "statblock for
-                              the lich", "map the sewers"
-            the party's       campaign-scoped, shared — quest hooks and
-                              open threads everyone can see
-            each person's     per-user, campaign-scoped — Derek's list
-                              and Julie's list are different lists
-
-          The first is closest to how the DM Screen's notes already
-          work and is the safest default; the third is the one that is
-          painful to retrofit, because it puts userId in the index and
-          nothing above it can be reused. Ask before building.
 ```
 
 ### vtt — Virtual tabletop
