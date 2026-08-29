@@ -206,6 +206,13 @@ export function relativeDue(
  * 86,400,000ms with no daylight-saving hour to round wrongly — the
  * classic way a "days between" helper returns 1.958 and floors to the
  * wrong answer twice a year.
+ *
+ * The UTC and the ROUND are a deliberate pair, and each covers for the
+ * other: UTC makes the difference exact so the rounding never matters,
+ * and rounding absorbs the missing hour if the UTC ever goes. Either
+ * one alone is correct, which is why a mutation removing just one of
+ * them passes the tests — removing both does not, and it is the
+ * timezone run that catches it. Do not "simplify" one away.
  */
 export function daysBetween(from: string, to: string): number {
   const at = (iso: string) => {
