@@ -156,3 +156,102 @@ export function trailOf(breadcrumb: string, title: string): string {
     .filter(Boolean)
     .join(" › ");
 }
+
+/**
+ * The AI layer's half.
+ *
+ * Everything below serves the answer panel rather than the hit list.
+ * Same property as everything above it, for the same reason: an answer
+ * is text out of a model, the citation markers inside it are text out
+ * of a model, and neither is ever built into markup here.
+ */
+
+/** How many past questions the box remembers, per browser. */
+export const RECENT_LIMIT = 8;
+
+export interface AnswerSpan {
+  text: string;
+  /** The number this span cites, or null when it is ordinary prose. */
+  cite: number | null;
+}
+
+/**
+ * An answer split into prose and the citation markers inside it.
+ *
+ * The answer arrives as prose with `[1]`-style markers where the claims
+ * are, and the screen turns each marker into a control that opens the
+ * section it names. Doing that by string replacement would mean
+ * building HTML out of model output — the one thing this file exists to
+ * avoid — so the marker is located here and the caller renders a button.
+ *
+ * Only numbers the answer actually carries citations for are treated as
+ * markers; `known` is that set. A bare `[4]` in an answer with three
+ * citations stays prose, because a control that opens nothing is worse
+ * than the bracket it replaced.
+ */
+export function answerSpans(answer: string, known: number[]): AnswerSpan[] {
+  const body = String(answer ?? "");
+  if (!body) return [];
+
+  const allowed = new Set(known);
+  const spans: AnswerSpan[] = [];
+  let at = 0;
+
+  for (const match of body.matchAll(/\[(\d{1,2})\]/g)) {
+    const n = Number(match[1]);
+    if (!allowed.has(n)) continue;
+    const start = match.index ?? 0;
+    if (start > at) spans.push({ text: body.slice(at, start), cite: null });
+    spans.push({ text: match[0], cite: n });
+    at = start + match[0].length;
+  }
+
+  if (at < body.length) spans.push({ text: body.slice(at), cite: null });
+  return spans;
+}
+
+/**
+ * Written as an escape, not as the character itself.
+ *
+ * A separator has to be something that cannot occur inside a source, a
+ * breadcrumb or a title, and NUL is the only one document text can
+ * never contain. Typed literally it turns this file binary to `grep`
+ * and to diffs; as an escape the file stays plain text and the value is
+ * the same.
+ */
+const SECTION_SEP = "\u0000";
+
+/**
+ * What identifies a section across a re-import.
+ *
+ * The rules table has no stable ids — `--replace` mints new ones every
+ * time the SRD is converted again — so a pin, a citation and a hit are
+ * matched to each other by name. Mirrors the key the server pins on.
+ */
+export function sectionKeyOf(ref: {
+  source: string;
+  breadcrumb: string;
+  title: string;
+}): string {
+  return [ref.source, ref.breadcrumb, ref.title]
+    .map((p) => String(p ?? "").trim())
+    .join(SECTION_SEP);
+}
+
+/**
+ * A question added to the recent list.
+ *
+ * Newest first, no duplicates, capped. Pure so the guard can check the
+ * behaviour that matters: asking the same thing twice moves it up the
+ * list rather than leaving a second copy of it further down.
+ */
+export function pushRecent(
+  list: readonly string[],
+  query: string,
+  limit = RECENT_LIMIT
+): string[] {
+  const next = String(query ?? "").trim();
+  if (!next) return list.slice(0, limit);
+  const rest = list.filter((q) => q.toLowerCase() !== next.toLowerCase());
+  return [next, ...rest].slice(0, limit);
+}

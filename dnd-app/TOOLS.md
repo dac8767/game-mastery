@@ -218,11 +218,29 @@ Note    Adding a builtin marked `permanent` is how new controls reach
 ### rules — Rules Lawyer
 ```
 Owns    components/RulesLawyerTool.tsx, components/rulesSnippet.ts
+        convex/rules.ts, convex/rulesAsk.ts
         app/campaign/[campaignId]/rules/
-Reads   convex/lookup.ts (api.lookup)
+Tables  rulePins, ruleAnswers
+Reads   convex/lookup.ts (api.lookup) — the `rules` table, its two
+        search indexes, and ruleContext all live there and stay there
 Branch  claude/tool-rules
-Status  Thin — a stub with a route and a DM Screen panel. Building it
-        out is a tool-shaped job that conflicts with nothing.
+Note    Two halves, and the order matters. The search half quotes the
+        rules verbatim and is the reason anything here can be trusted;
+        the AI half reads those passages back with inline citations and
+        sits ABOVE them, never instead of them. The integrity guard
+        enforces exactly that — prose is allowed only where the quoted
+        sections and its citations are on screen with it.
+
+        rulesAsk.ts is the only `"use node"` file in the app and the
+        only thing in Game Mastery that costs money per use. It needs
+        ANTHROPIC_API_KEY set on the deployment (`npx convex env set`),
+        refuses to answer with no passages to cite, and caches every
+        answer in ruleAnswers so the same question is paid for once.
+
+        Nothing outside the `rules` table stores a rule's `_id`. The
+        importer replaces that table wholesale, so pins, cached
+        citations and the `?open=` in a shared link are all keyed on
+        source + breadcrumb + title instead.
 ```
 
 ### scheduler — Scheduler

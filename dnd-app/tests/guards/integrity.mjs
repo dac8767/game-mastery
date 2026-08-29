@@ -777,12 +777,82 @@ export const integrity = {
           "RulesLawyerTool no longer renders the stored rules text"
         );
       }
+      // 4. The second slice.
+      //
+      //    This check used to forbid prose outright. It was holding a
+      //    place, and its message said what for: prose belongs BESIDE
+      //    the quoted rule with its citations checked, never in place
+      //    of it. The AI layer exists now, so the condition it was
+      //    waiting on is the check.
+      //
+      //    Nothing here relaxes 1–3. The answer is model output, so it
+      //    is swept for dangerouslySetInnerHTML with everything else,
+      //    and hit.text above still has to render.
       if (/api\.\w+\.(ask|explain|summari)/i.test(tool)) {
-        problems.push(
-          "RulesLawyerTool calls something that generates prose. That is " +
-            "the second slice, and it belongs beside the quoted rule with " +
-            "its citations checked — never in place of it"
-        );
+        const ask = read("convex", "rulesAsk.ts");
+        const rules = read("convex", "rules.ts");
+
+        // The answer is text out of a model and its citation markers
+        // are text out of a model. Spans, then, for the same reason
+        // the rules text is spans.
+        if (!/answerSpans/.test(tool)) {
+          problems.push(
+            "RulesLawyerTool renders the AI answer without answerSpans — " +
+              "model output turned into markup is the same hole as document " +
+              "text turned into markup"
+          );
+        }
+
+        // Beside, not instead: an answer with nothing to check against
+        // is the thing this tool was built to be an alternative to.
+        if (!/citations/.test(tool)) {
+          problems.push(
+            "RulesLawyerTool shows an AI answer but renders no citations — " +
+              "an answer you cannot check is the thing this tool exists to " +
+              "replace"
+          );
+        }
+
+        // The prompt is the only thing keeping the answer inside the
+        // passages. It is load-bearing, so it is checked.
+        if (!/only from the numbered passages/i.test(ask)) {
+          problems.push(
+            "convex/rulesAsk.ts no longer confines the model to the " +
+              "retrieved passages — without that instruction the answer is " +
+              "whatever the model remembers about D&D, cited to sections " +
+              "that do not say it"
+          );
+        }
+
+        // No passages, no answer. Also means an empty rules table
+        // cannot run up a bill.
+        if (!/passages\.length === 0/.test(ask)) {
+          problems.push(
+            "convex/rulesAsk.ts will answer with no passages to cite — " +
+              "that is an ungrounded ruling, and it costs money to produce"
+          );
+        }
+
+        // A [9] against eight passages is the model miscounting.
+        // Clamping it to [8] would attribute a claim to a section that
+        // never supported it.
+        if (!/n >= 1 && n <= count/.test(ask)) {
+          problems.push(
+            "convex/rulesAsk.ts no longer bounds citation numbers — an " +
+              "out-of-range citation must be dropped, never clamped onto " +
+              "whichever passage is nearest"
+          );
+        }
+
+        // The screen presents cached answers as the model's. Only the
+        // action that paid for one may write it.
+        if (!/export const recordAnswer = internalMutation/.test(rules)) {
+          problems.push(
+            "convex/rules.ts exposes a write path into ruleAnswers — the " +
+              "screen presents those rows as what the model said, so only " +
+              "the action that paid for one may write it"
+          );
+        }
       }
     }
 

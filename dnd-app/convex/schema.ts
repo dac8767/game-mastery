@@ -676,6 +676,13 @@ export default defineSchema({
     order: v.number(),
   })
     .index("by_source_order", ["source", "order"])
+    // Resolving a section from its NAME rather than its id. Pins and
+    // cached citations outlive the rows they point at — `--replace`
+    // mints new ids for every section on every import — so they are
+    // stored by name and looked up here. Title is not unique within a
+    // source ("Actions" appears under several headings), so a lookup
+    // takes the small set this returns and matches the breadcrumb.
+    .index("by_source_title", ["source", "title"])
     .searchIndex("search_title", {
       searchField: "title",
       filterFields: ["source"],
@@ -684,6 +691,74 @@ export default defineSchema({
       searchField: "search",
       filterFields: ["source"],
     }),
+
+  /**
+   * The sections one person keeps coming back to.
+   *
+   * Per-user and NOT per-campaign, for the reason the Rules Lawyer
+   * route already gives for taking no campaignId: the rules are the
+   * rules in every campaign, so the conditions you look up every
+   * session are the same ones in both of Derek's games.
+   *
+   * Stored by NAME, never by `_id`. The rules table is derived
+   * reference data with no write path — re-importing replaces every
+   * row and mints new ids — so a pin holding an id would be a dangling
+   * pointer the first time the SRD is re-imported. A pin whose section
+   * genuinely went away survives as a row and is shown as missing
+   * rather than dropped, because a pin vanishing silently is
+   * indistinguishable from a bug.
+   */
+  rulePins: defineTable({
+    userId: v.id("users"),
+    source: v.string(),
+    breadcrumb: v.string(),
+    title: v.string(),
+  })
+    .index("by_user", ["userId"])
+    // The uniqueness check on pinning, and the row to delete on
+    // unpinning: one identity per user, so toggling cannot leave two.
+    .index("by_user_section", ["userId", "source", "breadcrumb", "title"]),
+
+  /**
+   * Answers already paid for.
+   *
+   * The AI layer is the one part of this app that costs money per use,
+   * and a table asks the same dozen questions every session — "how does
+   * grappling work", "can I move after attacking". Keyed on the
+   * normalised question plus the source filter, so the second person to
+   * ask it that night is served from here for nothing.
+   *
+   * Citations are stored by name for the same reason pins are. There is
+   * no write path from the client: only the action that paid for an
+   * answer inserts one.
+   */
+  ruleAnswers: defineTable({
+    /** Normalised question + source — see rules.answerKey. */
+    key: v.string(),
+    question: v.string(),
+    /** The source filter in force, or null for "all". */
+    source: v.union(v.string(), v.null()),
+    answer: v.string(),
+    citations: v.array(
+      v.object({
+        /**
+         * The bracketed number as it appears in the answer text.
+         *
+         * Stored, not derived from position: only the CITED passages
+         * are kept, so an answer citing [2] and [5] has two entries and
+         * neither is at the index its number implies. Without this the
+         * screen would link [5] to the wrong section.
+         */
+        n: v.number(),
+        source: v.string(),
+        breadcrumb: v.string(),
+        title: v.string(),
+        order: v.number(),
+      })
+    ),
+    /** Which model wrote it, so a re-run after a model change is visible. */
+    model: v.string(),
+  }).index("by_key", ["key"]),
 
   /**
    * ── The character-build half of the library ───────────────────────
