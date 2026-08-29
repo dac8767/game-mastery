@@ -614,6 +614,67 @@ export const dmVisibility = {
       }
     }
 
+    // ---- convex/todo.ts --------------------------------------------
+    // The DM's prep list has no player-facing shape at all, which makes
+    // it a different rule from everything above. An NPC has a redacted
+    // version; "statblock for the lich before Tuesday" does not — the
+    // task IS the spoiler. So every function refuses a non-DM caller
+    // rather than filtering rows, and that includes the QUERY.
+    //
+    // requireMember would be the quiet failure here: it returns a list
+    // instead of an error, and a list is a promise the tool works for
+    // you. One day somebody would make that promise true.
+    {
+      const todo = read("convex", "todo.ts");
+      const fnBody = (name) => {
+        const at = todo.indexOf(`export const ${name} = `);
+        if (at === -1) throw new Error(`no ${name} in convex/todo.ts`);
+        const next = todo.indexOf("\nexport const ", at + 1);
+        return todo.slice(at, next === -1 ? undefined : next);
+      };
+
+      for (const fn of ["listTodos", "addTodo", "reorderTodos", "clearDone"]) {
+        if (!/await requireDm\(ctx, args\.campaignId\)/.test(fnBody(fn))) {
+          problems.push(`todo.${fn} is not gated on requireDm`);
+        }
+      }
+      // The row-addressed ones authorise against the ROW's campaign.
+      // Trusting a campaignId in the arguments would make somebody
+      // else's todo id plus your own campaign enough to edit theirs.
+      for (const fn of ["setDone", "updateTodo", "deleteTodo"]) {
+        if (!/await ownedTodo\(ctx, args\.todoId\)/.test(fnBody(fn))) {
+          problems.push(
+            `todo.${fn} does not authorise through ownedTodo — a row id is ` +
+              "all a caller needs to reach another campaign's list"
+          );
+        }
+      }
+      if (!/const row = await ctx\.db\.get\(todoId\);[\s\S]{0,160}await requireDm\(ctx, row\.campaignId\)/.test(
+        todo
+      )) {
+        problems.push(
+          "ownedTodo does not requireDm against the row's own campaign"
+        );
+      }
+      // A batch aimed at one campaign must not carry a row from
+      // another along with it.
+      if (!/row\.campaignId !== args\.campaignId/.test(fnBody("reorderTodos"))) {
+        problems.push(
+          "todo.reorderTodos does not check each row's campaign — one batch " +
+            "would be able to reorder another campaign's list"
+        );
+      }
+      // requireMember anywhere in this file is the mistake this whole
+      // section exists to catch.
+      if (/requireMember/.test(todo)) {
+        problems.push(
+          "convex/todo.ts uses requireMember — a prep list has no " +
+            "player-facing version, so a non-DM caller is refused rather " +
+            "than served a filtered one"
+        );
+      }
+    }
+
     return problems;
   },
 };

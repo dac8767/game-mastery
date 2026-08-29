@@ -5399,6 +5399,83 @@ export const integrity = {
       }
     }
 
+    // ---- the DM's prep list ----------------------------------------
+    {
+      const todoSrc = stripComments(read("components", "TodoTool.tsx"));
+      const todoCss = read("app", "globals.css");
+
+      // The list is sorted by the MODEL, which is unit-tested. A sort
+      // written inline in the component is a second answer to "what
+      // order is this in" that nothing checks.
+      // The RENDER path, not merely a mention. sortTodos is called in
+      // the drop handler too, so looking for the name anywhere passed
+      // on a component that had gone back to sorting the visible list
+      // inline — the one place a wrong order is actually seen.
+      if (!/const sorted = useMemo\(\(\) => \(items \? sortTodos\(items\)/.test(todoSrc)) {
+        problems.push(
+          "TodoTool does not sort the RENDERED list through sortTodos — a " +
+            "second ordering rule in the component is one nothing tests"
+        );
+      }
+      if (!/reorderTo\(/.test(todoSrc)) {
+        problems.push(
+          "TodoTool does not compute moves through reorderTo — the sort-key " +
+            "arithmetic, including the exhausted-gap case, lives in the model"
+        );
+      }
+      // Today is read ONCE. Per-item, a list open across midnight
+      // would colour its first half against yesterday.
+      if (!/const today = useMemo\(\(\) => todayISO\(\), \[\]\)/.test(todoSrc)) {
+        problems.push(
+          "TodoTool reads today per render or per item rather than once — a " +
+            "list open across midnight would grade its rows against two days"
+        );
+      }
+      // Finished items have no order of their own, so dragging one is
+      // a move that silently undoes itself.
+      if (!/draggable=\{!item\.done\}/.test(todoSrc)) {
+        problems.push(
+          "TodoTool lets a finished item be dragged — its place comes from " +
+            "when it was ticked, so the move would undo itself on reload"
+        );
+      }
+
+      for (const cls of [
+        "todo",
+        "todo-add",
+        "todo-input",
+        "todo-date",
+        "todo-count",
+        "todo-list",
+        "todo-item",
+        "todo-check",
+        "todo-body",
+        "todo-text",
+        "todo-edit",
+        "todo-notes",
+        "todo-due",
+        "todo-del",
+      ]) {
+        if (!new RegExp(`^\\.${cls}\\s*[,{]`, "m").test(todoCss)) {
+          problems.push(
+            `TodoTool renders .${cls}, which globals.css gives no rule of its own`
+          );
+        }
+      }
+      // Only lateness is coloured. Everything coloured is nothing
+      // coloured, and a list where every row shouts stops being read.
+      // `color:` at the start of a declaration, because "border-color:"
+      // contains the substring and made this pass on a rule that had
+      // lost the text colour and kept only the outline.
+      const overdue = /\.todo-due\.overdue\s*\{([^}]*)\}/.exec(todoCss);
+      if (!overdue || !/^\s*color:/m.test(overdue[1])) {
+        problems.push(
+          "an overdue item is not coloured — the due pill is the only thing " +
+            "on the row that carries urgency"
+        );
+      }
+    }
+
     return problems;
   },
 };

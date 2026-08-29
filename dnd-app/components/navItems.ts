@@ -80,11 +80,11 @@ export const TOOL_ITEMS: NavItem[] = [
     dmOnly: true,
   },
   { id: "scheduler", label: "Scheduler", icon: "⏱", slug: "scheduler" },
-  // No slug: reserved, not built. The sidebar greys it and the ribbon
-  // leaves it out entirely, which is how this app holds a place for a
-  // tool without offering a door that 404s. See TOOLS.md — whose list
-  // it is has to be decided before the table is written.
-  { id: "todo", label: "To-Do", icon: "☑" },
+  // dmOnly because the whole tool is: convex/todo.ts refuses a non-DM
+  // caller rather than shaping the rows, since a prep list has no
+  // player-facing version. The flag hides the link; the server is what
+  // enforces it.
+  { id: "todo", label: "To-Do", icon: "☑", slug: "todo", dmOnly: true },
 ];
 
 /**

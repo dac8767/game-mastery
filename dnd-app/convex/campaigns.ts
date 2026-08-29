@@ -566,6 +566,12 @@ export const purgeCampaign = internalMutation({
       .take(left);
     if (await sweep(uiOverrides)) return await more();
 
+    const todos = await ctx.db
+      .query("todos")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
+      .take(left);
+    if (await sweep(todos)) return await more();
+
     const members = await ctx.db
       .query("campaignMembers")
       .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))

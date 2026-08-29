@@ -7046,6 +7046,265 @@ export const unit = {
       );
     }
 
+    // ---- the DM's prep list ----------------------------------------
+    // Two halves, both of which fail silently. A reorder that puts an
+    // item back where it started reads as a missed click; a due date
+    // off by one calls tomorrow overdue, and a list that cries wolf is
+    // a list you stop believing.
+    {
+      const td = await import(
+        pathToFileURL(join(compile("components/todoModel.ts"), "todoModel.js"))
+          .href
+      );
+
+      check(
+        "a new item lands past the ends of the list",
+        td.orderAfter(3000) === 4000 &&
+          td.orderBefore(1000) === 0 &&
+          td.orderAfter(undefined) === td.ORDER_GAP &&
+          td.orderBefore(undefined) === td.ORDER_GAP
+      );
+      // Dropping at the very top or bottom is the same question with
+      // one side missing, which is why orderBetween takes undefined.
+      check(
+        "a key between two others sits between them",
+        td.orderBetween(1000, 2000) === 1500 &&
+          td.orderBetween(undefined, 1000) === 0 &&
+          td.orderBetween(2000, undefined) === 3000 &&
+          td.orderBetween(undefined, undefined) === td.ORDER_GAP
+      );
+
+      // Repeated inserts into one gap halve it every time. The floor
+      // is what stops two items ending up with keys too close to
+      // separate — after which they sort however the database feels
+      // and shuffle themselves when nobody is looking.
+      check(
+        "splitting the same gap forever eventually asks for a renumber",
+        (() => {
+          let lo = 1000;
+          const hi = 2000;
+          for (let i = 0; i < 40; i++) {
+            if (td.needsRenumber(lo, hi)) return true;
+            lo = td.orderBetween(lo, hi);
+          }
+          return false;
+        })()
+      );
+      check(
+        "a comfortable gap does not ask for one, and an open end never does",
+        !td.needsRenumber(1000, 2000) &&
+          !td.needsRenumber(undefined, 1000) &&
+          !td.needsRenumber(1000, undefined)
+      );
+      check(
+        "a renumber spaces the list evenly and keeps its order",
+        (() => {
+          const out = td.renumber([
+            { _id: "a", order: 1 },
+            { _id: "b", order: 1.0001 },
+            { _id: "c", order: 9 },
+          ]);
+          return (
+            out.map((i) => i._id).join("") === "abc" &&
+            out[0].order === 1000 &&
+            out[2].order === 3000
+          );
+        })()
+      );
+
+      // Moving one item must write ONE row. Rewriting the list on every
+      // drag is invisible until it is a hundred writes on a free tier.
+      check(
+        "a move writes only the item that moved",
+        (() => {
+          const items = [
+            { _id: "a", order: 1000 },
+            { _id: "b", order: 2000 },
+            { _id: "c", order: 3000 },
+          ];
+          const moves = td.reorderTo(items, "c", 0);
+          return moves.length === 1 && moves[0]._id === "c" && moves[0].order < 1000;
+        })()
+      );
+      check(
+        "a move lands where it was dropped, in both directions",
+        (() => {
+          const items = [
+            { _id: "a", order: 1000 },
+            { _id: "b", order: 2000 },
+            { _id: "c", order: 3000 },
+          ];
+          const after = (moves) => {
+            const by = new Map(moves.map((m) => [m._id, m.order]));
+            return items
+              .map((i) => ({ ...i, order: by.get(i._id) ?? i.order }))
+              .sort((x, y) => x.order - y.order)
+              .map((i) => i._id)
+              .join("");
+          };
+          return (
+            after(td.reorderTo(items, "a", 2)) === "bca" &&
+            after(td.reorderTo(items, "c", 0)) === "cab" &&
+            after(td.reorderTo(items, "a", 1)) === "bac"
+          );
+        })()
+      );
+      check(
+        "a move that changes nothing writes nothing",
+        (() => {
+          const items = [
+            { _id: "a", order: 1000 },
+            { _id: "b", order: 2000 },
+          ];
+          return (
+            td.reorderTo(items, "a", 0).length === 0 &&
+            td.reorderTo(items, "ghost", 1).length === 0
+          );
+        })()
+      );
+      // The rare case: no room left, so the whole list is rewritten
+      // once rather than two items being given the same key.
+      check(
+        "a move into an exhausted gap renumbers the list instead",
+        (() => {
+          const items = [
+            { _id: "a", order: 1000 },
+            { _id: "b", order: 1000.0001 },
+            { _id: "c", order: 3000 },
+          ];
+          const moves = td.reorderTo(items, "c", 1);
+          const orders = moves.map((m) => m.order);
+          return (
+            moves.length === 3 &&
+            new Set(orders).size === 3 &&
+            moves[1]._id === "c"
+          );
+        })()
+      );
+
+      check(
+        "open items keep their order and finished ones sink, newest first",
+        (() => {
+          const out = td.sortTodos([
+            { _id: "old", order: 1, done: true, doneAt: 100 },
+            { _id: "second", order: 2000, done: false },
+            { _id: "first", order: 1000, done: false },
+            { _id: "new", order: 0, done: true, doneAt: 900 },
+          ]);
+          return out.map((i) => i._id).join(",") === "first,second,new,old";
+        })()
+      );
+      check(
+        "a finished item with no timestamp still sorts, at the bottom",
+        (() => {
+          const out = td.sortTodos([
+            { _id: "x", order: 1, done: true, doneAt: null },
+            { _id: "y", order: 2, done: true, doneAt: 5 },
+          ]);
+          return out.map((i) => i._id).join(",") === "y,x";
+        })()
+      );
+
+      // Dates are compared as STRINGS. "YYYY-MM-DD" sorts
+      // lexicographically in date order, so this needs no Date and
+      // therefore has no timezone — which is the bug being avoided:
+      // parsing into a Date makes a task overdue an evening early for
+      // everyone west of UTC, and this table plays at night.
+      check(
+        "a due date reads against the day, not the hour",
+        td.dueState("2026-08-28", "2026-08-29") === "overdue" &&
+          td.dueState("2026-08-29", "2026-08-29") === "today" &&
+          td.dueState("2026-09-02", "2026-08-29") === "soon" &&
+          td.dueState("2026-09-30", "2026-08-29") === "later"
+      );
+      check(
+        "the edge of the week is inside it, and the next day is not",
+        td.dueState("2026-09-05", "2026-08-29") === "soon" &&
+          td.dueState("2026-09-06", "2026-08-29") === "later"
+      );
+      check(
+        "no date, or a nonsense one, has no state at all",
+        td.dueState(null, "2026-08-29") === null &&
+          td.dueState(undefined, "2026-08-29") === null &&
+          td.dueState("", "2026-08-29") === null &&
+          td.dueState("soon", "2026-08-29") === null &&
+          td.dueState("2026-08-29", "rubbish") === null
+      );
+
+      check(
+        "a date has to be a real day, not merely the right shape",
+        td.isDate("2026-02-28") &&
+          td.isDate("2028-02-29") &&
+          !td.isDate("2026-02-29") &&
+          !td.isDate("2026-02-30") &&
+          !td.isDate("2026-13-01") &&
+          !td.isDate("2026-00-10") &&
+          !td.isDate("2026-8-9") &&
+          !td.isDate("")
+      );
+      check(
+        "adding days crosses months, years and a leap day",
+        td.addDays("2026-08-29", 7) === "2026-09-05" &&
+          td.addDays("2026-12-30", 3) === "2027-01-02" &&
+          td.addDays("2028-02-28", 1) === "2028-02-29" &&
+          td.addDays("2026-09-05", -7) === "2026-08-29"
+      );
+      // ---- and again, somewhere that is not UTC ----
+      //
+      // This sandbox runs in UTC, which makes it exactly the wrong
+      // place to test date arithmetic: every timezone bug in this
+      // file is INVISIBLE here and lands on whoever is running the
+      // app. Three mutations proved it — a UTC-based todayISO and a
+      // local-time addDays both passed everything above.
+      //
+      // So the same functions run again in a child process with TZ
+      // set, once behind UTC and once ahead, which is the only way
+      // this machine can see a bug about where you are sitting.
+      check(
+        "the dates hold up outside UTC, in both directions",
+        (() => {
+          const dir = compile("components/todoModel.ts");
+          const url = pathToFileURL(join(dir, "todoModel.js")).href;
+          const script = `
+            const td = await import(${JSON.stringify(url)});
+            const fail = (m) => { console.log("FAIL " + m); process.exitCode = 1; };
+            // 9pm on the 29th is still the 29th, wherever you are —
+            // in New York the UTC date has already rolled over, and
+            // in Tokyo it rolled over hours ago.
+            if (td.todayISO(new Date(2026, 7, 29, 21, 30)) !== "2026-08-29") {
+              fail("todayISO at 21:30 in " + process.env.TZ);
+            }
+            if (td.todayISO(new Date(2026, 0, 1, 0, 5)) !== "2026-01-01") {
+              fail("todayISO just after midnight in " + process.env.TZ);
+            }
+            // A week later is a week later. Built on a local Date this
+            // slips a day for every zone east of Greenwich.
+            if (td.addDays("2026-08-29", 7) !== "2026-09-05") {
+              fail("addDays across a week in " + process.env.TZ);
+            }
+            if (td.addDays("2026-12-30", 3) !== "2027-01-02") {
+              fail("addDays across a year in " + process.env.TZ);
+            }
+            if (td.dueState("2026-09-05", "2026-08-29") !== "soon") {
+              fail("dueState at the week edge in " + process.env.TZ);
+            }
+          `;
+          // One zone behind UTC and one ahead: a bug that only shows
+          // in the evening and a bug that only shows in the morning
+          // are different bugs, and each zone catches one of them.
+          for (const tz of ["America/New_York", "Asia/Tokyo"]) {
+            const r = spawnSync(
+              process.execPath,
+              ["--input-type=module", "-e", script],
+              { env: { ...process.env, TZ: tz }, encoding: "utf8" }
+            );
+            if (r.status !== 0) return false;
+          }
+          return true;
+        })()
+      );
+    }
+
     // ---- the Moonbrook session import holds to its sources ----------
     // The records in scripts/import-moonbrook-sessions.mjs were merged
     // from the OneNote session pages and the Discord scheduling

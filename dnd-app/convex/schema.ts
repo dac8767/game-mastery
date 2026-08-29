@@ -1343,4 +1343,35 @@ export default defineSchema({
     text: v.array(v.object({ id: v.string(), value: v.string() })),
     layout: v.array(v.object({ id: v.string(), value: v.number() })),
   }).index("by_campaign", ["campaignId"]),
+
+  /**
+   * The DM's prep list.
+   *
+   * Campaign-scoped and the DM's alone — convex/todo.ts refuses a
+   * non-DM caller outright rather than shaping the rows, because
+   * unlike an NPC or a location there is no player-facing version of
+   * this. "Statblock for the lich" is not a thing to show a player a
+   * redacted copy of; it is a thing they must not know exists.
+   *
+   * A player-facing list is planned as its OWN table rather than a
+   * flag on this one. Bolting a `visibility` field here would make
+   * every query in the tool answer "which rows may this caller see",
+   * which is the question this design exists to avoid asking.
+   */
+  todos: defineTable({
+    campaignId: v.id("campaigns"),
+    text: v.string(),
+    done: v.boolean(),
+    /**
+     * Sort key, not an index. Moving one item rewrites one row rather
+     * than renumbering the list — see components/todoModel.ts, which
+     * owns the arithmetic and the rare case where a gap runs out.
+     */
+    order: v.number(),
+    /** "YYYY-MM-DD". Compared as a string, so it has no timezone. */
+    due: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    /** When it was ticked, so finished items sort newest-first. */
+    doneAt: v.optional(v.number()),
+  }).index("by_campaign", ["campaignId"]),
 });

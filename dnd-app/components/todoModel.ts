@@ -1,0 +1,198 @@
+/**
+ * The DM's prep list: ordering, and what a due date means today.
+ *
+ * Pure arithmetic and string comparison — no React, no Convex — because
+ * both halves fail quietly. A reorder that puts an item back where it
+ * was looks like a missed click rather than a bug, and a due date that
+ * is off by one calls tomorrow's task overdue, which trains you to stop
+ * believing the colour. Neither shows up in a screenshot.
+ */
+
+/**
+ * The gap left between neighbouring items.
+ *
+ * Items carry a sort key rather than an index, so moving one rewrites
+ * ONE row instead of renumbering the list. A thousand is room for about
+ * ten inserts between any two items before the midpoints get too close
+ * to split, which is what `needsRenumber` is for.
+ */
+export const ORDER_GAP = 1000;
+
+/**
+ * How close two keys may get before splitting them again is pointless.
+ *
+ * Not floating-point epsilon — a practical floor. Below this the
+ * midpoints are still distinct numbers but the list is one insert away
+ * from two items that cannot be told apart, and a renumber now is
+ * cheaper than a silent tie later.
+ */
+export const ORDER_FLOOR = 0.0005;
+
+export interface Orderable {
+  order: number;
+}
+
+/** The key for a new item at the top of the list. */
+export function orderBefore(first: number | undefined): number {
+  return first === undefined ? ORDER_GAP : first - ORDER_GAP;
+}
+
+/** The key for a new item at the bottom. */
+export function orderAfter(last: number | undefined): number {
+  return last === undefined ? ORDER_GAP : last + ORDER_GAP;
+}
+
+/**
+ * A key between two others.
+ *
+ * Either side may be absent, which is what dropping at the very top or
+ * the very bottom means — so this is also the general "put it here"
+ * answer, not only the middle case.
+ */
+export function orderBetween(
+  before: number | undefined,
+  after: number | undefined
+): number {
+  if (before === undefined && after === undefined) return ORDER_GAP;
+  if (before === undefined) return orderBefore(after);
+  if (after === undefined) return orderAfter(before);
+  return (before + after) / 2;
+}
+
+/**
+ * True when the gap being split has run out of room.
+ *
+ * The caller renumbers the whole list when this says so. It is rare —
+ * ten or so inserts into the same gap — and the alternative is two
+ * items with equal keys, which sort by whatever the database felt like
+ * and reorder themselves when you are not looking.
+ */
+export function needsRenumber(
+  before: number | undefined,
+  after: number | undefined
+): boolean {
+  if (before === undefined || after === undefined) return false;
+  return Math.abs(after - before) < ORDER_FLOOR;
+}
+
+/** Evenly spaced keys for a list that has been squeezed flat. */
+export function renumber<T extends Orderable>(items: readonly T[]): T[] {
+  return items.map((item, i) => ({ ...item, order: (i + 1) * ORDER_GAP }));
+}
+
+/**
+ * A list moved into the order a drag asked for.
+ *
+ * Takes the ids rather than indices, because the list the UI dragged in
+ * is the SORTED one and the array the caller holds may not be. Returns
+ * only the rows whose key changed — moving one item should not write
+ * every row.
+ */
+export function reorderTo<T extends Orderable & { _id: string }>(
+  items: readonly T[],
+  movedId: string,
+  toIndex: number
+): { _id: string; order: number }[] {
+  const sorted = [...items].sort((a, b) => a.order - b.order);
+  const from = sorted.findIndex((i) => i._id === movedId);
+  if (from === -1) return [];
+
+  const target = Math.min(Math.max(Math.round(toIndex), 0), sorted.length - 1);
+  if (target === from) return [];
+
+  const without = sorted.filter((i) => i._id !== movedId);
+  const before = without[target - 1]?.order;
+  const after = without[target]?.order;
+
+  // Out of room: rewrite the whole list once rather than create a tie.
+  if (needsRenumber(before, after)) {
+    const next = [...without];
+    next.splice(target, 0, sorted[from]);
+    return renumber(next).map((i) => ({ _id: i._id, order: i.order }));
+  }
+  return [{ _id: movedId, order: orderBetween(before, after) }];
+}
+
+/**
+ * The list as it is read: open items in their own order, done ones
+ * beneath in the order they were finished, newest first.
+ *
+ * Done items sink rather than vanish. A prep list you have worked
+ * through is a record of what you did, and hiding it the moment it is
+ * ticked makes the tool feel like it forgot.
+ */
+export function sortTodos<
+  // `doneAt` may be null, not merely absent: the queries in this app
+  // answer `?? null` for an unset optional, and a model that only
+  // accepted `undefined` would force the query to break that habit for
+  // one field.
+  T extends Orderable & { done: boolean; doneAt?: number | null },
+>(items: readonly T[]): T[] {
+  const open = items.filter((i) => !i.done).sort((a, b) => a.order - b.order);
+  const done = items
+    .filter((i) => i.done)
+    .sort((a, b) => (b.doneAt ?? 0) - (a.doneAt ?? 0));
+  return [...open, ...done];
+}
+
+export type DueState = "overdue" | "today" | "soon" | "later";
+
+/**
+ * How a due date reads against a given day.
+ *
+ * Both dates are "YYYY-MM-DD" and compared as STRINGS, which is the
+ * whole trick: that format sorts lexicographically in date order, so
+ * this needs no Date object and therefore has no timezone. Parsing
+ * "2026-09-01" into a Date and comparing it to `new Date()` is how a
+ * task becomes overdue an evening early for anyone west of UTC — and
+ * Derek's table plays at night.
+ *
+ * "soon" is within a week, which is roughly one session away.
+ */
+export function dueState(
+  due: string | undefined | null,
+  today: string
+): DueState | null {
+  if (!due || !isDate(due) || !isDate(today)) return null;
+  if (due < today) return "overdue";
+  if (due === today) return "today";
+  return due <= addDays(today, 7) ? "soon" : "later";
+}
+
+/** "YYYY-MM-DD", and a real date rather than merely the right shape. */
+export function isDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, m, d] = value.split("-").map(Number);
+  if (m < 1 || m > 12 || d < 1) return false;
+  // Month lengths, leap years included — "2026-02-30" has the right
+  // shape and is not a day.
+  return d <= new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
+/**
+ * `days` after an ISO date, as an ISO date.
+ *
+ * Built in UTC deliberately. A local-time Date shifts the day for half
+ * the world, and this is only ever used to compare one calendar day
+ * against another.
+ */
+export function addDays(date: string, days: number): string {
+  const [y, m, d] = date.split("-").map(Number);
+  const at = new Date(Date.UTC(y, m - 1, d + days));
+  return at.toISOString().slice(0, 10);
+}
+
+/** Today where the reader is sitting, as "YYYY-MM-DD". */
+export function todayISO(now: Date = new Date()): string {
+  // Local parts, not toISOString: at 9pm in New York the UTC date is
+  // already tomorrow, and "today" on a prep list means the day the
+  // person reading it is having.
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** The longest a task may be. Past this it is a note, not a task. */
+export const MAX_TEXT = 300;
+export const MAX_NOTES = 2000;

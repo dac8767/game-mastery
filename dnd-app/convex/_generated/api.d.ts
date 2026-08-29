@@ -23,6 +23,7 @@ import type * as notebook from "../notebook.js";
 import type * as npcs from "../npcs.js";
 import type * as sessions from "../sessions.js";
 import type * as settings from "../settings.js";
+import type * as todo from "../todo.js";
 import type * as views from "../views.js";
 
 import type {
@@ -47,6 +48,7 @@ declare const fullApi: ApiFromModules<{
   npcs: typeof npcs;
   sessions: typeof sessions;
   settings: typeof settings;
+  todo: typeof todo;
   views: typeof views;
 }>;
 

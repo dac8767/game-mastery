@@ -8922,3 +8922,195 @@ button.cal-day:hover {
   background: var(--accent-soft);
   color: var(--accent);
 }
+
+/* ---------- To-Do (DM prep list) ---------- */
+
+.todo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  flex: 1;
+  min-height: 0;
+  max-width: 46rem;
+  width: 100%;
+}
+
+/* The one thing this screen has to be good at: the twenty seconds
+   between remembering something and forgetting it. It sits at the top,
+   it is wide, and it takes Enter. */
+.todo-add {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.todo-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.55rem 0.7rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.todo-input:focus,
+.todo-date:focus,
+.todo-edit:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.todo-date {
+  padding: 0.55rem 0.5rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.todo-count {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+
+.todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+/* The item under the cursor during a drag. Held at half opacity rather
+   than hidden, so the list does not reflow under the hand that is
+   moving it. */
+.todo-item.dragging {
+  opacity: 0.5;
+}
+
+/* Finished, not gone. A list you have worked through is a record of
+   what you did — struck through and dimmed, still countable. */
+.todo-item.done {
+  background: none;
+  border-style: dashed;
+}
+
+.todo-item.done .todo-text {
+  color: var(--text-dim);
+  text-decoration: line-through;
+}
+
+.todo-check {
+  margin-top: 0.15rem;
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: none;
+  /* The browser default is a bright system blue, which on this palette
+     is the loudest thing on the screen — and it is loudest on the rows
+     that are FINISHED, which are the ones that matter least. */
+  accent-color: var(--accent);
+}
+
+.todo-body {
+  flex: 1;
+  min-width: 0;
+}
+
+/* A button so it is reachable by keyboard, styled as the text it is —
+   the whole line is the edit affordance, and a pencil icon on each row
+   would be twenty pencils. */
+.todo-text {
+  display: block;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 0.92rem;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.todo-text:hover {
+  color: var(--accent);
+}
+
+.todo-edit {
+  width: 100%;
+  padding: 0.1rem 0.3rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
+.todo-notes {
+  margin: 0.2rem 0 0;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.todo-due {
+  flex: none;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+/* Only lateness gets a colour. Everything coloured is nothing
+   coloured, and a list where every row shouts is one you stop
+   reading. */
+.todo-due.overdue {
+  border-color: var(--bloodied);
+  color: var(--bloodied);
+}
+
+.todo-due.today {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.todo-del {
+  flex: none;
+  padding: 0 0.25rem;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.todo-del:hover {
+  color: var(--bloodied);
+}
+
+@media (max-width: 700px) {
+  .todo-add {
+    flex-wrap: wrap;
+  }
+
+  .todo-input {
+    flex-basis: 100%;
+  }
+}
