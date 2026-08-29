@@ -227,15 +227,23 @@ export function allDice(result: RollResult): DieRoll[] {
  * A d20 that came up 20 or 1, which the table cares about more than
  * the total. Only ever true for a SINGLE scoring d20 — "8d20" has no
  * crit, and neither does a d20 that was dropped by a keep.
+ *
+ * Takes the flat dice rather than a RollResult, because the log reads
+ * this off a stored row and the roller reads it off a fresh throw.
+ * Two implementations of "is this a crit" would disagree eventually,
+ * and the one on screen is the one people cheer at.
  */
-export function critOf(result: RollResult): "high" | "low" | null {
-  const scoring = result.terms
-    .flatMap((t) => t.dice)
-    .filter((d) => d.sides === 20 && d.kept);
+export function critOfDice(dice: readonly DieRoll[]): "high" | "low" | null {
+  const scoring = dice.filter((d) => d.sides === 20 && d.kept);
   if (scoring.length !== 1) return null;
   if (scoring[0].value === 20) return "high";
   if (scoring[0].value === 1) return "low";
   return null;
+}
+
+/** The same question, asked of a roll that has just been made. */
+export function critOf(result: RollResult): "high" | "low" | null {
+  return critOfDice(allDice(result));
 }
 
 /** "2d6+3 → 4, 5 +3" — the roll read back in one line. */

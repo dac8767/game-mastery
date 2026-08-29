@@ -5102,6 +5102,113 @@ export const integrity = {
       }
     }
 
+    // ---- the dice roller never rolls -------------------------------
+    // The client parses, to grey out a bad notation and say what the
+    // box means. It must never THROW. A browser that produced its own
+    // faces for instant feedback would disagree with the log the
+    // moment the server's row arrived, and the version that stopped
+    // disagreeing would be the one that had stopped asking the server.
+    {
+      const roller = stripComments(read("components", "DiceRoller.tsx"));
+
+      if (/Math\.random|\brollParsed\b|\bfrom "@\/components\/diceModel"[\s\S]{0,120}\broll\b\s*[,}]/.test(
+        roller
+      )) {
+        problems.push(
+          "DiceRoller reaches for a random source or a roller — the dice " +
+            "are thrown in convex/dice.ts and nowhere else"
+        );
+      }
+      if (!/useMutation\(api\.dice\.rollDice\)/.test(roller)) {
+        problems.push(
+          "DiceRoller does not call the rollDice mutation — nothing else " +
+            "can produce a roll the rest of the table sees"
+        );
+      }
+      // The preview is the reason to parse here at all. Without it the
+      // import is dead weight and the Roll button stops knowing when
+      // the notation is nonsense.
+      if (!/parseRoll\(notation\)/.test(roller)) {
+        problems.push(
+          "DiceRoller no longer parses the draft — the Roll button cannot " +
+            "tell a typo from a formula, and the preview is a lie"
+        );
+      }
+      if (!/disabled=\{!parsed \|\| busy\}/.test(roller)) {
+        problems.push(
+          "the Roll button is not disabled on an unparseable notation"
+        );
+      }
+
+      // One answer to "is this a crit", used by the log and by the
+      // roller. Two would drift, and the one on screen is the one
+      // people cheer at.
+      const model = read("components", "diceModel.ts");
+      if (!/export function critOf\(result: RollResult\)[^}]*critOfDice\(allDice\(result\)\)/.test(
+        model
+      )) {
+        problems.push(
+          "critOf no longer delegates to critOfDice — the log reads a " +
+            "stored row and the roller reads a fresh throw, and two " +
+            "implementations of the crit rule will disagree"
+        );
+      }
+      if (!/critOfDice\(r\.dice\)/.test(roller)) {
+        problems.push(
+          "the roll log does not use critOfDice — a second crit rule in " +
+            "the component is a crit rule nothing tests"
+        );
+      }
+
+      // Every class the component renders has a rule behind it. A
+      // renamed selector unstyles the tool silently: the markup is
+      // still correct, so nothing throws and nothing is missing —
+      // it simply looks like an unstyled list.
+      const diceCss = read("app", "globals.css");
+      for (const cls of [
+        "dice",
+        "dice-controls",
+        "dice-quick",
+        "dice-die",
+        "dice-shortcuts",
+        "dice-form",
+        "dice-notation",
+        "dice-label",
+        "dice-preview",
+        "dice-go",
+        "dice-secret",
+        "dice-log",
+        "dice-log-head",
+        "dice-roll",
+        "dice-roll-head",
+        "dice-by",
+        "dice-for",
+        "dice-at",
+        "dice-roll-body",
+        "dice-faces",
+        "dice-face",
+        "dice-notation-read",
+        "dice-total",
+        "dice-crit",
+      ]) {
+        if (!new RegExp(`\\.${cls}[\\s,.:{+>]`).test(diceCss)) {
+          problems.push(
+            `DiceRoller renders .${cls}, which globals.css does not style`
+          );
+        }
+      }
+      // The dropped die has to stay legible as a dropped die.
+      const dropped = /\.dice-face\.dropped\s*\{([^}]*)\}/.exec(diceCss);
+      if (!dropped) {
+        problems.push("no .dice-face.dropped rule — a dropped die reads as a kept one");
+      } else if (!/line-through/.test(dropped[1])) {
+        problems.push(
+          "a dropped die is no longer struck through — 4d6kh3 renders as " +
+            "four dice that all counted"
+        );
+      }
+    }
+
     return problems;
   },
 };

@@ -8791,3 +8791,290 @@ button.cal-day:hover {
   background: var(--accent-soft);
   color: var(--accent);
 }
+
+/* ---------- Dice roller ---------- */
+
+/* Controls on the left at a fixed width, log on the right taking the
+   rest. The log is the part that grows, and it scrolls inside itself
+   rather than pushing the controls off the top of the screen — the
+   quick-roll buttons are the reason anyone opened this. */
+.dice {
+  display: grid;
+  grid-template-columns: 17rem minmax(0, 1fr);
+  gap: 0.75rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.dice-controls,
+.dice-log {
+  padding: 0.75rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.dice-controls .facet-label {
+  margin-top: 0.75rem;
+}
+
+.dice-controls .facet-label:first-child {
+  margin-top: 0;
+}
+
+.dice-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.4rem;
+}
+
+/* Wide enough for "d100" without the row reflowing when it appears. */
+.dice-die {
+  min-width: 3.1rem;
+  padding: 0.45rem 0.3rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.dice-die:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.dice-die:disabled {
+  opacity: 0.5;
+}
+
+.dice-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.4rem;
+}
+
+.dice-form {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.dice-notation,
+.dice-label {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+/* The notation is read character by character when it goes wrong, so
+   it gets a face where a 1 and an l are different shapes. */
+.dice-notation {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.dice-notation:focus,
+.dice-label:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* What the box means, said before it is rolled. Dim when it is fine —
+   this is a confirmation, not an instruction — and only coloured when
+   the notation cannot be read at all. */
+.dice-preview {
+  margin: 0;
+  min-height: 1.1rem;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+.dice-preview.bad {
+  color: var(--bloodied);
+}
+
+.dice-go {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.dice-secret {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.dice-log-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.dice-log-title {
+  font-weight: 600;
+}
+
+.dice-roll {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-inset);
+}
+
+.dice-roll + .dice-roll {
+  margin-top: 0.4rem;
+}
+
+.dice-roll.mine {
+  border-color: var(--accent-soft);
+}
+
+.dice-roll.secret {
+  border-style: dashed;
+}
+
+.dice-roll-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.dice-by {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.dice-for {
+  font-style: italic;
+}
+
+/* Pushed to the far end so the times line up down the log. */
+.dice-at {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.dice-roll-body {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.dice-faces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.dice-face {
+  min-width: 1.6rem;
+  padding: 0.15rem 0.3rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* A die the keep threw away. Struck through rather than hidden: seeing
+   the 2 you dropped is half the point of rolling 4d6kh3 — which means
+   it has to stay READABLE. Dimmed by colour alone; an opacity on top
+   of that rendered a struck-through "1" as a smudge.
+
+   No background, so it sinks into the card rather than sitting on it.
+   Keeping --bg-raised made the dropped die the LIGHTEST chip in the
+   row on parchment, which reads as emphasis — the opposite of what a
+   discarded die should say. */
+.dice-face.dropped {
+  background: none;
+  color: var(--text-dim);
+  border-style: dashed;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.dice-face.flat {
+  border-style: dashed;
+  color: var(--text-dim);
+}
+
+.dice-notation-read {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.dice-total {
+  min-width: 2.2rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--accent);
+}
+
+.crit-high .dice-total {
+  color: var(--healthy);
+}
+
+.crit-low .dice-total {
+  color: var(--bloodied);
+}
+
+.dice-crit {
+  margin: 0.3rem 0 0;
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.crit-high .dice-crit {
+  color: var(--healthy);
+}
+
+.crit-low .dice-crit {
+  color: var(--bloodied);
+}
+
+/* Side by side needs the width. Stacked, the controls stay on top so
+   the dice are still the first thing under your thumb. */
+@media (max-width: 900px) {
+  .dice {
+    grid-template-columns: minmax(0, 1fr);
+    /* And the PAGE scrolls, not each panel. Left as two flex-filled
+       panels this split a short screen in half and gave three quick
+       dice above one scrollbar and one roll below another. */
+    flex: initial;
+    min-height: auto;
+  }
+
+  .dice-controls,
+  .dice-log {
+    overflow-y: visible;
+  }
+}
