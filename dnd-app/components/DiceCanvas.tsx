@@ -30,11 +30,45 @@ import type { DieRoll } from "@/components/diceModel";
  * turns dddice on should not pay for it.
  */
 
+/**
+ * Whatever the thing that failed had to say for itself.
+ *
+ * dddice's errors are not all Error instances — the SDK throws its own
+ * APIError types and axios-shaped rejections — and `String(e)` on one
+ * of those is "[object Object]", which is how a diagnosable failure
+ * turns into an unactionable one.
+ */
+function reason(e: unknown): string {
+  if (typeof e === "string") return e;
+  if (e && typeof e === "object") {
+    const any = e as Record<string, unknown>;
+    const response = any.response as { status?: number } | undefined;
+    const status = typeof any.status === "number" ? any.status : response?.status;
+    const message =
+      typeof any.message === "string" && any.message ? any.message : null;
+    if (status && message) return `${message} (HTTP ${status})`;
+    if (status) return `HTTP ${status}`;
+    if (message) return message;
+  }
+  return "no reason given — see the browser console";
+}
+
 /** Where a browser keeps the guest account it made for itself. */
 const GUEST_KEY = "gm.dddice.guest";
 
-/** How the app identifies itself to dddice. */
-const APP_NAME = "Game Mastery";
+/**
+ * The SDK's `appName` is deliberately NOT set.
+ *
+ * It is cosmetic — it identifies the integration in dddice's logs —
+ * but the SDK turns it into an `X-Extension` request header, and a
+ * custom header on a cross-origin XHR forces a CORS preflight that
+ * dddice must then be willing to answer. Their own integrations are
+ * browser extensions, which are not subject to CORS at all, so that
+ * path is far better travelled than ours.
+ *
+ * This is a hedge, not a diagnosis: it removes a known way for a
+ * cross-origin call to fail, in exchange for a field nothing reads.
+ */
 
 export interface DiceCanvasProps {
   slug: string;
@@ -72,11 +106,20 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
     setStatus("connecting");
     setNote(null);
 
+    // Which step we are on, so a failure names the step. The first
+    // version reported every failure as "Couldn't reach dddice",
+    // which is the same sentence for a missing WebGL context, a
+    // rate-limited guest signup and a wrong passcode — three
+    // different fixes behind one message, and no way to tell them
+    // apart without reading the code.
+    let step = "loading the dddice library";
+
     (async () => {
       try {
         const sdk = await import("dddice-js");
         const { ThreeDDice, ThreeDDiceAPI } = sdk;
 
+        step = "checking WebGL";
         if (!ThreeDDice.isWebGLAvailable()) {
           if (!cancelled) {
             setStatus("failed");
@@ -95,7 +138,10 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
           key = null;
         }
         if (!key) {
-          const api = new ThreeDDiceAPI(undefined, APP_NAME);
+          // dddice rate-limits guest signup to 3 per minute per IP, so
+          // this is a step that legitimately fails and recovers.
+          step = "creating a dddice guest account";
+          const api = new ThreeDDiceAPI();
           key = (await api.user.guest()).data;
           try {
             window.localStorage.setItem(GUEST_KEY, key);
@@ -106,17 +152,21 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
 
         if (cancelled || !canvasRef.current) return;
 
-        const engine = new ThreeDDice().initialize(
-          canvasRef.current,
-          key,
-          {},
-          APP_NAME
-        );
+        step = "starting the renderer";
+        const engine = new ThreeDDice().initialize(canvasRef.current, key, {});
+        // initialize() builds the API client, so this is a real
+        // failure rather than something to optional-chain past —
+        // skipping the join silently would surface later as an
+        // unexplained "not a participant" from connect().
+        if (!engine.api) throw new Error("the dddice client did not start");
+
         // Joining comes BEFORE connecting: the SDK throws when asked to
         // listen to a room the user is not a participant of.
-        await engine.api?.room.join(slug, passcode ?? undefined);
+        step = `joining room ${slug}`;
+        await engine.api.room.join(slug, passcode ?? undefined);
         if (cancelled) return;
 
+        step = "connecting to the room";
         engine.connect(slug, passcode ?? undefined);
         engine.start();
         // No preloading: `preloadTheme` is newer than the SDK version
@@ -132,12 +182,13 @@ export function DiceCanvas({ slug, passcode, theme, roll }: DiceCanvasProps) {
         setStatus("ready");
       } catch (e) {
         if (cancelled) return;
+        // The whole error to the console, where a stack is useful; the
+        // step and dddice's own words to the screen, where they are
+        // the difference between "check the passcode" and "wait a
+        // minute and reload".
+        console.error("[dice] dddice failed while " + step, e);
         setStatus("failed");
-        setNote(
-          e instanceof Error && /passcode|403|401/i.test(e.message)
-            ? "dddice refused that room — check the slug and passcode."
-            : "Couldn't reach dddice. Rolls still work."
-        );
+        setNote(`3D dice off — failed while ${step}: ${reason(e)}`);
       }
     })();
 

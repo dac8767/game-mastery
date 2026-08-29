@@ -5236,6 +5236,37 @@ export const integrity = {
         );
       }
 
+      // The canvas must say WHAT failed and WHY.
+      //
+      // Its first version reported every failure as "Couldn't reach
+      // dddice" — the same sentence for a missing WebGL context, a
+      // rate-limited guest signup and a wrong passcode. Three
+      // different fixes behind one message, and the only way to tell
+      // them apart was to read the source. A diagnostic that cannot
+      // diagnose is worse than none, because it looks like one.
+      {
+        const canvasSrc = read("components", "DiceCanvas.tsx");
+        if (!/\bstep = /.test(canvasSrc) || !/failed while \$\{step\}/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas no longer names the step it failed on — every " +
+              "dddice failure reads the same and none of them is actionable"
+          );
+        }
+        if (!/console\.error\(/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas swallows the underlying error instead of logging it"
+          );
+        }
+        // The screen gets dddice's own words, not a house sentence
+        // that replaces them.
+        if (!/function reason\(e: unknown\)/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas has no reason() — an SDK rejection is not always an " +
+              "Error, and String(e) on one of those is \"[object Object]\""
+          );
+        }
+      }
+
       // Every die the tray offers has a shape drawn for it. DiceIcon
       // returns null for a size it does not know, so a mismatch here
       // renders an EMPTY button — clickable, correct, invisible.
