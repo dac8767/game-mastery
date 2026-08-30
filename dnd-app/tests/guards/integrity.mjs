@@ -5193,46 +5193,40 @@ export const integrity = {
       const layout = stripComments(read("app", "layout.tsx"));
 
       if (exists("app", "icon.svg")) {
-        // An SVG cannot read a CSS variable, so the icon's two colours
-        // are hard-coded copies of the palette's. Change the gold in
-        // globals.css and the tab keeps the old one, in the one place
-        // nobody looks. Checked against the source of each rather than
-        // against a literal here, so this says "they still agree"
-        // rather than "they are still these two values".
         const icon = read("app", "icon.svg");
 
         /* It has to PARSE, and that is not the same as containing the
-           right strings. This icon shipped once with the accent
-           variable's real name written in its comment — two hyphens,
-           which XML forbids inside a comment body — and the file was
-           unparseable while every check below it passed happily,
-           because they all read it as text. The browser drew nothing
-           and said nothing. */
+           right strings. This icon shipped once with a CSS variable's
+           name written in its comment — two hyphens, which XML forbids
+           inside a comment body — and the file was unparseable while
+           every check below it passed happily, because they all read it
+           as text. The browser drew nothing and said nothing. */
         for (const problem of xmlProblems(icon)) {
           problems.push(`app/icon.svg is not well-formed XML: ${problem}`);
         }
 
-        // TEN faces, because that is how many an icosahedron shows when
-        // you look down a face axis — it is the die's actual geometry
-        // rather than a number picked to be strict. Fewer paths means
-        // somebody flattened it back into a silhouette, which is what
-        // it was before and what it was replaced for.
-        const paths = (icon.match(/<path\b/g) ?? []).length;
-        if (paths < 10) {
+        /* TEN faces, because that is how many a d20 shows face-on.
+           Counted as FILLED paths so the numerals are not among them.
+           Fewer means somebody flattened it into a silhouette.
+
+           Nothing here compares the icon to the palette any more: it is
+           its own artwork rather than the accent in a hexagon, so a
+           check that it still matched --accent would fail the moment
+           the art was the point. */
+        const faceFills = [
+          ...icon.matchAll(/<path\b[^>]*\bfill="(#[0-9a-f]{3,8})"/gi),
+        ].map((m) => m[1].toLowerCase());
+        if (faceFills.length < 10) {
           problems.push(
-            `app/icon.svg draws ${paths} <path> — a d20 seen face-on shows ` +
-              "ten faces, and fewer is a hexagon with lines on it"
+            `app/icon.svg draws ${faceFills.length} filled faces — a d20 ` +
+              "seen face-on shows ten, and fewer is a hexagon with lines on it"
           );
         }
-        /* Lit, not flat: every FACE its own shade.
-           Counted off the <path> elements rather than off the file, so
-           the ground rect is not one of them — and compared against the
-           number of faces rather than against a floor, because "at
-           least six different colours" passed a die whose top three
-           faces had all been set to the same gold. Ten faces, ten
-           shades, or it is a hexagon with lines on it again. */
-        const faceFills = [...icon.matchAll(/<path\b[^>]*\bfill="(#[0-9a-f]{3,8})"/gi)]
-          .map((m) => m[1].toLowerCase());
+
+        /* Lit, not flat: every face its own shade. Compared against the
+           NUMBER of faces rather than against a floor, because "at least
+           six colours" passed a die whose top three faces had all been
+           set to the same one. */
         const shades = new Set(faceFills);
         if (shades.size < faceFills.length) {
           problems.push(
@@ -5241,54 +5235,57 @@ export const integrity = {
               "sharing a shade read as one bigger face"
           );
         }
-        if (shades.size < 10) {
+
+        /* The heavy edges are most of what survives at 16px, where the
+           faceting is below a pixel and the outline is the whole shape.
+
+           Checked on the group that HOLDS THE FACES, not on any group
+           in the file. "Some <g> has a stroke" passed a die whose faces
+           had lost theirs, because the numerals are in a stroked group
+           of their own — the same shape of miss as looking for a name
+           anywhere instead of at the call site. */
+        {
+          const faceGroup = [...icon.matchAll(/<g\b([^>]*)>([\s\S]*?)<\/g>/g)].find(
+            (m) => /<path\b[^>]*\bfill="#/i.test(m[2])
+          );
+          if (!faceGroup) {
+            problems.push(
+              "app/icon.svg has no group of filled faces — the die is drawn " +
+                "as loose paths, so nothing carries the shared edge colour"
+            );
+          } else if (!/\bstroke="#[0-9a-f]{3,8}"/i.test(faceGroup[1])) {
+            problems.push(
+              "app/icon.svg strokes no edges around its faces — at tab size " +
+                "they run together and there is nothing left to recognise"
+            );
+          }
+        }
+
+        /* The 20 is PATHS, not <text>. A favicon is rendered by the
+           browser with whatever font it resolves, so a text element in
+           one is a different shape on every machine and sometimes no
+           shape at all. Two numerals beyond the ten faces. */
+        // Comments stripped first: this file's own comment EXPLAINS
+        // why it does not use a text element, and searching the raw
+        // source found the word in the explanation. A check that reads
+        // the prose about the rule instead of the markup under it is
+        // the shape of bug this whole suite is about.
+        const iconMarkup = icon.replace(/<!--[\s\S]*?-->/g, "");
+        if (/<text\b/i.test(iconMarkup)) {
           problems.push(
-            `app/icon.svg has ${shades.size} face shades — a d20 seen ` +
-              "face-on shows ten, and a flat one is not a die"
+            "app/icon.svg sets the 20 as <text> — a favicon is drawn with " +
+              "whatever font the browser has, which is not a promise"
           );
         }
-        const gold = /--accent:\s*(#[0-9a-f]{3,8})/i.exec(
-          read("app", "globals.css")
-        )?.[1];
-        const ground = /themeColor:\s*"(#[0-9a-f]{3,8})"/i.exec(layout)?.[1];
-        if (!gold || !ground) {
+        const allPaths = (icon.match(/<path\b/g) ?? []).length;
+        if (allPaths - faceFills.length < 2) {
           problems.push(
-            "cannot find --accent in globals.css or themeColor in " +
-              "layout.tsx, so the tab icon's colours cannot be checked " +
-              "against the palette they were copied from"
+            "app/icon.svg has no numerals beyond its faces — the 20 is what " +
+              "makes it a d20 rather than a gem"
           );
-        } else {
-          // FILLS, counted — not "the colour appears somewhere". The
-          // ground colour is also the stroke that separates the die's
-          // edges, so merely finding the string proves nothing about
-          // either the ground or the face: dropping the face path, or
-          // setting the ground rect to fill="none", both leave the
-          // string in the file and the icon wrong.
-          const fills = (c) =>
-            (icon.match(new RegExp(`fill="${c}"`, "gi")) ?? []).length;
-          if (fills(gold) < 1) {
-            problems.push(
-              `app/icon.svg fills nothing with the accent ${gold} — the tab ` +
-                "icon has drifted from the palette"
-            );
-          }
-          if (fills(ground) < 1) {
-            problems.push(
-              `app/icon.svg does not fill anything with ${ground}, the theme ` +
-                "colour — the die would sit on whatever the tab strip is"
-            );
-          }
-          // The seams between faces, in the ground colour. Without them
-          // the ten triangles run together into one gold shape at any
-          // size where the shading is subtle.
-          if (!new RegExp(`stroke="${ground}"`, "i").test(icon)) {
-            problems.push(
-              "app/icon.svg draws no seams between the faces — they would " +
-                "run together into one gold shape"
-            );
-          }
         }
       }
+
       const titled = /title:\s*"([^"]+)"/.exec(layout);
       if (!titled) {
         problems.push(

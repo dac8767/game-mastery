@@ -1,60 +1,64 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
   <!--
-    The tab icon: an actual d20, not a hexagon with a triangle in it.
+    The tab icon: the d20 from the reference art, redrawn as vectors.
 
-    Drawn as the real projection of an icosahedron down a face axis,
-    which is how a d20 looks sitting on a table showing its top face.
-    That view shows exactly TEN of the twenty faces, and the geometry is
-    not a guess:
+    Pointy-topped hexagon, ten faces, heavy black edges, and a 20 on the
+    face you are looking at. Lit from the upper right, so the palest
+    faces are top-right and the deepest is the bottom-left corner.
 
-      the silhouette is a regular hexagon, flat-topped;
-      the front face is a triangle at the centre, turned 30 degrees from
-      the hexagon so its points aim at the hexagon's EDGES rather than
-      its corners, which is what the real solid does;
-      the front face's radius is the hexagon's divided by phi (0.618),
-      which falls out of the icosahedron's own coordinates;
-      nine more triangles fill the ring, three sharing the front face's
-      edges and six filling the corners.
+    Nine points, eighteen edges, ten faces. The nine are the hexagon's
+    six corners plus the three of the centre face; every edge below is
+    one of those pairs, and every face is a triangle of three of them.
 
-    Ten paths, ten faces, shaded from a light above and to the left.
-    That is what makes it read as a solid object rather than a badge.
-    The front face is the palette's accent exactly; the other nine are
-    tints and shades of it, so the whole thing is one colour lit.
-
-    Next's app/icon.svg convention picks this up by FILE NAME and emits
-    the link tag, so nothing imports it and a rename loses the icon
-    silently. tests/guards/integrity.mjs checks it for that reason,
-    including that its gold and its ground still agree with the accent
-    in globals.css and the theme colour in layout.tsx. An SVG cannot
-    read a CSS variable, so these are hard-coded copies of both.
+    The 20 is drawn as PATHS, not as text. A favicon is rendered by the
+    browser with whatever font it feels like, and a <text> element in
+    one is a different shape on every machine — including no shape at
+    all where the family does not resolve.
 
     NOTE: no double hyphen anywhere in this comment. XML forbids one
-    inside a comment body, and writing the accent variable's real name
-    here made the whole file fail to parse while every text-matching
-    check on it still passed. The guard now parses it as well.
+    inside a comment body, and an earlier version of this file put a
+    CSS variable's name here and stopped parsing entirely while every
+    text-matching check on it still passed. The guard parses it now.
 
-    At 16px the facets fall below a pixel and only the gold hexagon
-    survives, which is why the silhouette is drawn as large as the
-    rounded ground allows: the shape carries the tab strip, and the
-    faceting is the reward at 32px and up.
+    No background plate, matching the reference: the die is the icon.
+    That means it no longer borrows the app's gold, so nothing here is
+    checked against the palette any more.
+
+    At 16px the faceting is below a pixel and what survives is the
+    hexagon and its dark edges, which is the shape people recognise.
   -->
-  <rect width="32" height="32" rx="7" fill="#141210" />
-  <g stroke="#141210" stroke-width="0.3" stroke-linejoin="round">
-    <!-- Top, catching the most light. -->
-    <path fill="#efc95a" d="M16 8.83 10.2 5.95 21.8 5.95Z" />
-    <!-- The upper ring. -->
-    <path fill="#dcb63e" d="M16 8.83 4.4 16 10.2 5.95Z" />
-    <path fill="#d8ae33" d="M22.21 19.58 16 8.83 21.8 5.95Z" />
-    <!-- The face you are looking at, in the accent itself. -->
-    <path fill="#c9a227" d="M16 8.83 22.21 19.58 9.79 19.58Z" />
-    <!-- The two sides. -->
-    <path fill="#b5901f" d="M22.21 19.58 21.8 5.95 27.6 16Z" />
-    <path fill="#ab8a22" d="M16 8.83 9.79 19.58 4.4 16Z" />
-    <!-- The lower ring, in shadow. -->
-    <path fill="#97771a" d="M22.21 19.58 27.6 16 21.8 26.05Z" />
-    <path fill="#8d7118" d="M9.79 19.58 10.2 26.05 4.4 16Z" />
-    <path fill="#7d6315" d="M9.79 19.58 22.21 19.58 21.8 26.05Z" />
-    <!-- The bottom, furthest from the light. -->
-    <path fill="#6b5411" d="M9.79 19.58 21.8 26.05 10.2 26.05Z" />
+  <g
+    stroke="#1a1a1a"
+    stroke-width="1.15"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+  >
+    <!-- Upper right, catching the most light. -->
+    <path fill="#ffc2ce" d="M16 0.5 16 7.4 29.42 8.25Z" />
+    <path fill="#ffb3c2" d="M16 7.4 23.45 20.3 29.42 8.25Z" />
+    <path fill="#ffa8b9" d="M29.42 8.25 23.45 20.3 29.42 23.75Z" />
+    <!-- Upper left. -->
+    <path fill="#ff97ab" d="M16 0.5 2.58 8.25 16 7.4Z" />
+    <path fill="#ff8aa1" d="M2.58 8.25 8.55 20.3 16 7.4Z" />
+    <!-- The face you are looking at, with the 20 on it. -->
+    <path fill="#ff7d95" d="M16 7.4 8.55 20.3 23.45 20.3Z" />
+    <!-- Lower right. -->
+    <path fill="#fb6b85" d="M23.45 20.3 29.42 23.75 16 31.5Z" />
+    <path fill="#f45c78" d="M8.55 20.3 23.45 20.3 16 31.5Z" />
+    <!-- Lower left, furthest from the light. -->
+    <path fill="#ea4d6c" d="M2.58 8.25 2.58 23.75 8.55 20.3Z" />
+    <path fill="#e04664" d="M8.55 20.3 2.58 23.75 16 31.5Z" />
+  </g>
+  <!-- The 20, in the same ink as the edges but drawn thinner so the
+       digits stay open at small sizes rather than filling in. -->
+  <g
+    fill="none"
+    stroke="#1a1a1a"
+    stroke-width="1.05"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+  >
+    <path d="M11.75 15C11.75 13.95 12.8 13.35 13.85 13.35 14.95 13.35 15.8 14.05 15.8 15.05 15.8 16.6 14 17.6 11.75 19.3H15.95" />
+    <path d="M18.75 13.35C19.75 13.35 20.5 14.1 20.5 15.1V17.55C20.5 18.55 19.75 19.3 18.75 19.3 17.75 19.3 17 18.55 17 17.55V15.1C17 14.1 17.75 13.35 18.75 13.35Z" />
   </g>
 </svg>
