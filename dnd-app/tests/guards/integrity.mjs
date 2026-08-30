@@ -3076,15 +3076,52 @@ export const integrity = {
             }
           }
         }
-        // The other direction, which is a quieter loss: a validator key
-        // nothing writes is a setting that can be stored and can never
-        // be read back into anything.
+        /* The other direction, which is a quieter loss: a validator key
+           nothing writes is a setting that can be stored and can never
+           be read back into anything.
+
+           Except a key marked LEGACY. A field in a stored object is not
+           renameable in place — a Convex object validator is strict, so
+           rows carrying the OLD key stop matching the schema and the
+           deployment refuses to push at all. `expanded` did exactly
+           that. The old name has to stay accepted until no row has one,
+           and that is a deliberate line in the validator rather than an
+           oversight, so it is spelled out there and allowed here. */
+        /* And the two validators against EACH OTHER.
+           The schema's copy and the mutation's copy have to accept the
+           same keys — including the legacy ones. A key kept in one and
+           dropped from the other fails exactly the way the rename did:
+           either the deployment refuses to push, or every save of the
+           layout is rejected. Neither is caught by comparing each copy
+           to the interface, because a legacy key is in neither. */
+        {
+          const [[, mutKeys], [, tableKeys]] = copies;
+          for (const [a, b, whereA, whereB] of [
+            [mutKeys, tableKeys, "settings.sidebarValidator", "the userSettings table"],
+            [tableKeys, mutKeys, "the userSettings table", "settings.sidebarValidator"],
+          ]) {
+            for (const key of a) {
+              if (!b.includes(key)) {
+                problems.push(
+                  `${whereA}'s ${shape.label} accepts \`${key}\` and ` +
+                    `${whereB}'s does not — the two have to agree, or the ` +
+                    "push fails or every save is rejected"
+                );
+              }
+            }
+          }
+        }
+
+        const legacy = legacyKeys(
+          blockAfter(mutationSrc, shape.anchor, `the ${shape.label}`)
+        );
         for (const key of copies[0][1]) {
-          if (!shape.iface.includes(key)) {
+          if (!shape.iface.includes(key) && !legacy.has(key)) {
             problems.push(
               `settings.sidebarValidator accepts \`${key}\`, which is not a ` +
                 `field of ${shape.what} — nothing writes it and nothing ` +
-                "reads it"
+                "reads it. If it is an old name kept so existing rows " +
+                "still validate, say LEGACY in its comment"
             );
           }
         }
@@ -5938,6 +5975,23 @@ export const integrity = {
             "reconciles first, so the fold would never survive being saved"
         );
       }
+      /* And it builds the item field by field rather than spreading the
+         stored one. The spread looks tidier and is what keeps a RENAMED
+         field alive forever: reconcile would copy the old key straight
+         back out, so the row never heals and the legacy validator entry
+         can never be removed. The allow-list is what makes the cleanup
+         automatic. */
+      const reconcileBody = layoutSub.slice(
+        layoutSub.indexOf("export function reconcileSidebar"),
+        layoutSub.indexOf("export function sidebarIds")
+      );
+      if (/\.\.\.it\b/.test(reconcileBody)) {
+        problems.push(
+          "reconcileSidebar spreads the stored item — an old field name " +
+            "would be copied back out on every save, so no row would ever " +
+            "shed it and the legacy validator entry could never go"
+        );
+      }
       for (const cls of ["nav-row", "nav-caret", "nav-sub"]) {
         if (!new RegExp(`^\\.${cls}\\s*[,{]`, "m").test(css)) {
           problems.push(
@@ -6333,6 +6387,42 @@ export const integrity = {
     return problems;
   },
 };
+
+/**
+ * Validator keys whose own comment calls them LEGACY.
+ *
+ * A field in a stored object cannot be renamed in place: Convex object
+ * validators are strict, so every row still carrying the old key stops
+ * matching the schema and `convex dev` refuses to push — the app does
+ * not start. The old name has to stay accepted until no row has one.
+ *
+ * That is a deliberate decision, so it has to be written down where it
+ * is made. A key with LEGACY in the comment above it is allowed to have
+ * no matching interface field; a key without one is the oversight this
+ * check exists to catch.
+ */
+function legacyKeys(block) {
+  const out = new Set();
+  const lines = block.split("\n");
+  let sawLegacy = false;
+  let depth = 0;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (depth === 0) {
+      if (/\bLEGACY\b/.test(line)) sawLegacy = true;
+      const m = line.match(/^([A-Za-z_$][\w$]*)\s*:/);
+      if (m) {
+        if (sawLegacy) out.add(m[1]);
+        sawLegacy = false;
+      }
+    }
+    for (const c of line.replace(/\/\/.*$/, "")) {
+      if (c === "{" || c === "(" || c === "[") depth++;
+      else if (c === "}" || c === ")" || c === "]") depth--;
+    }
+  }
+  return out;
+}
 
 /**
  * The ways a hand-written SVG stops being XML.

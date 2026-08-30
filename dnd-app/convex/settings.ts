@@ -120,6 +120,22 @@ export const sidebarValidator = v.object({
           hidden: v.boolean(),
           /** Folded away, hiding the item's sub-screens. See SidebarItem. */
           collapsed: v.optional(v.boolean()),
+          /**
+           * LEGACY. Read by nothing, written by nothing.
+           *
+           * The flag above used to be called `expanded` and mean the
+           * opposite. Renaming it broke the deployment rather than the
+           * code: a Convex object validator is STRICT, so every
+           * userSettings row already carrying the old key stopped
+           * matching the schema and `convex dev` refused to push at
+           * all — the app would not start.
+           *
+           * A field is not renameable in place. It is accepted here so
+           * those rows still validate, and reconcileSidebar drops it,
+           * so a row heals the first time its owner touches the
+           * sidebar. Once no row has one it can go.
+           */
+          expanded: v.optional(v.boolean()),
         })
       ),
     })

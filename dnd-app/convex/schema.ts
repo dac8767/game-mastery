@@ -589,6 +589,16 @@ export default defineSchema({
                  * opinion, and a required field would reject it.
                  */
                 collapsed: v.optional(v.boolean()),
+                /**
+                 * LEGACY, read by nothing. `collapsed` used to be
+                 * called `expanded` and mean the opposite; a Convex
+                 * object validator is strict, so rows still carrying
+                 * the old key would fail to validate and `convex dev`
+                 * would refuse to push — the app does not start.
+                 * reconcileSidebar drops it, so rows heal themselves
+                 * the first time the sidebar is saved.
+                 */
+                expanded: v.optional(v.boolean()),
               })
             ),
           })
