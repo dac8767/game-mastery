@@ -6278,6 +6278,69 @@ export const integrity = {
               "fixed delay wearing the costume of a real one"
           );
         }
+
+        /* The theme is loaded at MOUNT, not on the first throw.
+           A dddice theme carries the meshes, textures and shaders for
+           every die in it, and fetching that lazily cost three or four
+           seconds on the first roll of a visit and nothing on any roll
+           after — which reads as a fluke rather than as a load, and is
+           why it survived being noticed for so long.
+
+           Both halves are checked, and inside the CONNECT path rather
+           than anywhere in the file. The order is the trap: read from
+           the SDK bundle, loadThemeResources opens with
+           `if (this.themes[id] !== undefined)` and does NOTHING
+           otherwise, so on its own it is a silent no-op that reads
+           exactly like a fix. loadTheme is what registers the theme —
+           and what compiles the shader material, which the first throw
+           was also paying for. */
+        const connectPath = canvasSrc.slice(
+          canvasSrc.indexOf('step = "loading the dice theme"'),
+          canvasSrc.indexOf('setStatus("ready")')
+        );
+        if (!connectPath) {
+          problems.push(
+            "DiceCanvas does not load the dice theme before it is ready — " +
+              "the first roll of a visit pays for the meshes while you watch"
+          );
+        } else {
+          if (!/engine\.loadTheme\(/.test(connectPath)) {
+            problems.push(
+              "DiceCanvas never calls loadTheme during connection, so the " +
+                "renderer meets the theme for the first time mid-throw"
+            );
+          }
+          if (!/engine\.loadThemeResources\(String\(full\.id\), true\)/.test(connectPath)) {
+            problems.push(
+              "DiceCanvas does not pull the theme's meshes and textures at " +
+                "connection — the first roll of a visit downloads them while " +
+                "you watch, and every roll after it looks fine"
+            );
+          }
+          // Registered BEFORE the resources are asked for. The other
+          // way round the second call finds no theme and returns
+          // having done nothing, which is indistinguishable from
+          // working until you time a roll.
+          if (
+            connectPath.indexOf("engine.loadTheme(") >
+            connectPath.indexOf("engine.loadThemeResources(")
+          ) {
+            problems.push(
+              "DiceCanvas asks for the theme's resources before registering " +
+                "the theme — loadThemeResources returns immediately when it " +
+                "does not know the theme, so the preload silently does nothing"
+            );
+          }
+        }
+        // One call, not two. The theme response carries the previews,
+        // so a separate fetch for them is a second round trip for a
+        // field that already arrived.
+        if (/dddice\.com\/api\/1\.0\/theme\/\$\{/.test(canvasSrc)) {
+          problems.push(
+            "DiceCanvas fetches the theme twice — api.theme.get already " +
+              "returns the previews the tray needs"
+          );
+        }
         // Every wait has a way out, and the way out has to be REACHED.
         if (!/waited > FINISH_BY \|\| \(!started && waited > START_BY\)/.test(canvasSrc)) {
           problems.push(

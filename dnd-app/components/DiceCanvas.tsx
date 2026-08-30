@@ -307,9 +307,6 @@ export function DiceCanvas({
         // camera, so there is no camera to move.
         engine.controlsEnabled = false;
         engine.resetCamera();
-        // No preloading: `preloadTheme` is newer than the SDK version
-        // this app pins, and each die carries its own `theme` anyway,
-        // so the engine fetches what it needs on the first throw.
 
         if (cancelled) {
           engine.stop();
@@ -343,23 +340,57 @@ export function DiceCanvas({
           console.warn("[dice] no dddice theme found; rolls will be refused");
         }
 
-        // The theme's own rendered dice, for the tray. Nothing draws a
-        // d12 like the thing that is about to draw the d12.
+        /**
+         * The theme, fetched and LOADED before anything is thrown.
+         *
+         * This is the fix for a three-to-four second wait on the first
+         * roll of a visit and none on any roll after it. A dddice theme
+         * carries the meshes, the textures and the shaders for every
+         * die in it, and the engine fetched all of that lazily — on the
+         * first throw, while you watched. Every later roll reused it,
+         * which is exactly why the delay looked like a fluke rather
+         * than a load.
+         *
+         * The old comment here said the SDK had no preloading because
+         * `preloadTheme` is newer than the version this app pins. That
+         * was true and beside the point: the pinned version has
+         * `loadTheme` and `loadThemeResources`, which are the same idea
+         * under the names it uses. Looking for one spelling and
+         * concluding the capability was absent is how the wait shipped.
+         *
+         * THE ORDER MATTERS, and only one way round works.
+         * loadThemeResources opens with `if (this.themes[id] !== undefined)`
+         * and does nothing at all otherwise — so called on its own it is
+         * a silent no-op that looks exactly like a fix. loadTheme is
+         * what registers the theme, and it also compiles the shader
+         * material, which is the other thing the first throw was paying
+         * for.
+         *
+         * The `true` is the default and is passed to say so. The two
+         * `false`s are not: they turn off overwriting an already-loaded
+         * theme, and turn off the engine's own preview fetches — this
+         * response already carries the previews, and queueing a second
+         * set of downloads during startup is the opposite of the point.
+         *
+         * It also replaces the raw preview fetch: this response IS the
+         * theme, previews included, so the tray's dice come out of the
+         * call that was needed anyway rather than a second one.
+         */
+        step = "loading the dice theme";
         const themeId = theme ?? fallbackThemeRef.current;
-        if (themeId && onPreviews) {
+        if (themeId) {
           try {
-            const res = await fetch(
-              `https://dddice.com/api/1.0/theme/${encodeURIComponent(themeId)}`,
-              { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" } }
-            );
-            if (res.ok) {
-              const previews = (
-                (await res.json()) as { data?: { preview?: Record<string, string> } }
-              ).data?.preview;
-              if (previews && !cancelled) onPreviews(previews);
+            const full = (await engine.api.theme.get(themeId)).data;
+            engine.loadTheme(full, false, false);
+            engine.loadThemeResources(String(full.id), true);
+            if (!cancelled && onPreviews && full.preview) {
+              onPreviews(full.preview as Record<string, string>);
             }
-          } catch {
-            // The drawn icons stay. They were always the fallback.
+          } catch (e) {
+            // Best effort, like everything else on this canvas. Without
+            // it the first roll is slow again; nothing breaks, and the
+            // drawn icons stay as the tray's fallback.
+            console.warn("[dice] could not preload the theme", e);
           }
         }
         if (cancelled) {
