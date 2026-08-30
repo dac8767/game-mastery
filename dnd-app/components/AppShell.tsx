@@ -32,7 +32,7 @@ import {
  * the right.
  *
  * The customizable ribbon deliberately does NOT live here. It belongs to
- * the DM Screen and nowhere else, so every other screen keeps its full
+ * the GM Screen and nowhere else, so every other screen keeps its full
  * height for the thing it is actually showing.
  *
  * The nav list itself lives in components/navItems.ts, because the
@@ -173,10 +173,10 @@ export function AppShell({
   /**
    * Two different questions, and conflating them is a trap.
    *
-   * runsThis is structural — you are the DM of this campaign — and is
+   * runsThis is structural — you are the GM of this campaign — and is
    * what decides whether the View as Player switch is offered at all.
    * isDm is what the sidebar filters on, and the preview turns it off
-   * so the DM-only screens go away like they would for a player.
+   * so the GM-only screens go away like they would for a player.
    *
    * The switch must hang off the first, never the second. Gate the way
    * OUT of a preview on not being in one and it becomes a one-way
@@ -298,7 +298,7 @@ export function AppShell({
             </Link>
 
             {/* The campaign name doubles as the link to the live table.
-                No DM badge beside it any more: the switch below says
+                No GM badge beside it any more: the switch below says
                 which of the two you are looking as, which is the same
                 fact and the more useful half of it. Admin stays —
                 borrowed authority is labelled, never disguised. */}
@@ -331,7 +331,7 @@ export function AppShell({
                 aria-pressed={!previewing}
                 onClick={() => void saveSettings({ viewAsPlayer: false })}
               >
-                DM
+                GM
               </button>
               <button
                 type="button"
@@ -367,8 +367,8 @@ export function AppShell({
                     {folded ? "▸" : "▾"}
                   </span>
                   {section.title}
-                  {/* No DM badge. Reported off: the section is only
-                      RENDERED for the DM, so the pill told its one
+                  {/* No GM badge. Reported off: the section is only
+                      RENDERED for the GM, so the pill told its one
                       possible reader something they already are. */}
                 </button>
               )}

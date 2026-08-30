@@ -47,7 +47,7 @@ export function LookupFilterBar({
   matched: number;
   total: number;
   /**
-   * The DM Screen's windows ask for this: the whole section as ONE
+   * The GM Screen's windows ask for this: the whole section as ONE
    * row of dropdowns — nothing listed out on screen, minor filters
    * left off entirely, advanced ones behind their own dropdowns
    * instead of a second row.
@@ -221,7 +221,7 @@ function MiniControl({
 /**
  * A dropdown panel for the controls a native select cannot be.
  *
- * PORTALED to the body like the DM Screen's own menus, because this
+ * PORTALED to the body like the GM Screen's own menus, because this
  * bar lives inside a window whose body is a scroll container — a
  * panel positioned inside it would be clipped at the window's edge.
  */

@@ -38,7 +38,7 @@ import { FeedbackForm } from "@/components/FeedbackForm";
  *                     label underneath) filling the section's height
  *   - a row break   → two rows of small icon buttons
  *
- * It lives on the DM Screen and nowhere else. That was a deliberate
+ * It lives on the GM Screen and nowhere else. That was a deliberate
  * call: a toolbar you arranged yourself is worth its height on the
  * screen built around it, and is just a band across the top of every
  * other one.
@@ -57,7 +57,7 @@ export function RibbonBar({
   campaignId: Id<"campaigns">;
   /**
    * Renderers for the builtins whose content belongs to the SCREEN the
-   * bar is standing on — the DM Screen's Add Window and Workspaces
+   * bar is standing on — the GM Screen's Add Window and Workspaces
    * menus, and its note format bar. Injected rather than imported,
    * because those menus read and write the screen's own state, and the
    * bar knowing about DmScreen would be the dependency pointing the
@@ -211,7 +211,7 @@ export function RibbonBar({
             <span className="rib-icon">{meta.icon}</span>
             <span className="rib-label">
               {campaign?.name ?? "Campaign"}
-              {campaign?.isDm && <span className="badge">DM</span>}
+              {campaign?.isDm && <span className="badge">GM</span>}
               {campaign?.viaAdmin && <span className="badge admin">Admin</span>}
             </span>
           </Link>

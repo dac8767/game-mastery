@@ -12,7 +12,7 @@ import {
 import { isActive } from "@/components/rosterModel";
 
 /**
- * The DM's invite links.
+ * The GM's invite links.
  *
  * addMemberByEmail beside this can only add an account that already
  * exists, which made inviting somebody a conversation: make an account,
@@ -158,7 +158,7 @@ export function InvitePanel({
               >
                 {/* Readonly rather than a link: this is something to
                     copy and paste into a chat, and clicking it would
-                    spend the DM's own invite on the DM. */}
+                    spend the GM's own invite on the GM. */}
                 <input
                   className="detail-input invite-url"
                   value={url}

@@ -5,17 +5,17 @@
  * whole security surface and they are worth testing on their own. An
  * invite is an UNAUTHENTICATED door into a campaign: anyone holding the
  * link is anyone at all until the moment they sign in. So it has three
- * independent ways to die — a clock, a counter, and the DM's hand — and
+ * independent ways to die — a clock, a counter, and the GM's hand — and
  * every one of them is checked on the way in, not on the way out.
  *
  * Free of React and Convex so the unit guard can compile it alone.
  */
 
 export const INVITE_LIMITS = {
-  /** Days a new link lasts unless the DM says otherwise. */
+  /** Days a new link lasts unless the GM says otherwise. */
   defaultDays: 14,
   maxDays: 90,
-  /** People a new link admits unless the DM says otherwise. */
+  /** People a new link admits unless the GM says otherwise. */
   defaultUses: 1,
   maxUses: 50,
   /** Hex characters. 32 is one UUID's worth — 122 bits of randomness. */
@@ -35,8 +35,8 @@ export interface InviteState {
  * The reason this link is dead, or null if it is alive.
  *
  * Ordered deliberately: revoked beats expired beats spent, so the
- * message names the thing the DM actually did rather than whichever
- * clock ran out first afterwards. A link the DM killed on Monday should
+ * message names the thing the GM actually did rather than whichever
+ * clock ran out first afterwards. A link the GM killed on Monday should
  * not report itself as having expired on Friday.
  */
 export function inviteProblem(
@@ -54,16 +54,16 @@ export function inviteProblem(
 export function inviteMessage(problem: InviteProblem): string {
   switch (problem) {
     case "revoked":
-      return "This invite was cancelled. Ask the DM for a new link.";
+      return "This invite was cancelled. Ask the GM for a new link.";
     case "expired":
-      return "This invite has expired. Ask the DM for a new link.";
+      return "This invite has expired. Ask the GM for a new link.";
     case "spent":
-      return "This invite has already been used. Ask the DM for a new link.";
+      return "This invite has already been used. Ask the GM for a new link.";
     default:
       // Deliberately the same words as "expired" would get from a token
       // that never existed: telling a stranger which of their guesses
       // was a real campaign is telling them something.
-      return "This invite link is not valid. Ask the DM for a new one.";
+      return "This invite link is not valid. Ask the GM for a new one.";
   }
 }
 
@@ -81,7 +81,7 @@ export function tokenFrom(bytes: Uint8Array): string {
     .slice(0, INVITE_LIMITS.tokenLength);
 }
 
-/** Days the DM asked for, held inside what the app will actually issue. */
+/** Days the GM asked for, held inside what the app will actually issue. */
 export function clampDays(days: unknown): number {
   const n = Math.round(Number(days));
   if (!Number.isFinite(n) || n <= 0) return INVITE_LIMITS.defaultDays;
@@ -112,7 +112,7 @@ export function inviteUrl(origin: string, token: string): string {
   return `${String(origin ?? "").replace(/\/+$/, "")}/join/${token}`;
 }
 
-/** "in 13 days", "today", "3 days ago" — for the DM's list of links. */
+/** "in 13 days", "today", "3 days ago" — for the GM's list of links. */
 export function expiryText(expiresAt: number, now: number): string {
   const days = Math.round((expiresAt - now) / (24 * 60 * 60 * 1000));
   if (expiresAt <= now) return "expired";

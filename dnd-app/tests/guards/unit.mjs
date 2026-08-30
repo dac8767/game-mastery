@@ -842,7 +842,7 @@ export const unit = {
       "a player sees only the tabs that are theirs",
       st.visibleTabs(false).every((t) => !t.dmOnly)
     );
-    check("a DM sees all of them", st.visibleTabs(true).length === st.SETTINGS_TABS.length);
+    check("a GM sees all of them", st.visibleTabs(true).length === st.SETTINGS_TABS.length);
     check(
       "a player still has somewhere to land",
       st.visibleTabs(false).length > 0
@@ -862,7 +862,7 @@ export const unit = {
         !st.SETTINGS_TABS.some((t) => t.id === "gm")
     );
     check(
-      "User is not DM-only — it is where everyone edits their name",
+      "User is not GM-only — it is where everyone edits their name",
       st.SETTINGS_TABS.find((t) => t.id === "user")?.dmOnly !== true
     );
     // A tab id saved before this rename still resolves to something,
@@ -879,11 +879,11 @@ export const unit = {
 
     check("a valid tab is kept", st.resolveTab("interface", false) === "interface");
     check(
-      "a DM keeps a DM tab",
+      "a GM keeps a GM tab",
       st.resolveTab("campaign", true) === "campaign"
     );
     check(
-      "a player asking for a DM tab is redirected, not shown a blank page",
+      "a player asking for a GM tab is redirected, not shown a blank page",
       st.resolveTab("campaign", false) === st.visibleTabs(false)[0].id
     );
     // Players was folded into Campaign. A saved selection pointing at
@@ -895,7 +895,7 @@ export const unit = {
         !st.SETTINGS_TABS.some((t) => t.id === "players")
     );
     check(
-      "losing the DM role moves you off a DM tab",
+      "losing the GM role moves you off a GM tab",
       st.resolveTab("gm", false) === st.visibleTabs(false)[0].id
     );
     check("nonsense falls back", st.resolveTab("nope", true) === st.SETTINGS_TABS[0].id);
@@ -1097,11 +1097,11 @@ export const unit = {
     );
     const forPlayer = sec.arrange(playerKeys);
     check(
-      "a player gets no DM-only section at all",
+      "a player gets no GM-only section at all",
       !forPlayer.some((s) => s.id === "dm")
     );
     check(
-      "a player's DM-only fields are not smuggled into More",
+      "a player's GM-only fields are not smuggled into More",
       !forPlayer.flatMap((s) => s.keys).some((k) => dmSection.keys.includes(k))
     );
     check(
@@ -1727,7 +1727,7 @@ export const unit = {
     // ---- invite links: three independent ways to die ---------------
     // An invite is an UNAUTHENTICATED door into a campaign — anyone
     // holding the link is anyone at all until they sign in. So the
-    // clock, the counter and the DM's Cancel are each checked on the
+    // clock, the counter and the GM's Cancel are each checked on the
     // way in, and the reasons are ordered so the message names what
     // actually happened.
     const invOut = compile("components/inviteModel.ts");
@@ -1758,7 +1758,7 @@ export const unit = {
       inv.inviteProblem({ ...live, usesLeft: -3 }, NOW) === "spent"
     );
 
-    // Revoked beats expired beats spent: a link the DM killed on Monday
+    // Revoked beats expired beats spent: a link the GM killed on Monday
     // should not report itself as having expired on Friday.
     check(
       "revoking wins over expiry",
@@ -1844,7 +1844,7 @@ export const unit = {
     );
 
     // ---- what a note is allowed to contain -------------------------
-    // A player writing a note is handing markup to the DM's browser.
+    // A player writing a note is handing markup to the GM's browser.
     // Every case below is something that renders as a script, a
     // request, or a hijacked page if it survives — so this is the one
     // module where a passing test is the actual security property and
@@ -2166,17 +2166,17 @@ export const unit = {
     );
 
     // ---- a section that is only yours while you run the game -------
-    // The DM's own preference, and the reason it exists is the preview:
+    // The GM's own preference, and the reason it exists is the preview:
     // View as Player is meant to show what the table sees, so a prep
     // section still standing in it would make the preview a lie about
     // the only screen it is checked on.
     const sbDm = sb.setSectionDmOnly(sbBase, "tools", true);
     check(
-      "a DM-only section renders for the DM",
+      "a GM-only section renders for the GM",
       sb.visibleSidebar(sbDm, IDS, true).some((s) => s.id === "tools")
     );
     check(
-      "and is gone when you are not the DM here",
+      "and is gone when you are not the GM here",
       !sb.visibleSidebar(sbDm, IDS, false).some((s) => s.id === "tools")
     );
     check(
@@ -2200,7 +2200,7 @@ export const unit = {
           .sections.find((s) => s.id === "tools"))
     );
     check(
-      "marking a section DM-only does not hide its items for the DM",
+      "marking a section GM-only does not hide its items for the GM",
       sb.sidebarIds(sbDm).join() === IDS.join()
     );
 
@@ -2810,7 +2810,7 @@ export const unit = {
     );
 
     // ---- the NPC record template -----------------------------------
-    // The DM's own layout. Everything here is one property said five
+    // The GM's own layout. Everything here is one property said five
     // ways: a field cannot go missing. A template outlives the column
     // list it was built from, and a field the template forgets is not
     // missing from a tab — it is missing from the app, in every record
@@ -6208,7 +6208,7 @@ export const unit = {
     // ---- what a session's note box may contain ---------------------
     // The notebook's boxes are private, so their HTML round-tripped
     // untouched. A session's player notes are written by any member and
-    // read by the DM, which makes them the same problem notes already
+    // read by the GM, which makes them the same problem notes already
     // solved — and a wider vocabulary, because the format toolbar puts
     // colours and alignment on the text.
     {
@@ -6483,7 +6483,7 @@ export const unit = {
       );
     }
 
-    // ---- the DM Screen's windows -----------------------------------
+    // ---- the GM Screen's windows -----------------------------------
     // The tiling tree: drop zones, splits, shares, and the parser
     // every stored layout comes through. The failures here are all
     // invisible in a demo: a drop zone that reads the wrong edge, a
@@ -7046,7 +7046,7 @@ export const unit = {
       );
     }
 
-    // ---- the DM's prep list ----------------------------------------
+    // ---- the GM's prep list ----------------------------------------
     // Two halves, both of which fail silently. A reorder that puts an
     // item back where it started reads as a missed click; a due date
     // off by one calls tomorrow overdue, and a list that cries wolf is
@@ -8385,7 +8385,7 @@ export const unit = {
           return R.every((r) => r.players.every((p) => cast.has(p)));
         })()
       );
-      // The DM notes are inserted through sanitizeBoxHtml. Canonical
+      // The GM notes are inserted through sanitizeBoxHtml. Canonical
       // HTML passes through IDENTICALLY — so any drift here means the
       // sanitizer would silently rewrite or drop note content the
       // moment it was imported.
@@ -8399,7 +8399,7 @@ export const unit = {
           (r) => r.dmNotes && bx.sanitizeBoxHtml(r.dmNotes) !== r.dmNotes
         );
         check(
-          "every session's DM notes survive the sanitizer untouched",
+          "every session's GM notes survive the sanitizer untouched",
           R.filter((r) => r.dmNotes).length === 42 && changed.length === 0
         );
       }
@@ -8407,7 +8407,7 @@ export const unit = {
       // A description says what happened IN THE GAME. Attendance,
       // start times and where a date came from are facts about the
       // evening, not about Moonbrook — the columns beside it carry the
-      // ones worth keeping, and the DM notes carry the provenance. The
+      // ones worth keeping, and the GM notes carry the provenance. The
       // giveaway is a PLAYER's name: these summaries name characters.
       check(
         "no summary carries attendance, a clock time, or source trivia",

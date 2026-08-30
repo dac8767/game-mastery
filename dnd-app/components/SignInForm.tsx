@@ -7,7 +7,7 @@ import { useState } from "react";
  * Email + password sign-in (Convex Auth Password provider).
  *
  * "Create account" exists so the 11 players can register themselves once
- * before the DM adds them to a campaign by email. After everyone is in,
+ * before the GM adds them to a campaign by email. After everyone is in,
  * you can hide the toggle (or add an email allowlist in convex/auth.ts)
  * to shut the door.
  */

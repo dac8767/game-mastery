@@ -15,7 +15,7 @@ import { isActive } from "../components/rosterModel";
 /**
  * Campaigns, membership, and characters.
  *
- * Two campaigns = your two groups. A DM adds a member either by the
+ * Two campaigns = your two groups. A GM adds a member either by the
  * email they already signed up with, or — for somebody with no account
  * yet — by handing them an invite link, which is the only path that
  * works before the person exists in the database at all.
@@ -53,7 +53,7 @@ export const createCampaign = mutation({
 });
 
 /**
- * Campaigns the caller can see: their own as DM, the ones they play in,
+ * Campaigns the caller can see: their own as GM, the ones they play in,
  * and — only while the admin override is active — every campaign, so a
  * broken one can be opened and repaired.
  */
@@ -158,10 +158,10 @@ export const campaignCards = query({
           viaAdmin: admin && c.dmId !== userId,
           imageUrl: c.imageId ? await ctx.storage.getUrl(c.imageId) : null,
           imagePath: c.imagePath ?? null,
-          dmName: dmProfile?.displayName ?? "the DM",
+          dmName: dmProfile?.displayName ?? "the GM",
           /**
-           * The party as the DM entered it. A character with no player
-           * at all is the DM's own sheet and is not somebody at the
+           * The party as the GM entered it. A character with no player
+           * at all is the GM's own sheet and is not somebody at the
            * table, so it is left off the card's roster — and so is
            * anybody marked inactive, which is what the card is for:
            * this is who you are playing with now, not who ever played.
@@ -186,7 +186,7 @@ export const campaignCards = query({
   },
 });
 
-/** DM: the details behind a campaign card. */
+/** GM: the details behind a campaign card. */
 export const updateCampaign = mutation({
   args: {
     campaignId: v.id("campaigns"),
@@ -222,7 +222,7 @@ export const generateImageUploadUrl = mutation({
   },
 });
 
-/** DM: attach an uploaded picture, replacing whatever was there. */
+/** GM: attach an uploaded picture, replacing whatever was there. */
 export const setCampaignImage = mutation({
   args: {
     campaignId: v.id("campaigns"),
@@ -245,7 +245,7 @@ export const setCampaignImage = mutation({
 });
 
 /**
- * DM: delete a campaign, and everything in it.
+ * GM: delete a campaign, and everything in it.
  *
  * The typed name is the whole safety mechanism. There is no undo and no
  * backup here: a confirm dialog is one misplaced click, and this throws
@@ -278,14 +278,14 @@ export const deleteCampaign = mutation({
 });
 
 /**
- * DM: choose which edition this table plays.
+ * GM: choose which edition this table plays.
  *
  * Campaign-wide rather than personal — an edition is a property of the
  * game everyone at the table is in, not of one person's browser — so it
  * goes through requireDm like every other game-state change.
  */
 /**
- * DM: choose how this table levels. Campaign-wide for the same reason
+ * GM: choose how this table levels. Campaign-wide for the same reason
  * the edition is — it changes what everyone sees on a session, and it
  * goes through requireDm like every other game-state change.
  */
@@ -315,7 +315,7 @@ export const setRulesVersion = mutation({
  * Sweep up everything that belonged to a deleted campaign.
  *
  * Internal and unauthenticated by design: the campaign row is already
- * gone by the time this runs, so there is no DM left to check against.
+ * gone by the time this runs, so there is no GM left to check against.
  * deleteCampaign is the only thing that schedules it, and that one does
  * check.
  *
@@ -509,7 +509,7 @@ export const purgeCampaign = internalMutation({
       return await more();
     }
 
-    /* The DM Screen's rows. Their index is by_campaign_user, which a
+    /* The GM Screen's rows. Their index is by_campaign_user, which a
        campaign-only prefix query still walks — every user's screens,
        workspaces and notes for this campaign go. */
     const dmScreens = await ctx.db
@@ -615,21 +615,21 @@ export const purgeCampaign = internalMutation({
 });
 
 /**
- * DM: hand the campaign to someone else.
+ * GM: hand the campaign to someone else.
  *
- * Authority in this app is structural — you are the DM of a campaign
+ * Authority in this app is structural — you are the GM of a campaign
  * because `dmId` is you — so handing it over is a one-field change and
  * every check in the app follows immediately. There is no role table to
  * fall out of step with.
  *
- * The outgoing DM is kept as a MEMBER rather than dropped. Someone who
+ * The outgoing GM is kept as a MEMBER rather than dropped. Someone who
  * built a campaign and handed it to a friend should not lose the ability
  * to open it in the same click; leaving is a separate, deliberate act.
- * The incoming DM keeps their membership row too — harmless, and it
+ * The incoming GM keeps their membership row too — harmless, and it
  * means transferring back does not have to reinstate one.
  *
  * Only a member can receive it. Handing a campaign to a stranger would
- * be a way to lose one permanently, and the DM is by definition someone
+ * be a way to lose one permanently, and the GM is by definition someone
  * at the table.
  */
 export const transferDm = mutation({
@@ -648,14 +648,14 @@ export const transferDm = mutation({
       .unique();
     if (!membership) {
       throw new Error(
-        "Only someone already in the campaign can be made DM — add them first"
+        "Only someone already in the campaign can be made GM — add them first"
       );
     }
 
     const outgoing = campaign.dmId;
     await ctx.db.patch(args.campaignId, { dmId: args.toUserId });
 
-    // Keep the outgoing DM in the game unless they choose otherwise.
+    // Keep the outgoing GM in the game unless they choose otherwise.
     const existing = await ctx.db
       .query("campaignMembers")
       .withIndex("by_campaign_user", (q) =>
@@ -671,7 +671,7 @@ export const transferDm = mutation({
   },
 });
 
-/** DM: add a player to the campaign by the email they signed up with. */
+/** GM: add a player to the campaign by the email they signed up with. */
 export const addMemberByEmail = mutation({
   args: { campaignId: v.id("campaigns"), email: v.string() },
   handler: async (ctx, args) => {
@@ -702,7 +702,7 @@ export const addMemberByEmail = mutation({
   },
 });
 
-/** Members + their profiles, for the DM's roster view. */
+/** Members + their profiles, for the GM's roster view. */
 export const listMembers = query({
   args: { campaignId: v.id("campaigns") },
   handler: async (ctx, args) => {
@@ -747,7 +747,7 @@ export const upsertCharacter = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, isDm } = await requireMember(ctx, args.campaignId);
-    // Players may only manage their own characters; the DM can manage any.
+    // Players may only manage their own characters; the GM can manage any.
     if (!isDm && args.playerId !== userId) {
       throw new Error("You can only edit your own character");
     }
@@ -760,8 +760,8 @@ export const upsertCharacter = mutation({
       if (!isDm && existing.playerId !== userId) {
         throw new Error("You can only edit your own character");
       }
-      // Players never write DM notes, and never rename who plays what —
-      // playerName is the DM's roster of people who have not signed up,
+      // Players never write GM notes, and never rename who plays what —
+      // playerName is the GM's roster of people who have not signed up,
       // so a player editing their own sheet must not be able to reassign
       // it to somebody else.
       const patch = isDm
@@ -770,7 +770,7 @@ export const upsertCharacter = mutation({
       await ctx.db.patch(characterId, patch);
       return characterId;
     }
-    // Players never write DM notes — on create either.
+    // Players never write GM notes — on create either.
     return await ctx.db.insert("characters", {
       ...fields,
       notes: isDm ? fields.notes : undefined,
@@ -780,10 +780,10 @@ export const upsertCharacter = mutation({
 });
 
 /**
- * DM: take a character off the roster.
+ * GM: take a character off the roster.
  *
- * DM-only even for a claimed character: a player leaving the table is
- * the DM's call, and a player deleting their own sheet mid-campaign
+ * GM-only even for a claimed character: a player leaving the table is
+ * the GM's call, and a player deleting their own sheet mid-campaign
  * takes the party's history with it.
  */
 export const deleteCharacter = mutation({
@@ -805,7 +805,7 @@ export const generatePortraitUploadUrl = mutation({
   },
 });
 
-/** Attach uploaded art to a character. The DM, or the player who owns it. */
+/** Attach uploaded art to a character. The GM, or the player who owns it. */
 export const setCharacterPortrait = mutation({
   args: {
     characterId: v.id("characters"),
@@ -828,7 +828,7 @@ export const setCharacterPortrait = mutation({
 });
 
 /**
- * DM: mark somebody as still at the table, or no longer.
+ * GM: mark somebody as still at the table, or no longer.
  *
  * Its own mutation rather than a field on upsertCharacter, because the
  * roster's name fields call that on every blur without passing this
@@ -837,8 +837,8 @@ export const setCharacterPortrait = mutation({
  * full character into the call, renaming a player silently un-retires
  * them. A separate mutation cannot be got wrong that way.
  *
- * DM-only, like deleteCharacter and for the same reason: who is still
- * in the campaign is the DM's call, not something a player settles by
+ * GM-only, like deleteCharacter and for the same reason: who is still
+ * in the campaign is the GM's call, not something a player settles by
  * editing their own sheet.
  */
 export const setCharacterActive = mutation({
@@ -859,7 +859,7 @@ export const listCharacters = query({
       .query("characters")
       .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
       .collect();
-    // Strip DM notes for players, and resolve the portrait: a storage
+    // Strip GM notes for players, and resolve the portrait: a storage
     // id is useless to the browser, and the shaping belongs here rather
     // than in every screen that draws a character.
     //
@@ -895,7 +895,7 @@ const INVITE_MAX_DAYS = 90;
 const INVITE_DEFAULT_USES = 1;
 const INVITE_MAX_USES = 50;
 
-/** DM: mint a link. */
+/** GM: mint a link. */
 export const createInvite = mutation({
   args: {
     campaignId: v.id("campaigns"),
@@ -939,7 +939,7 @@ export const createInvite = mutation({
   },
 });
 
-/** DM: the links that exist, so they can be copied or killed. */
+/** GM: the links that exist, so they can be copied or killed. */
 export const listInvites = query({
   args: { campaignId: v.id("campaigns") },
   handler: async (ctx, args) => {
@@ -964,7 +964,7 @@ export const listInvites = query({
   },
 });
 
-/** DM: kill a link. Kept rather than deleted, so it reads as cancelled. */
+/** GM: kill a link. Kept rather than deleted, so it reads as cancelled. */
 export const revokeInvite = mutation({
   args: { inviteId: v.id("campaignInvites") },
   handler: async (ctx, args) => {
@@ -982,7 +982,7 @@ export const revokeInvite = mutation({
  * it has to: the person clicking has no account yet, and "sign up to
  * find out what you are joining" is not an invitation.
  *
- * So it returns the campaign's NAME, the DM's display name, and the
+ * So it returns the campaign's NAME, the GM's display name, and the
  * character being offered — and nothing else. Not the id, not the
  * roster, not the description. A stranger guessing tokens learns
  * whether a guess hit, which unguessable tokens already concede, and
@@ -1024,7 +1024,7 @@ export const peekInvite = query({
     return {
       ok: true as const,
       campaignName: campaign.name,
-      dmName: dmProfile?.displayName ?? "the DM",
+      dmName: dmProfile?.displayName ?? "the GM",
       characterName: character?.name ?? null,
     };
   },

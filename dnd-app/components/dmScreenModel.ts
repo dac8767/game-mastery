@@ -1,5 +1,5 @@
 /**
- * The DM Screen's window model: a Premiere-style tiled dock.
+ * The GM Screen's window model: a Premiere-style tiled dock.
  *
  * Premiere's behaviour, matched from four filmed scenarios: windows
  * NEVER float. The screen is one tree of splits whose leaves are tab
@@ -33,7 +33,7 @@
  * Every kind of window the screen offers.
  *
  * The Lookup tabs are separate kinds on purpose: "a spell lookup" is
- * what the DM adds, and one generic Lookup window whose kind lived in
+ * what the GM adds, and one generic Lookup window whose kind lived in
  * group state would be a second copy of the tab strip to keep in step.
  */
 export const DM_PANEL_KINDS = [
@@ -367,8 +367,8 @@ export function serializeLayout(layout: DmLayout): string {
 }
 
 /**
- * The screen a DM sees before arranging anything: the reference panel
- * the old DM Screen WAS — conditions and death saves — beside a
+ * The screen a GM sees before arranging anything: the reference panel
+ * the old GM Screen WAS — conditions and death saves — beside a
  * monster-and-spell lookup stack, so the first visit shows the idea
  * rather than an empty grey field with a menu.
  */

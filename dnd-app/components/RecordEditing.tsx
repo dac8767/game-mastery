@@ -371,7 +371,7 @@ export function TabStripEditor({
  * editor is one nobody can un-hide. So it keeps its tab, its place and
  * its size, and shows here greyed with the switch flipped.
  *
- * DM-only fields are worth hiding too — a table that never uses
+ * GM-only fields are worth hiding too — a table that never uses
  * "Secret" should not have it taking a quarter of a row — and hiding
  * one changes nothing about who may READ it. That is decided on the
  * server, and a hidden field is withheld from a player exactly as

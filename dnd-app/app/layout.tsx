@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   // The tab's ICON is app/icon.svg. Next's file convention emits the
   // <link rel="icon"> for it, which is why nothing here references it.
   title: "Game Mastery",
-  description: "D&D campaign app — live map, combat tracker and DM tools",
+  description: "D&D campaign app — live map, combat tracker and GM tools",
 };
 
 export const viewport: Viewport = {

@@ -29,13 +29,13 @@ const linkValidator = v.object({
 });
 
 /**
- * The DM's prep list.
+ * The GM's prep list.
  *
- * Every function here is DM-only, and that is a stronger statement than
+ * Every function here is GM-only, and that is a stronger statement than
  * it is elsewhere in this app. NPCs and locations have a player-facing
  * shape — the same row with the secrets stripped. This has none. There
  * is no redacted version of "statblock for the lich before Tuesday":
- * the task itself is the spoiler, so a non-DM caller is refused rather
+ * the task itself is the spoiler, so a non-GM caller is refused rather
  * than served a filtered list.
  *
  * Which is why the QUERY takes requireDm too. A player asking for this

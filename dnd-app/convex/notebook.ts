@@ -9,7 +9,7 @@ import { requireMember, requireUser } from "./auth";
  * One notebook per person per campaign, private to them: every function
  * here resolves the caller from the auth context and filters by that
  * userId, so there is no way to read or write someone else's pages. The
- * campaign only scopes it — being the DM grants nothing over a player's
+ * campaign only scopes it — being the GM grants nothing over a player's
  * notes, which is deliberate. Session notes are where you write things
  * you have not decided to share.
  *

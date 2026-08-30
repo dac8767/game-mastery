@@ -92,7 +92,7 @@ export function LookupTool({
   kind: LookupKind;
   campaignId: Id<"campaigns">;
   /**
-   * Inside a DM Screen window the search/filter section is ONE row of
+   * Inside a GM Screen window the search/filter section is ONE row of
    * dropdowns — asked for by report — with the edition pair folded
    * into a dropdown of its own instead of standing as a second row.
    */

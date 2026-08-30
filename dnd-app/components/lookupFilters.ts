@@ -265,7 +265,7 @@ export interface FilterDef {
   advanced?: boolean;
   /**
    * Not worth a slot where space is tight: the condensed one-row bar
-   * the DM Screen's windows use leaves minor filters out entirely.
+   * the GM Screen's windows use leaves minor filters out entirely.
    * Named by report: "unimportant options can be removed (like the
    * size option in the species tab)".
    */

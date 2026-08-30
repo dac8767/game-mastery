@@ -28,7 +28,7 @@ import {
  * Vikunja nests projects in its own navigation pane, arbitrarily deep.
  * Two things are different here. The pane is gone, because this app has
  * one already and two navigation columns is one too many; and the
- * nesting is gone, because a tree is a thing you maintain and a DM
+ * nesting is gone, because a tree is a thing you maintain and a GM
  * wants a list to read.
  *
  * What a project is NOT is a folder you are afraid of: deleting one

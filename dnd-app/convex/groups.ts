@@ -31,7 +31,7 @@ import { getSettings } from "./settings";
  * collected. Otherwise a player learns that someone they have not met
  * is in the cult — the name leaks through the group even though the NPC
  * itself is withheld. A group nobody visible belongs to still shows if
- * it has been described; the description is the DM's writing, not a
+ * it has been described; the description is the GM's writing, not a
  * roster fact.
  */
 
@@ -73,7 +73,7 @@ export const listForCampaign = query({
       args.campaignId
     );
 
-    // A DM previewing the player view is served as a player, exactly as
+    // A GM previewing the player view is served as a player, exactly as
     // the roster is — otherwise the preview would show the real member
     // lists and say nothing was being withheld.
     const { viewAsPlayer } = await getSettings(ctx, userId);

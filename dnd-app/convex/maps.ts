@@ -7,11 +7,11 @@ import { Id } from "./_generated/dataModel";
 /**
  * Map library + live table state.
  *
- * The map picker (DM app) searches this table; the player view subscribes
- * to getTableState and renders whatever map the DM has made active.
+ * The map picker (GM app) searches this table; the player view subscribes
+ * to getTableState and renders whatever map the GM has made active.
  * Image URLs are built client-side as:
  *   `${MAP_SERVER_BASE}/${map.webPath}`      — players
- *   `${MAP_SERVER_BASE}/${map.originalPath}` — DM app, when needed
+ *   `${MAP_SERVER_BASE}/${map.originalPath}` — GM app, when needed
  */
 
 /** Search the library by title text, optionally filtered by tag. */
@@ -65,7 +65,7 @@ export const listTags = query({
   },
 });
 
-/** Add a map to the library (used by the Airtable migration + DM app). */
+/** Add a map to the library (used by the Airtable migration + GM app). */
 export const addMap = mutation({
   args: {
     title: v.string(),
@@ -122,7 +122,7 @@ export const getTableState = query({
   },
 });
 
-/** DM: change what every player screen displays. */
+/** GM: change what every player screen displays. */
 export const setActiveMap = mutation({
   args: {
     campaignId: v.id("campaigns"),
@@ -135,7 +135,7 @@ export const setActiveMap = mutation({
   },
 });
 
-/** DM: toggle the grid overlay on player screens. */
+/** GM: toggle the grid overlay on player screens. */
 export const setShowGrid = mutation({
   args: { campaignId: v.id("campaigns"), showGrid: v.boolean() },
   handler: async (ctx, args) => {
@@ -145,7 +145,7 @@ export const setShowGrid = mutation({
   },
 });
 
-/** DM: broadcast a banner line ("Roll perception", "Short rest"). */
+/** GM: broadcast a banner line ("Roll perception", "Short rest"). */
 export const setBanner = mutation({
   args: {
     campaignId: v.id("campaigns"),

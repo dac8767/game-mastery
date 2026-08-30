@@ -1,9 +1,9 @@
 /**
- * Guard 5 — the DM/player boundary.
+ * Guard 5 — the GM/player boundary.
  *
  * The project's hardest rule: hidden NPCs, `secret`, `dmNotes`, and
- * masked HP must never leave the server for a non-DM caller. A
- * regression here is invisible in the UI you look at (you're the DM —
+ * masked HP must never leave the server for a non-GM caller. A
+ * regression here is invisible in the UI you look at (you're the GM —
  * you see everything either way) and only shows up when a player opens
  * the app. Nothing else in the toolchain checks it.
  */
@@ -12,7 +12,7 @@ import { read, requirePattern, stripComments } from "./lib.mjs";
 
 export const dmVisibility = {
   name: "dm-visibility",
-  description: "DM-only fields stay server-side for non-DM callers",
+  description: "GM-only fields stay server-side for non-GM callers",
   run() {
     const problems = [];
 
@@ -30,7 +30,7 @@ export const dmVisibility = {
       problems,
       npcs,
       /\.filter\(\s*\(n\)\s*=>\s*isDm\s*\|\|\s*!n\.hidden\s*\)/,
-      "npcs.listForCampaign must drop hidden NPCs for non-DM callers"
+      "npcs.listForCampaign must drop hidden NPCs for non-GM callers"
     );
     requirePattern(
       problems,
@@ -55,7 +55,7 @@ export const dmVisibility = {
     if (/\.map\((?:async )?\(n\)\s*=>\s*\(\{\s*\n?\s*\.\.\.n\b/.test(npcs)) {
       problems.push(
         "npcs.listForCampaign spreads the raw document (...n) — " +
-          "DM-only fields would ride along"
+          "GM-only fields would ride along"
       );
     }
 
@@ -151,7 +151,7 @@ export const dmVisibility = {
       );
     }
 
-    // Every write is the DM's. A player must not be able to move a pin,
+    // Every write is the GM's. A player must not be able to move a pin,
     // rename a place, or upload a map over one.
     for (const fn of [
       "createLocation",
@@ -216,7 +216,7 @@ export const dmVisibility = {
           "unfiltered list, which puts hidden NPCs back into the counts"
       );
     }
-    // A DM previewing as a player must see what a player sees here too,
+    // A GM previewing as a player must see what a player sees here too,
     // or the preview quietly reports the wrong thing.
     requirePattern(
       problems,
@@ -226,7 +226,7 @@ export const dmVisibility = {
         "roster does — otherwise the preview shows the real member lists"
     );
 
-    // Every write is the DM's. A player must not rename a faction,
+    // Every write is the GM's. A player must not rename a faction,
     // describe one, delete one, or upload a picture onto one.
     for (const fn of [
       "createGroup",
@@ -250,11 +250,11 @@ export const dmVisibility = {
     }
 
     // ---- convex/sessions.ts ----------------------------------------
-    // The DM notes on a session are a whole PAGE of things the table
+    // The GM notes on a session are a whole PAGE of things the table
     // does not know, and the withholding is stronger here than
-    // anywhere else in the app on purpose: a non-DM request never
+    // anywhere else in the app on purpose: a non-GM request never
     // queries that side at all. Fetching both and returning one would
-    // mean the DM's notes had been read out of the database on a
+    // mean the GM's notes had been read out of the database on a
     // player's behalf and were sitting in a variable, one careless edit
     // from the wire.
     const sessions = read("convex", "sessions.ts");
@@ -287,16 +287,16 @@ export const dmVisibility = {
       problems,
       getNotes,
       /dm: isDm \? await side\("dm"\) : null/,
-      "sessions.getNotes must not evaluate the dm side for a non-DM " +
+      "sessions.getNotes must not evaluate the dm side for a non-GM " +
         "caller — and must send null rather than [], because an empty " +
-        "page says the DM wrote nothing, which is a different claim"
+        "page says the GM wrote nothing, which is a different claim"
     );
     requirePattern(
       problems,
       getNotes,
       /const isDm = isCampaignDm && !viewAsPlayer/,
-      "sessions.getNotes must honour viewAsPlayer — otherwise the DM's " +
-        "player preview shows the DM notes and reports nothing withheld"
+      "sessions.getNotes must honour viewAsPlayer — otherwise the GM's " +
+        "player preview shows the GM notes and reports nothing withheld"
     );
     // The PAGE the boxes sit on is the same secret as the boxes, and it
     // is newer — so it is the half likely to be forgotten. Same shape:
@@ -305,7 +305,7 @@ export const dmVisibility = {
       problems,
       getNotes,
       /dmBody: isDm \? await body\("dm"\) : null/,
-      "sessions.getNotes must not read the DM's page for a non-DM caller " +
+      "sessions.getNotes must not read the GM's page for a non-GM caller " +
         "— the page carries the same secrets the boxes on it do"
     );
     requirePattern(
@@ -327,7 +327,7 @@ export const dmVisibility = {
     }
 
     // Writing. The player side is any member's, the same rule
-    // playerNotes runs on; the DM side is the DM's. What must never
+    // playerNotes runs on; the GM side is the GM's. What must never
     // happen is a box mutation that decides from an ARGUMENT which side
     // it is touching — the box's own `side` is the only trustworthy
     // answer, because an id is all a caller needs to name someone
@@ -349,13 +349,13 @@ export const dmVisibility = {
       if (!/requireWriter\(ctx, session\.campaignId, box\.side\)/.test(body)) {
         problems.push(
           `sessions.${fn} does not check the side the BOX is on — a ` +
-            "player who knows a DM box's id could reach it"
+            "player who knows a GM box's id could reach it"
         );
       }
     }
     // setBody names its side in an argument, which is safe ONLY because
-    // requireWriter then refuses a non-DM the dm side. Without that
-    // call it is a mutation that writes the DM's page for anyone who
+    // requireWriter then refuses a non-GM the dm side. Without that
+    // call it is a mutation that writes the GM's page for anyone who
     // passes side: "dm" — the exact hole the box mutations avoid by
     // reading the side off the document instead.
     {
@@ -363,13 +363,13 @@ export const dmVisibility = {
       if (!/requireWriter\(ctx, session\.campaignId, args\.side\)/.test(body)) {
         problems.push(
           "sessions.setBody does not pass the side to requireWriter — any " +
-            "member could write the DM's page by asking for it"
+            "member could write the GM's page by asking for it"
         );
       }
       if (!/sanitizeBoxHtml\(args\.html\)/.test(body)) {
         problems.push(
           "sessions.setBody stores html unsanitised — the player page is " +
-            "written by any member and rendered in the DM's browser"
+            "written by any member and rendered in the GM's browser"
         );
       }
     }
@@ -392,7 +392,7 @@ export const dmVisibility = {
     // The notebook's boxes are one person's page and went to the
     // database untouched, which was fine while that was true of every
     // box in the app. A session's PLAYER notes are written by any
-    // member and rendered in the DM's browser, so the same markup is
+    // member and rendered in the GM's browser, so the same markup is
     // now a script running as them unless something rebuilds it. Two
     // mutations write `html`, and one of them forgetting is not
     // visible in anything you can look at.
@@ -404,8 +404,8 @@ export const dmVisibility = {
       if (!/sanitizeBoxHtml\(/.test(body)) {
         problems.push(
           `sessions.${fn} writes a box's html without rebuilding it — ` +
-            "the player side is written by any member and read by the DM, " +
-            "so unsanitised markup there runs as the DM"
+            "the player side is written by any member and read by the GM, " +
+            "so unsanitised markup there runs as the GM"
         );
       }
     }
@@ -419,14 +419,14 @@ export const dmVisibility = {
       );
     }
 
-    // And the screen must render the DM section from what the SERVER
+    // And the screen must render the GM section from what the SERVER
     // sent rather than from its own idea of who is looking. `isDm` in a
     // component is a render decision; `dm === null` is the data not
     // being there.
     const detail = read("components", "SessionDetail.tsx");
     if (/\{isDm && [\s\S]{0,80}dm-notes/.test(detail)) {
       problems.push(
-        "SessionDetail gates its DM notes section on the client's isDm — " +
+        "SessionDetail gates its GM notes section on the client's isDm — " +
           "it must render from `notes.dm` being present, which is the " +
           "server's answer rather than the browser's"
       );
@@ -450,7 +450,7 @@ export const dmVisibility = {
     // A settable role would defeat the entire visibility model.
     if (/isDm:\s*v\.|role:\s*v\./.test(settings)) {
       problems.push(
-        "convex/settings.ts accepts a role/isDm argument — DM status is " +
+        "convex/settings.ts accepts a role/isDm argument — GM status is " +
           "structural (campaign.dmId) and must never be self-settable"
       );
     }
@@ -461,7 +461,7 @@ export const dmVisibility = {
       problems,
       chat,
       /case "dmOnly":\s*\n\s*return false;/,
-      "chat.canSee must refuse dmOnly channels to non-DM callers"
+      "chat.canSee must refuse dmOnly channels to non-GM callers"
     );
     requirePattern(
       problems,
@@ -487,7 +487,7 @@ export const dmVisibility = {
       problems,
       chat,
       /export const createChannel[\s\S]*?await requireDm\(ctx, args\.campaignId\)/,
-      "chat.createChannel must be DM-gated"
+      "chat.createChannel must be GM-gated"
     );
 
     // ---- admin must not be grantable from inside the app -----------
@@ -523,9 +523,9 @@ export const dmVisibility = {
       );
     }
 
-    // ---- the client must not re-derive DM state --------------------
+    // ---- the client must not re-derive GM state --------------------
     // `dmNotes` is deliberately NOT here any more: it stopped being a
-    // column when the record's DM Notes thread replaced it, so there
+    // column when the record's GM Notes thread replaced it, so there
     // is no picker entry to mark dmOnly. The field still exists on the
     // document until npcs.migrateDmNotes has been run everywhere, and
     // the checks that matter for it — that the query nulls it for a
@@ -559,7 +559,7 @@ export const dmVisibility = {
     }
 
     // ---- convex/dmscreen.ts ----------------------------------------
-    // The DM Screen's storage. Everything in it is the DM's own — the
+    // The GM Screen's storage. Everything in it is the GM's own — the
     // arrangement, the workspaces, the prep notes — so every function
     // goes through requireDm, and the row-addressed mutations authorise
     // against the ROW's campaign rather than an argument a caller
@@ -593,7 +593,7 @@ export const dmVisibility = {
           );
         }
       }
-      // And the helpers check the USER too: two DMs of two campaigns
+      // And the helpers check the USER too: two GMs of two campaigns
       // must not reach each other's rows through the shared table.
       for (const helper of ["ownedWorkspace", "ownedNote"]) {
         const at = dmscreen.indexOf(`async function ${helper}`);
@@ -601,7 +601,7 @@ export const dmVisibility = {
         if (!/row\.userId !== userId/.test(body)) {
           problems.push(
             `${helper} does not compare the row's userId — an admin or ` +
-              "co-DM would reach rows that are not theirs"
+              "co-GM would reach rows that are not theirs"
           );
         }
       }
@@ -609,16 +609,16 @@ export const dmVisibility = {
       if (!/patch\.html = sanitizeBoxHtml\(args\.html\)/.test(fnBody("updateNote"))) {
         problems.push(
           "dmscreen.updateNote stores html unsanitised — pasted rich text " +
-            "goes straight to the DM's own browser"
+            "goes straight to the GM's own browser"
         );
       }
     }
 
     // ---- convex/todo.ts --------------------------------------------
-    // The DM's prep list has no player-facing shape at all, which makes
+    // The GM's prep list has no player-facing shape at all, which makes
     // it a different rule from everything above. An NPC has a redacted
     // version; "statblock for the lich before Tuesday" does not — the
-    // task IS the spoiler. So every function refuses a non-DM caller
+    // task IS the spoiler. So every function refuses a non-GM caller
     // rather than filtering rows, and that includes the QUERY.
     //
     // requireMember would be the quiet failure here: it returns a list
@@ -711,7 +711,7 @@ export const dmVisibility = {
       if (/requireMember/.test(todo)) {
         problems.push(
           "convex/todo.ts uses requireMember — a prep list has no " +
-            "player-facing version, so a non-DM caller is refused rather " +
+            "player-facing version, so a non-GM caller is refused rather " +
             "than served a filtered one"
         );
       }
@@ -720,9 +720,9 @@ export const dmVisibility = {
     // ---- convex/dice.ts --------------------------------------------
     // Two separate things have to hold, and both fail silently.
     //
-    // The DM's secret roll must be ABSENT from a player's data, not
+    // The GM's secret roll must be ABSENT from a player's data, not
     // hidden in the UI — the same rule as a dmOnly channel. A player
-    // who can see that a roll happened has learned something the DM
+    // who can see that a roll happened has learned something the GM
     // chose not to tell them, whatever the number was.
     //
     // And the dice must be thrown on the SERVER. A mutation that
@@ -743,7 +743,7 @@ export const dmVisibility = {
         fnBody("listRolls"),
         /\.filter\(\s*\(r\) => !r\.secret \|\| \(isDm && r\.userId === userId\)\s*\)/,
         "dice.listRolls must drop secret rolls server-side — a player must " +
-          "not learn that the DM rolled at all"
+          "not learn that the GM rolled at all"
       );
       // Filtered BEFORE the names are resolved and the rows are
       // shaped, so a secret roll cannot leak through a field added
@@ -767,7 +767,7 @@ export const dmVisibility = {
       }
 
       const rollDice = fnBody("rollDice");
-      // Only the DM rolls in secret, and the flag is ANDed with that
+      // Only the GM rolls in secret, and the flag is ANDed with that
       // rather than taken from the client.
       requirePattern(
         problems,
@@ -822,7 +822,7 @@ export const dmVisibility = {
               "kept private by not being sent, not by asking nicely"
           );
         }
-        // The DM's own dddice key must never become a shared secret.
+        // The GM's own dddice key must never become a shared secret.
         const diceSrc = read("convex", "dice.ts");
         if (/apiKey|api_key|\bsecretKey\b/i.test(diceSrc)) {
           problems.push(
@@ -837,7 +837,7 @@ export const dmVisibility = {
           );
         }
         if (!/await requireDm\(ctx, args\.campaignId\)/.test(fnBody("setRoom"))) {
-          problems.push("dice.setRoom is not DM-gated");
+          problems.push("dice.setRoom is not GM-gated");
         }
       }
 
@@ -845,7 +845,7 @@ export const dmVisibility = {
         problems,
         fnBody("clearRolls"),
         /await requireDm\(ctx, args\.campaignId\)/,
-        "dice.clearRolls is not DM-gated — one player could wipe the " +
+        "dice.clearRolls is not GM-gated — one player could wipe the " +
           "table's shared record of a roll they did not like"
       );
     }

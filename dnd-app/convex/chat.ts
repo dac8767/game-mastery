@@ -7,7 +7,7 @@ import { requireDm, requireMember } from "./auth";
  * Campaign chat.
  *
  * Built on Convex rather than ported from Stoat: everyone here already
- * has an account and a role, so a chat that knows who the DM is comes
+ * has an account and a role, so a chat that knows who the GM is comes
  * free, where a separate platform would mean a second login and a
  * second identity to keep in step.
  *
@@ -27,7 +27,7 @@ function canSee(
   userId: Id<"users">,
   isDm: boolean
 ): boolean {
-  if (isDm) return true; // the DM sees every channel in their campaign
+  if (isDm) return true; // the GM sees every channel in their campaign
   switch (channel.visibility) {
     case "everyone":
       return true;
@@ -136,7 +136,7 @@ export const createChannel = mutation({
     memberIds: v.optional(v.array(v.id("users"))),
   },
   handler: async (ctx, args) => {
-    // Only the DM shapes the campaign's channels.
+    // Only the GM shapes the campaign's channels.
     await requireDm(ctx, args.campaignId);
 
     const existing = await ctx.db
@@ -206,7 +206,7 @@ export const deleteMessage = mutation({
     const message = await ctx.db.get(args.messageId);
     if (!message) throw new Error("Not found");
     const { userId, isDm } = await requireMember(ctx, message.campaignId);
-    // Your own words, or the DM moderating their table.
+    // Your own words, or the GM moderating their table.
     if (message.userId !== userId && !isDm) throw new Error("Not yours");
     await ctx.db.delete(args.messageId);
   },

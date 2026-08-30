@@ -7,7 +7,7 @@
  * The records were merged from the OneNote session pages, the Discord
  * #scheduling channel, and — from February 2026 on, after the group
  * gave up on Discord — the Moonbrook Scheduling text thread. The
- * OneNote page content lands as each session's DM notes page.
+ * OneNote page content lands as each session's GM notes page.
  *
  * THE NUMBERING HERE IS DEREK'S, read back out of the app after he
  * corrected it: sessions 1 through 53, whole numbers only. An earlier
@@ -24,7 +24,7 @@
  * against a campaign that had just been renumbered, so each one
  * landed on the wrong night. A campaign runs one game on a given day,
  * so the date is the identity that survives a renumbering; the number
- * is a label the DM is free to change.
+ * is a label the GM is free to change.
  *
  * A `description` is what HAPPENED IN THE GAME, in a sentence or two —
  * "The party fights the bandits outside of town. One bandit dies." No
@@ -33,7 +33,7 @@
  * carry the ones worth keeping. Twenty sessions left no record of
  * their events in any source and carry NO description rather than an
  * invented one; everything known about where a date came from lives
- * in that session's DM notes under "Source note".
+ * in that session's GM notes under "Source note".
  *
  * Two passes, both in convex/sessions.ts and both safe to repeat:
  * `importRecords` creates the sessions missing from the campaign and
@@ -44,7 +44,7 @@
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-// The regulars, by era. Derek is the DM and is not listed as a player.
+// The regulars, by era. Derek is the GM and is not listed as a player.
 const FOUNDERS = ["Alex", "Andrew", "Gaige", "Julie", "Max", "Scott", "Steph"];
 const AFTER_GAIGE = ["Alex", "Andrew", "Julie", "Max", "Scott", "Steph"];
 const AFTER_ANDREW = ["Alex", "Julie", "Max", "Scott", "Steph"];
@@ -704,7 +704,7 @@ function main() {
   }
 
   // Pass two: the summaries, keyed by DATE onto whatever is there —
-  // including records an earlier run created and the DM has since
+  // including records an earlier run created and the GM has since
   // renumbered. EVERY session is sent, the ones with no summary as an
   // empty string, so a withdrawn summary clears the old text rather
   // than leaving it behind for want of anything to overwrite it.

@@ -26,8 +26,8 @@ import {
  * The campaign calendar.
  *
  * Everyone sees the same date, because the date is a fact about the
- * world rather than a private note. Only the DM changes it, and only
- * the DM sees the settings — a player looking at a month grid does not
+ * world rather than a private note. Only the GM changes it, and only
+ * the GM sees the settings — a player looking at a month grid does not
  * need a form for renaming the months.
  *
  * The viewed month is local state, deliberately separate from the
@@ -133,7 +133,7 @@ export function CalendarTool({
 
   return (
     <div className="cal">
-      {/* What day it is in the world, and — for the DM — the controls
+      {/* What day it is in the world, and — for the GM — the controls
           that change it. A panel of its own, above the grid: the date
           is a fact about the campaign, and the grid below is a way of
           looking at the month around it. */}
@@ -368,7 +368,7 @@ export function CalendarTool({
 }
 
 /**
- * What is on the day you clicked, and — for the DM — how to put
+ * What is on the day you clicked, and — for the GM — how to put
  * something there.
  *
  * Below the grid rather than in a dialog: the point of clicking a day is

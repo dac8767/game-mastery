@@ -11,7 +11,7 @@ import { Doc, Id } from "./_generated/dataModel";
 /**
  * Combat tracker — the reactive core of the app.
  *
- * Every player screen subscribes to getEncounterView. Every DM action
+ * Every player screen subscribes to getEncounterView. Every GM action
  * (damage, next turn, reveal) is a single mutation; Convex pushes the
  * updated view to all clients immediately. There is no refetch step and
  * no polling — the latency problem from the Airtable tracker cannot
@@ -20,10 +20,10 @@ import { Doc, Id } from "./_generated/dataModel";
  * Player-safe shaping happens server-side in getEncounterView:
  * - hidden combatants are omitted entirely
  * - HP is masked into status buckets unless showHpToPlayers
- * - dmNotes never leave the server for non-DM callers
+ * - dmNotes never leave the server for non-GM callers
  */
 
-// ---------- Encounter lifecycle (DM only) ----------
+// ---------- Encounter lifecycle (GM only) ----------
 
 export const createEncounter = mutation({
   args: {
@@ -100,7 +100,7 @@ export const endEncounter = mutation({
   },
 });
 
-// ---------- Combatants (DM only) ----------
+// ---------- Combatants (GM only) ----------
 
 export const addCombatant = mutation({
   args: {
@@ -235,7 +235,7 @@ export const removeCombatant = mutation({
   },
 });
 
-// ---------- Turn management (DM only) ----------
+// ---------- Turn management (GM only) ----------
 
 export const nextTurn = mutation({
   args: { encounterId: v.id("encounters") },
@@ -254,7 +254,7 @@ export const nextTurn = mutation({
 
 /**
  * The one subscription both apps use. Shape depends on who's asking:
- * the DM gets everything; players get the player-safe projection.
+ * the GM gets everything; players get the player-safe projection.
  */
 export const getEncounterView = query({
   args: { encounterId: v.id("encounters") },
@@ -311,12 +311,12 @@ export const getEncounterView = query({
   },
 });
 
-/** DM: list encounters for a campaign (prep + active + recent). */
+/** GM: list encounters for a campaign (prep + active + recent). */
 export const listEncounters = query({
   args: { campaignId: v.id("campaigns") },
   handler: async (ctx, args) => {
     const { isDm } = await requireMember(ctx, args.campaignId);
-    if (!isDm) throw new Error("Only the DM can list encounters");
+    if (!isDm) throw new Error("Only the GM can list encounters");
     return await ctx.db
       .query("encounters")
       .withIndex("by_campaign_status", (q) =>

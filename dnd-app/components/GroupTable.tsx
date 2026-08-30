@@ -234,7 +234,7 @@ export function GroupTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
 
   const filterableFields = GROUP_COLUMNS;
 
-  /** Only the group's own two fields are writable, and only by the DM. */
+  /** Only the group's own two fields are writable, and only by the GM. */
   const canEdit = (def: ColumnDef) => isDm && Boolean(def.editable);
 
   function sortOn(def: ColumnDef) {
@@ -379,7 +379,7 @@ export function GroupTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
               type="button"
               className="npc-btn primary"
               disabled={!isDm}
-              title={isDm ? undefined : "Only the DM can add a group"}
+              title={isDm ? undefined : "Only the GM can add a group"}
               onClick={async () => {
                 try {
                   setError(null);

@@ -24,7 +24,7 @@ import {
  * The Notebook: a tree of pages and coloured folders on the left, and a
  * canvas of free-floating boxes on the right.
  *
- * Notebooks are private per person per campaign — being the DM grants
+ * Notebooks are private per person per campaign — being the GM grants
  * nothing over a player's notes. Session notes are where you write the
  * things you haven't decided to share yet.
  *

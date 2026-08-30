@@ -24,7 +24,7 @@ This is the trunk. Every branch below is cut from it, and it is where
 the app actually lives.
 
 `main` is NOT the app. It is the initial import from 17 July 2026 and
-is over 150 commits behind — no DM Screen, no Lookup, no pagination,
+is over 150 commits behind — no GM Screen, no Lookup, no pagination,
 and no copy of this file. A fresh session clones the default branch, so
 a chat that skips this step is reading a six-week-old skeleton and will
 correctly report that the thing it was asked to work on does not exist.
@@ -48,6 +48,44 @@ git checkout claude/game-mastery-db-setup-jaeuln
 
 Anything not listed under your tool, treat as read-only. Reading another
 tool's file never conflicts; editing it does.
+
+---
+
+## GM, not DM
+
+The app's word for the person running the game is **Game Master**, and
+it says GM everywhere a person reads.
+
+**The code still says `dm`, and that is deliberate.** `dmId`, `dmNotes`,
+`dmOnly`, `isDm`, `requireDm`, the `dmScreens` and `dmWorkspaces`
+tables, the `dm-screen` route, `convex/dmscreen.ts`, the `.dm-tag`
+class, `"dm"` as a page side — none of them were renamed, for three
+separate reasons:
+
+- **Stored field and table names cannot be renamed in place.** A Convex
+  object validator is strict, so a row carrying the old key stops
+  matching the schema and `convex dev` refuses to push — the app does
+  not start. This already happened once with a sidebar field.
+- **Convex module names are the API path.** Renaming `dmscreen.ts`
+  changes `api.dmscreen.*` and needs codegen, which needs network the
+  sandbox may not have.
+- **Nav ids are stored in saved ribbons.** `toolbarTokens` holds
+  `t:dm-screen`; renaming the id silently drops that button from
+  anyone's saved layout, because normalizeRibbon discards tokens it
+  does not recognise.
+
+So: **change the words, leave the names.** A label is GM; an identifier
+is `dm`.
+
+Three strings contain "DM" and are NOT this app's vocabulary. The
+integrity guard pins all three, because getting them wrong is silent:
+
+- `sourceNames.ts` — "Dungeon Master's Guide" is a book's actual title
+- `lookupFilters.ts` — the same book, named in the edition note
+- `scripts/import-npcs.mjs` — `col(r, "DM Notes")` is a column header in
+  the Airtable export. `col()` returns `""` for a header it cannot
+  find, so renaming it imports every NPC with blank notes and reports
+  success
 
 ---
 
@@ -89,7 +127,7 @@ mutation that accepted a natural 20 every time.
 
 A secret roll is filtered on the way OUT of `listRolls`, not hidden in
 the UI — same rule as a dmOnly channel. A player must not learn that
-the DM rolled at all.
+the GM rolled at all.
 
 `critOfDice` is the one answer to "is this a crit", used by both the
 log (reading a stored row) and a fresh throw. Two implementations
@@ -123,11 +161,11 @@ Tables  encounters, combatants
 Mounted in  TableScreen (maps) — see the cross-mount note below
 Branch  claude/tool-combat
 Note    Player-facing shape is server-side: hidden combatants and
-        masked HP must never leave the server for a non-DM caller.
+        masked HP must never leave the server for a non-GM caller.
         See combat.getEncounterView.
 ```
 
-### dmscreen — DM Screen
+### dmscreen — GM Screen
 ```
 Owns    components/DmScreen.tsx, components/dmScreenModel.ts
         convex/dmscreen.ts
@@ -222,7 +260,7 @@ Owns    components/NotebookTool.tsx, components/BoxCanvas.tsx,
 Tables  notebooks, notebookBoxes
 Branch  claude/tool-notebook
 Note    boxHtml.ts is the sanitizer for every stored HTML in the app,
-        including session pages and DM notes — changing its allowlist
+        including session pages and GM notes — changing its allowlist
         affects other tools. Treat it as Common when you touch it.
         contentEditable rule: innerHTML is written only when the caret
         is elsewhere.
@@ -262,7 +300,7 @@ Owns    components/RulesLawyerTool.tsx, components/rulesSnippet.ts
         app/campaign/[campaignId]/rules/
 Reads   convex/lookup.ts (api.lookup)
 Branch  claude/tool-rules
-Status  Thin — a stub with a route and a DM Screen panel. Building it
+Status  Thin — a stub with a route and a GM Screen panel. Building it
         out is a tool-shaped job that conflicts with nothing.
 ```
 
@@ -285,8 +323,8 @@ Owns    components/SessionTable.tsx, components/SessionDetail.tsx,
         scripts/import-moonbrook-sessions.mjs
 Tables  sessions, sessionBoxes, sessionPages
 Branch  claude/tool-sessions
-Note    Session NUMBERS are the DM's to change; the importer matches on
-        date for exactly that reason. DM-side pages never leave the
+Note    Session NUMBERS are the GM's to change; the importer matches on
+        date for exactly that reason. GM-side pages never leave the
         server for a player — see sessions.getNotes.
 ```
 
@@ -307,10 +345,10 @@ Note    The tool has FOUR screens — Overview, Upcoming, Projects,
         SHELL. A chat changing which screens exist touches a shell
         file and therefore runs alone.
 ```
-The DM's prep list, and DM-only in a stronger sense than the rest of
+The GM's prep list, and GM-only in a stronger sense than the rest of
 the app. An NPC has a player-facing shape — the same row with the
 secrets stripped. This has none: "statblock for the lich" IS the
-spoiler. So every function refuses a non-DM caller rather than
+spoiler. So every function refuses a non-GM caller rather than
 filtering rows, the QUERY included, and the dm-visibility guard fails
 on `requireMember` appearing anywhere in `convex/todo.ts`.
 

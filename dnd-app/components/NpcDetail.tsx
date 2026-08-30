@@ -48,7 +48,7 @@ import {
  * The toolbar above stays put, so it is clear you are still inside the
  * NPC list and one Escape from being back in it.
  *
- * Who may write what is decided on the server (updateNpc is DM-gated;
+ * Who may write what is decided on the server (updateNpc is GM-gated;
  * setPlayerNotes is the only field a player can reach). This component
  * only decides what to *offer* — rendering a field read-only is a
  * courtesy so nobody types into something the server will reject, not
@@ -103,7 +103,7 @@ export const BODY_KEYS = COLUMNS.map((c) => c.key).filter(
 );
 
 /**
- * The layout this campaign uses, whether or not the DM has built one.
+ * The layout this campaign uses, whether or not the GM has built one.
  *
  * The shipped arrangement is the fallback, turned into a template so
  * there is exactly one thing the record renders from. Reconciled
@@ -146,7 +146,7 @@ export function NpcDetail({
   const [error, setError] = useState<string | null>(null);
 
   /**
-   * A DM opens a record to fill it in, so the blanks are the work. A
+   * A GM opens a record to fill it in, so the blanks are the work. A
    * player opens one to read it, where a column of empty labels is
    * just noise. Hence the different starting position, and the toggle
    * for when either of them wants the other view.
@@ -228,8 +228,8 @@ export function NpcDetail({
   /**
    * While arranging, the record shows the WHOLE template rather than
    * the filtered view. You cannot drag a field onto a tab you cannot
-   * see, and a DM arranging a layout is deciding where a field goes,
-   * not reading the record — so the DM-only fields and the empty ones
+   * see, and a GM arranging a layout is deciding where a field goes,
+   * not reading the record — so the GM-only fields and the empty ones
    * are all present and all draggable.
    */
   const shownTabs = arranging ? template.tabs : tabs;
@@ -295,7 +295,7 @@ export function NpcDetail({
 
   // The header's own fields, minus the portrait, which has its own
   // control. An empty one is dropped only when it is also read-only —
-  // a DM with no nickname set still needs somewhere to type one.
+  // a GM with no nickname set still needs somewhere to type one.
   const headerFields = HEADER_KEYS.filter((k) => k !== "portraitPath")
     .map((k) => COLUMN_BY_KEY.get(k))
     .filter((c): c is ColumnDef => Boolean(c))
@@ -355,7 +355,7 @@ export function NpcDetail({
             cannot tell "hide this" from "this is hidden" without going
             to look at the list. The server withholds a hidden NPC from
             players regardless of what this button says. */}
-        {/* DM only, and behind a confirmation. Deleting takes the notes
+        {/* GM only, and behind a confirmation. Deleting takes the notes
             and the portrait with it and nothing here can undo it, which
             is a different weight of action from every other button on
             this bar. */}
@@ -457,7 +457,7 @@ export function NpcDetail({
           <div className="record-titles">
             {/* Through RecordField like everything else, not as a heading
                 with the value baked in: name and nickname are editable
-                columns, and rendering them as text is how a DM quietly
+                columns, and rendering them as text is how a GM quietly
                 loses the ability to rename an NPC from its own record. */}
             {headerFields.map((col) => (
               <RecordField
@@ -623,7 +623,7 @@ export function NpcDetail({
           </div>
         </section>
 
-        {/* A player gets the whole column for the table pad. A DM gets
+        {/* A player gets the whole column for the table pad. A GM gets
             it split, because they keep two sets of notes and need both
             beside the record at once. */}
         <UiSplitHandle id="record.split" axis="x" />
@@ -817,7 +817,7 @@ function RecordField({
             ⠿
           </span>
           {col.label}
-          {dmOnly && <span className="dm-tag">DM only</span>}
+          {dmOnly && <span className="dm-tag">GM only</span>}
         </div>
         {col.kind === "longtext" ? (
           <textarea className="detail-input" rows={4} disabled value={value} readOnly />
@@ -856,7 +856,7 @@ function RecordField({
             }}
           />
           <span>{col.label}</span>
-          {dmOnly && <span className="dm-tag">DM only</span>}
+          {dmOnly && <span className="dm-tag">GM only</span>}
         </label>
       </div>
     );
@@ -886,7 +886,7 @@ function RecordField({
       {!variant && (
         <div className="detail-label">
           {col.label}
-          {dmOnly && <span className="dm-tag">DM only</span>}
+          {dmOnly && <span className="dm-tag">GM only</span>}
         </div>
       )}
 

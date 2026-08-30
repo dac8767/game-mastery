@@ -292,7 +292,7 @@ export const integrity = {
         }
       }
 
-      // Tabs, DM first — which is the way round it was asked for and is
+      // Tabs, GM first — which is the way round it was asked for and is
       // not otherwise recoverable: both tabs are the same markup with
       // different props, so swapping them is a silent change that still
       // renders perfectly. They replaced a side-by-side split.
@@ -306,14 +306,14 @@ export const integrity = {
       } else {
         // Anchored on the handlers rather than the labels: the label
         // text sits on its own line inside the button, so a search for
-        // ">DM notes" finds nothing and reports the tabs in the wrong
+        // ">GM notes" finds nothing and reports the tabs in the wrong
         // order regardless of what order they are in.
         const dmAt = detailSrc.indexOf('setTab("dm")', tabs);
         const playerAt = detailSrc.indexOf('setTab("player")', tabs);
         if (dmAt === -1 || playerAt === -1 || dmAt > playerAt) {
-          problems.push("the DM notes are not the first tab");
+          problems.push("the GM notes are not the first tab");
         }
-        for (const label of ["DM notes", "Player notes"]) {
+        for (const label of ["GM notes", "Player notes"]) {
           if (!detailSrc.slice(tabs).includes(label)) {
             problems.push(`the session tabs have no "${label}" tab`);
           }
@@ -367,7 +367,7 @@ export const integrity = {
       // is both wrong and in the way.
       for (const gone of [
         "Add to notes:",
-        "Add to DM notes:",
+        "Add to GM notes:",
         "Nothing written down yet",
       ]) {
         if (detailSrc.includes(gone)) {
@@ -633,7 +633,7 @@ export const integrity = {
             "of the tabs and drawn nowhere else"
         );
       }
-      // And it has to stay DM-only: the switch is about who may see the
+      // And it has to stay GM-only: the switch is about who may see the
       // NPC, so offering it to a player is offering them the lever.
       if (!/isDm && hiddenCol/.test(src)) {
         problems.push(
@@ -645,7 +645,7 @@ export const integrity = {
 
     // Every editable field needs an editor somewhere in the record.
     // This is not hypothetical: moving `name` and `nickname` into the
-    // header rendered them as a heading and a line of text, and the DM
+    // header rendered them as a heading and a line of text, and the GM
     // silently lost the ability to rename an NPC from its own record.
     // Nothing failed — the field was simply gone as a control.
     //
@@ -660,7 +660,7 @@ export const integrity = {
     if (!/headerFields\.map\(/.test(detailSrc)) {
       problems.push(
         "NpcDetail no longer maps the header's fields through RecordField — " +
-          "a header field rendered as bare text is a field the DM cannot edit"
+          "a header field rendered as bare text is a field the GM cannot edit"
       );
     }
     for (const key of headerKeys) {
@@ -687,7 +687,7 @@ export const integrity = {
       }
       seenKey.add(key);
     }
-    // DM-only fields must be behind a section a player never receives.
+    // GM-only fields must be behind a section a player never receives.
     // The server withholds them regardless, so this is about the record
     // not rendering an empty labelled box where a secret used to be.
     const dmKeys = columnsBlock
@@ -710,7 +710,7 @@ export const integrity = {
       if (pinnedKeys.includes(key)) continue;
       if (!dmSectionKeys.includes(key)) {
         problems.push(
-          `\`${key}\` is dmOnly but is not in the record's "DM only" section — ` +
+          `\`${key}\` is dmOnly but is not in the record's "GM only" section — ` +
             "a player would see its heading with a permanently empty field"
         );
       }
@@ -718,7 +718,7 @@ export const integrity = {
     for (const key of dmSectionKeys) {
       if (!dmKeys.includes(key)) {
         problems.push(
-          `the record's "DM only" section holds \`${key}\`, which is not ` +
+          `the record's "GM only" section holds \`${key}\`, which is not ` +
             "dmOnly — it is labelled as a secret and is not one"
         );
       }
@@ -818,7 +818,7 @@ export const integrity = {
       // 1. Sanitising in the editor is a convenience. Sanitising in the
       //    mutation is the guarantee, because a hand-made call never
       //    opens an editor. If this moves client-side, a player can put
-      //    a script in the DM's browser.
+      //    a script in the GM's browser.
       for (const fn of ["addNote", "editNote"]) {
         const at = src.indexOf(`export const ${fn}`);
         if (at === -1) throw new Error(`no ${fn} in convex/npcs.ts`);
@@ -843,22 +843,22 @@ export const integrity = {
         }
       }
 
-      // 3. The DM channel is filtered server-side, like every other
-      //    DM-only thing here. A client-side filter is a devtools
+      // 3. The GM channel is filtered server-side, like every other
+      //    GM-only thing here. A client-side filter is a devtools
       //    console away from being no filter at all.
       const listAt = src.indexOf("export const listNotes");
       if (listAt === -1) throw new Error("no listNotes in convex/npcs.ts");
       const listBody = blockAfter(src.slice(listAt), /handler:/, "listNotes");
       if (!/isDm \|\| n\.channel === "player"/.test(listBody)) {
         problems.push(
-          "npcs.listNotes does not filter the DM channel out server-side — " +
+          "npcs.listNotes does not filter the GM channel out server-side — " +
             "a player's browser would receive notes it merely does not render"
         );
       }
       if (!/viewAsPlayer/.test(listBody)) {
         problems.push(
           "npcs.listNotes ignores viewAsPlayer, so previewing as a player " +
-            "would still show the DM notes"
+            "would still show the GM notes"
         );
       }
 
@@ -939,7 +939,7 @@ export const integrity = {
     }
 
     // ---- the Scheduler's two authorities ---------------------------
-    // Different from the rest of the app, and worth stating: the DM
+    // Different from the rest of the app, and worth stating: the GM
     // decides the DAYS, but availability is each person's own. The
     // failure is not a leak — everyone is meant to see everyone's
     // times — it is one member marking another's evening free and the
@@ -981,7 +981,7 @@ export const integrity = {
       );
     }
 
-    // The DM's half. Offering days is not something a player may do.
+    // The GM's half. Offering days is not something a player may do.
     for (const fn of ["setWindow", "clearAllAvailability"]) {
       const at = schedSrc.indexOf(`export const ${fn}`);
       if (at === -1) throw new Error(`no ${fn} in convex/calendar.ts`);
@@ -992,7 +992,7 @@ export const integrity = {
     }
 
     // Slots are filtered to the window on the way IN as well as out. A
-    // day the DM withdrew leaves everyone's marks on it behind, and
+    // day the GM withdrew leaves everyone's marks on it behind, and
     // counting them would report agreement on a date nobody is being
     // offered any more.
     if (!/live\.has\(/.test(setAvailBody)) {
@@ -1758,7 +1758,7 @@ export const integrity = {
 
     // The way out of a preview must not be gated on not being in one.
     //
-    // View as Player turns isDm off so the DM-only screens go away —
+    // View as Player turns isDm off so the GM-only screens go away —
     // which is the point. But the switch that turns it back off lives
     // in the same sidebar, and hanging it off the same isDm would make
     // it a one-way door: the button disappears the instant it works,
@@ -1769,7 +1769,7 @@ export const integrity = {
     if (/viewAsPlayer/.test(shellSrc)) {
       if (!/runsThis && \(/.test(shellSrc)) {
         problems.push(
-          "the View as Player switch is not gated on the structural DM " +
+          "the View as Player switch is not gated on the structural GM " +
             "check — if it hangs off the previewing-adjusted isDm it " +
             "vanishes the moment it is used, with no way back"
         );
@@ -1777,7 +1777,7 @@ export const integrity = {
       if (!/const isDm = runsThis && !previewing/.test(shellSrc)) {
         problems.push(
           "AppShell does not fold viewAsPlayer into the isDm it filters " +
-            "the sidebar with, so previewing would leave the DM-only " +
+            "the sidebar with, so previewing would leave the GM-only " +
             "screens on screen"
         );
       }
@@ -1785,13 +1785,13 @@ export const integrity = {
       // The same door, checked at the level below. The switch is a
       // segmented pair now, and BOTH halves have to be on screen
       // whenever you run the campaign — the previewing state may decide
-      // which is marked, never which exists. Gate the DM option on
+      // which is marked, never which exists. Gate the GM option on
       // being in a preview and the way out is a button you have to
       // already be somewhere else to see.
       const at = shellSrc.indexOf('className="view-as"');
       if (at === -1) {
         problems.push(
-          "no view-as switch in AppShell — a DM who previews as a player " +
+          "no view-as switch in AppShell — a GM who previews as a player " +
             "would have no way back short of Settings, which the preview " +
             "also filters"
         );
@@ -1800,7 +1800,7 @@ export const integrity = {
         const opts = [...block.matchAll(/className=\{`view-as-opt/g)].length;
         if (opts !== 2) {
           problems.push(
-            `the view-as switch draws ${opts} options — it is DM and ` +
+            `the view-as switch draws ${opts} options — it is GM and ` +
               "Player, both always present, with the current one marked"
           );
         }
@@ -1892,15 +1892,15 @@ export const integrity = {
           "sidebar layout would be stored and ignored"
       );
     }
-    // A DM-only SECTION is filtered on the same preview-adjusted flag
-    // as the DM-only items. Handing visibleSidebar the structural
-    // runsThis instead would type-check perfectly and leave the DM's
+    // A GM-only SECTION is filtered on the same preview-adjusted flag
+    // as the GM-only items. Handing visibleSidebar the structural
+    // runsThis instead would type-check perfectly and leave the GM's
     // prep section standing in the preview that exists to show what a
     // player sees — the one place its absence is the entire point.
     if (!/visibleSidebar\(layout, allowed, isDm\)/.test(shellSrc)) {
       problems.push(
         "AppShell does not pass the previewing-adjusted isDm to " +
-          "visibleSidebar — a DM-only section would survive View as Player"
+          "visibleSidebar — a GM-only section would survive View as Player"
       );
     }
     // Folding writes through to the saved layout. Component state would
@@ -1979,7 +1979,7 @@ export const integrity = {
       }
     }
 
-    // The ribbon belongs to the DM Screen and nowhere else — that is
+    // The ribbon belongs to the GM Screen and nowhere else — that is
     // what the feedback asked for, and it is an ABSENCE, which is the
     // one shape you cannot check by reading the files you thought of.
     const mounts = sourceFiles("components", "app")
@@ -1989,7 +1989,7 @@ export const integrity = {
     if (mounts.length !== 1 || !mounts[0].endsWith("/DmScreen.tsx")) {
       problems.push(
         `RibbonBar is rendered in ${mounts.length ? mounts.join(", ") : "nowhere"} — ` +
-          "it belongs on the DM Screen and nowhere else"
+          "it belongs on the GM Screen and nowhere else"
       );
     }
 
@@ -2179,8 +2179,8 @@ export const integrity = {
       }
     }
 
-    // ---- handing over the DM role -----------------------------------
-    // The one mutation that changes WHO the DM is. Authority here is
+    // ---- handing over the GM role -----------------------------------
+    // The one mutation that changes WHO the GM is. Authority here is
     // structural — every other check in the app reads campaign.dmId — so
     // this single patch reassigns all of it at once, and the two things
     // guarding it are worth holding in place.
@@ -2198,11 +2198,11 @@ export const integrity = {
     if (!/requireDm\(/.test(transferBody)) {
       problems.push(
         "campaigns.transferDm does not go through requireDm — anyone could " +
-          "make themselves the DM of any campaign they can see"
+          "make themselves the GM of any campaign they can see"
       );
     }
     // The membership lookup has to be for the RECIPIENT. The outgoing
-    // DM is looked up through the same index a few lines later, so
+    // GM is looked up through the same index a few lines later, so
     // merely finding the index name here passed with the recipient's
     // check deleted — which is the whole check.
     const compactTransfer = transferBody.replace(/\s+/g, "");
@@ -2210,7 +2210,7 @@ export const integrity = {
       problems.push(
         "campaigns.transferDm does not look up the RECIPIENT's membership — " +
           "a campaign handed to someone outside it is lost, since only its " +
-          "DM can hand it back"
+          "GM can hand it back"
       );
     }
 
@@ -2372,7 +2372,7 @@ export const integrity = {
     }
 
     // Setting it is a change to the whole table's game, so it belongs to
-    // the DM by the same structural rule as every other game-state
+    // the GM by the same structural rule as every other game-state
     // mutation — not to whoever has the Settings page open.
     if (!/setRulesVersion[\s\S]{0,400}?requireDm\(/.test(read("convex", "campaigns.ts"))) {
       problems.push(
@@ -3161,7 +3161,7 @@ export const integrity = {
         if (a !== b) {
           problems.push(
             `invite limit ${modelName} is ${a} on the screen and ` +
-              `${serverName} is ${b} on the server — the DM would be ` +
+              `${serverName} is ${b} on the server — the GM would be ` +
               "offered one thing and issued another"
           );
         }
@@ -3227,17 +3227,17 @@ export const integrity = {
         if (!allowed.includes(key)) {
           problems.push(
             `peekInvite returns \`${key}\` — it answers to nobody, so it ` +
-              "must hand a stranger the campaign's name, the DM's and the " +
+              "must hand a stranger the campaign's name, the GM's and the " +
               "character's, and nothing else"
           );
         }
       }
     }
 
-    // ---- a player who may write cannot write the DM's fields --------
+    // ---- a player who may write cannot write the GM's fields --------
     // Players can create NPCs and keep editing the ones they made, so
-    // updateNpc is no longer DM-only — which makes the DM-only field
-    // list load-bearing. A fourth DM-only column added to the schema
+    // updateNpc is no longer GM-only — which makes the GM-only field
+    // list load-bearing. A fourth GM-only column added to the schema
     // and not to that list is a field a player could write.
     {
       const npcsSrc = stripComments(read("convex", "npcs.ts"));
@@ -3250,7 +3250,7 @@ export const integrity = {
       //
       // This used to check a hard-coded ["hidden", "dmNotes", "secret"],
       // which had both failure modes at once: it could not see a FOURTH
-      // DM-only field added to updateNpc and forgotten here — the exact
+      // GM-only field added to updateNpc and forgotten here — the exact
       // thing it exists to catch — and it failed on a field legitimately
       // retired, which is how it got read as noise. The invariant is a
       // relation between three lists, so all three are read.
@@ -3269,7 +3269,7 @@ export const integrity = {
         "updateNpc args"
       );
 
-      // Every DM-only column updateNpc actually accepts must be on the
+      // Every GM-only column updateNpc actually accepts must be on the
       // refusal list, or a player editing an NPC they created writes it.
       for (const key of dmColumns) {
         if (updateArgs.includes(key) && !listed.includes(key)) {
@@ -3293,7 +3293,7 @@ export const integrity = {
       }
       if (!/if \(!isDm && !isCreator\)/.test(npcsSrc)) {
         problems.push(
-          "updateNpc no longer refuses a caller who is neither the DM nor " +
+          "updateNpc no longer refuses a caller who is neither the GM nor " +
             "the NPC's creator"
         );
       }
@@ -3908,7 +3908,7 @@ export const integrity = {
       }
     }
 
-    // ---- the DM Screen's controls live in the ribbon ----------------
+    // ---- the GM Screen's controls live in the ribbon ----------------
     // Moved there by request: Add Window, Workspaces and the note
     // format bar are ribbon BUILTINS — arranged in Customize like
     // everything else — whose rendering the screen injects. Each link
@@ -3934,12 +3934,12 @@ export const integrity = {
         if (!new RegExp(`"b:${key}"`).test(registrySrc)) {
           problems.push(
             `DEFAULT_RIBBON does not place b:${key} — a fresh account's ` +
-              "DM Screen would open with no way to add a window"
+              "GM Screen would open with no way to add a window"
           );
         }
       }
       // Add Window and Workspaces are permanent: a layout that lost
-      // them is a DM Screen with no way to put windows on it.
+      // them is a GM Screen with no way to put windows on it.
       for (const key of ["addWindow", "workspaces"]) {
         const row = new RegExp(`key: "${key}"[^}]*`).exec(registrySrc);
         if (!row || !/permanent: true/.test(row[0])) {
@@ -3962,7 +3962,7 @@ export const integrity = {
       // clipped at the bar's edge — open, technically, and invisible.
       if (!/createPortal\(/.test(screenSrc2)) {
         problems.push(
-          "the DM Screen's menus no longer portal out of the ribbon — " +
+          "the GM Screen's menus no longer portal out of the ribbon — " +
             "the scroll container clips them at the bar's edge"
         );
       }
@@ -3975,7 +3975,7 @@ export const integrity = {
       }
     }
 
-    // ---- the DM Screen's windows ------------------------------------
+    // ---- the GM Screen's windows ------------------------------------
     // The registry, the geometry constants, and the two rules that keep
     // an arrangement from quietly losing pieces.
     {
@@ -4164,7 +4164,7 @@ export const integrity = {
       // rules is individually able to bring that back.
       if (!/\.dmscreen\s*\{[^}]*height:\s*calc\(100dvh/.test(dmCss)) {
         problems.push(
-          "the DM Screen is not pinned to the viewport — a tall tool " +
+          "the GM Screen is not pinned to the viewport — a tall tool " +
             "grows the tiling past the fold instead of scrolling"
         );
       }
@@ -4241,7 +4241,7 @@ export const integrity = {
       }
       if (!/sanitizeBoxHtml\(r\.dmNotes\)/.test(body)) {
         problems.push(
-          "importRecords writes DM notes without the sanitizer — " +
+          "importRecords writes GM notes without the sanitizer — " +
             "imported HTML would bypass the allowlist every stored " +
             "page goes through"
         );
@@ -4267,7 +4267,7 @@ export const integrity = {
       }
       // Keyed on the DATE. Matching on the number is what put every
       // summary on the wrong night the first time this ran against a
-      // renumbered campaign — the number is a label the DM may change,
+      // renumbered campaign — the number is a label the GM may change,
       // the date is which game it was.
       if (!/byDate\.get\(e\.date\)/.test(descBody)) {
         problems.push(
@@ -4359,7 +4359,7 @@ export const integrity = {
       }
     }
 
-    // ---- the DM Screen's windows condense their filter bars ---------
+    // ---- the GM Screen's windows condense their filter bars ---------
     // Asked for by report: inside a window the search/filter section
     // is ONE row of dropdowns, and minor filters (species Size, by
     // name) are left off entirely. Three links, each of which fails
@@ -4543,14 +4543,14 @@ export const integrity = {
         }
       }
 
-      // The sidebar's DM pill is gone; the section itself still only
-      // renders for the DM, which is what made the pill redundant.
+      // The sidebar's GM pill is gone; the section itself still only
+      // renders for the GM, which is what made the pill redundant.
       const titleAt = shell.indexOf("nav-group-title");
       const titleEnd = shell.indexOf("</button>", titleAt);
       if (/className="badge"/.test(shell.slice(titleAt, titleEnd))) {
         problems.push(
-          "the sidebar section heading wears the DM badge again — " +
-            "reported off, because the section only renders for the DM"
+          "the sidebar section heading wears the GM badge again — " +
+            "reported off, because the section only renders for the GM"
         );
       }
 
@@ -4610,7 +4610,7 @@ export const integrity = {
         }
       }
 
-      // Leveling: the schema stores it, the DM can set it, the session
+      // Leveling: the schema stores it, the GM can set it, the session
       // validates the level, and the settings tab offers the choice.
       if (!/leveling: v\.optional\(v\.union\(v\.literal\("xp"\), v\.literal\("milestone"\)\)\)/.test(read("convex", "schema.ts"))) {
         problems.push("campaigns.leveling is not in the schema");
@@ -4738,11 +4738,11 @@ export const integrity = {
           }
         }
       }
-      // The DM pane's own line stays: it is a promise, not an
+      // The GM pane's own line stays: it is a promise, not an
       // explanation, and nothing asked for it to go.
       if (!/record\.notes\.dm\.blurb/.test(npcDetail)) {
         problems.push(
-          "the DM notes pane lost its blurb too — only the player-facing " +
+          "the GM notes pane lost its blurb too — only the player-facing " +
             "sentences were reported"
         );
       }
@@ -5174,6 +5174,49 @@ export const integrity = {
       }
     }
 
+    // ---- the app says GM; three strings that must still say DM ------
+    //
+    // The app's word for the person running the game is Game Master.
+    // Three strings in the codebase contain "DM" and are NOT that word,
+    // so a future sweep of the vocabulary has to step around them — and
+    // both ways of getting it wrong are silent.
+    //
+    // Two are real published sourcebooks. Renamed, the Lookup screen
+    // labels a book with a title it does not have, and nothing anywhere
+    // says so.
+    //
+    // The third is worse. `col()` in the NPC importer looks a column up
+    // BY HEADER and returns "" when it cannot find one — so renaming
+    // that string does not fail the import, it imports every NPC with
+    // empty GM notes and reports success.
+    {
+      const sources = read("components", "sourceNames.ts");
+      for (const key of ["DMG", "XDMG"]) {
+        // Anchored at the line start. `DMG:` is a substring of `XDMG:`,
+        // so an unanchored match let the 2014 book be renamed and found
+        // itself satisfied by the 2024 one — the same substring trap
+        // that once let a rule lose `color:` because `border-color:`
+        // still contained it.
+        if (!new RegExp(`^\\s*${key}: "Dungeon Master's Guide"`, "m").test(sources)) {
+          problems.push(
+            `sourceNames no longer calls ${key} the Dungeon Master's Guide ` +
+              "— that is the book's name, not this app's word for the " +
+              "person running the game"
+          );
+        }
+      }
+
+      const importer = read("scripts", "import-npcs.mjs");
+      if (!/col\(r, "DM Notes"\)/.test(importer)) {
+        problems.push(
+          'the NPC importer no longer reads the "DM Notes" column — that ' +
+            "is a header in the Airtable export, and col() answers \"\" for " +
+            "a header it cannot find, so the import would succeed with " +
+            "every GM note blank"
+        );
+      }
+    }
+
     // ---- the shell's identity: tab name, tab icon, page heading -----
     //
     // Three things nothing else can see fail. The icon is picked up by
@@ -5333,7 +5376,7 @@ export const integrity = {
     // retires the whole party and nothing throws. A filter dropped from
     // one of the lists puts somebody who left back on the campaign card
     // — a name that is supposed to be missing, which is the hardest
-    // kind of wrong to notice. And the mutation is DM-only by
+    // kind of wrong to notice. And the mutation is GM-only by
     // convention, which the compiler has no opinion about.
     {
       const model = stripComments(read("components", "rosterModel.ts"));
@@ -5419,7 +5462,7 @@ export const integrity = {
       }
 
       // Both sources, or the name comes back through the other one: the
-      // account and the DM-typed player name are two ways to the same
+      // account and the GM-typed player name are two ways to the same
       // person, and dropping one is not dropping them.
       // Sliced to the next top-level export rather than brace-matched:
       // this function's PARAMETERS are object types, and the first `{`
@@ -5436,7 +5479,7 @@ export const integrity = {
       );
       for (const [fn, why] of [
         ["retiredPlayerIds(", "the accounts whose every sheet is retired"],
-        ["isActive(", "the DM-typed names on inactive characters"],
+        ["isActive(", "the GM-typed names on inactive characters"],
       ]) {
         if (!players.includes(fn)) {
           problems.push(
@@ -5515,7 +5558,7 @@ export const integrity = {
       }
     }
 
-    // ---- the DM's prep list ----------------------------------------
+    // ---- the GM's prep list ----------------------------------------
     {
       const todoSrc = stripComments(read("components", "TodoTool.tsx"));
       const todoCss = read("app", "globals.css");
@@ -6177,13 +6220,13 @@ export const integrity = {
               "reason is the only actionable part of a dddice failure"
           );
         }
-        // A die with no theme has no mesh. The DM may leave it blank,
+        // A die with no theme has no mesh. The GM may leave it blank,
         // so something must fill it in.
         // The USE, not the declaration. A ref that is still assigned
         // and never read looks exactly like a working fallback.
         if (!/theme \?\? fallbackThemeRef\.current/.test(canvasSrc)) {
           problems.push(
-            "the DM's blank theme does not fall back to the account's own — " +
+            "the GM's blank theme does not fall back to the account's own — " +
               "a die with no theme has no mesh, and dddice refuses the roll"
           );
         }

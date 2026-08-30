@@ -40,12 +40,12 @@ export interface SidebarSection {
   id: string;
   title: string;
   /**
-   * Shown only while you are the DM of the campaign you are looking at.
+   * Shown only while you are the GM of the campaign you are looking at.
    *
    * A preference, not a permission — this is YOUR sidebar and nobody
    * else has one built from it. What a player may actually reach is
    * decided on the server and by NavItem.dmOnly, and neither of them
-   * reads this. What it is for is the other direction: a DM who keeps
+   * reads this. What it is for is the other direction: a GM who keeps
    * their prep in one section and wants it gone while previewing as a
    * player, without hiding six things one at a time and putting them
    * all back after.
@@ -191,16 +191,16 @@ export function sidebarIds(layout: SidebarLayout): string[] {
 /**
  * What the sidebar renders: visible items only, empty sections dropped.
  *
- * `allowed` is what this person may see at all — the DM-only screens
+ * `allowed` is what this person may see at all — the GM-only screens
  * are not in it for a player. Hiding and not-being-allowed are
  * different things that happen to look the same here, and only one of
  * them is a preference.
  *
  * `isDm` is the third of those, and it is the preference again: a
- * section marked DM-only goes when you are not the DM here, including
+ * section marked GM-only goes when you are not the GM here, including
  * while previewing as a player. It is deliberately a required argument
  * rather than one defaulting to true — a call site that forgot it
- * would leave a DM's prep section on screen in the preview that exists
+ * would leave a GM's prep section on screen in the preview that exists
  * to show what the prep looks like from outside.
  */
 export function visibleSidebar(
@@ -218,7 +218,7 @@ export function visibleSidebar(
     .filter((s) => s.items.length > 0);
 }
 
-/** Mark a section as the DM's, or stop. */
+/** Mark a section as the GM's, or stop. */
 export function setSectionDmOnly(
   layout: SidebarLayout,
   id: string,

@@ -18,7 +18,7 @@ included scaffolds) into the repo root so Claude Code has full context._
 | Backend (data, realtime, auth, functions) | **Convex free tier** | $0 |
 | Media (battle maps ~1TB, portraits, attachments) | **PowerEdge home server** behind **Cloudflare Tunnel**, fronted by **Cloudflare Access** (email allowlist), served by **Caddy** | $0 |
 | Player/home web frontends | **Next.js on Vercel Hobby** | $0 |
-| DM desktop client (later) | **Tauri** (preferred over Electron), same React components as web | $0 |
+| GM desktop client (later) | **Tauri** (preferred over Electron), same React components as web | $0 |
 | Domain | DNS on Cloudflare (required for Tunnel) | ~$10/yr |
 
 **Total: ~$10/yr.**
@@ -95,7 +95,7 @@ included scaffolds) into the repo root so Claude Code has full context._
   table, suggested client build order.
 - `convex/schema.ts` — `profiles`, `campaigns` (Derek runs **two
   groups**; `dmId` is the authority), `campaignMembers`, `characters`
-  (player-owned or DM NPC sheets; `notes` = DM-only), `maps` (metadata
+  (player-owned or GM NPC sheets; `notes` = GM-only), `maps` (metadata
   only: `originalPath`/`webPath` on the map server, `tags` = locked
   vocabulary from Derek's existing Make+LLM Airtable tagging pipeline,
   grid metadata; search index on title with tag/environment filters),
@@ -105,10 +105,10 @@ included scaffolds) into the repo root so Claude Code has full context._
   `combatants` (initiative+tiebreak, HP/tempHp, conditions,
   concentration, `hidden`, `showHpToPlayers`, `dmNotes`).
 - `convex/auth.ts` — Password provider + helpers: `requireUser`,
-  `requireDm` (structural: DM iff `campaign.dmId === userId`),
+  `requireDm` (structural: GM iff `campaign.dmId === userId`),
   `requireMember` (returns `isDm` for output shaping).
 - `convex/maps.ts` — `searchMaps` (text + tag), `listTags`, `addMap`,
-  `getTableState` (joined with active map), DM-only `setActiveMap`,
+  `getTableState` (joined with active map), GM-only `setActiveMap`,
   `setShowGrid`, `setBanner`.
 - `convex/combat.ts` — the reactive combat tracker. Lifecycle
   (create/start/end; starting points tableState at the encounter + its
@@ -123,10 +123,10 @@ included scaffolds) into the repo root so Claude Code has full context._
   server-side**; masked HP still returns `hpStatus` bucket
   (healthy/injured/bloodied/down; bloodied = ≤ half).
 - `convex/campaigns.ts` — `createCampaign` (auto-creates tableState),
-  `myCampaigns`, `addMemberByEmail` (DM adds players after they sign up;
+  `myCampaigns`, `addMemberByEmail` (GM adds players after they sign up;
   note: does a `users` table scan — fine at 13 users), `listMembers`
   (with profile join), `upsertCharacter` (players edit only their own;
-  players can never write DM `notes`), `listCharacters` (notes stripped
+  players can never write GM `notes`), `listCharacters` (notes stripped
   for players).
 - `convex/settings.ts` — per-person settings: theme, `viewAsPlayer`,
   the break-glass admin override, and the ribbon toolbar's token array
@@ -135,7 +135,7 @@ included scaffolds) into the repo root so Claude Code has full context._
 - `convex/npcs.ts`, `convex/views.ts`, `convex/notebook.ts`,
   `convex/chat.ts` — the NPC table (with per-person column layouts) and
   the Notebook and Chat tools.
-- **Built since:** the player web app (Next.js, `dnd-app/`). The DM
+- **Built since:** the player web app (Next.js, `dnd-app/`). The GM
   desktop app (Tauri) is still to come.
 
 #### Client subsystems worth knowing about
@@ -167,7 +167,7 @@ included scaffolds) into the repo root so Claude Code has full context._
    combat panel (subscribe `combat.getEncounterView`; initiative list,
    active-turn highlight, HP bars or status buckets, condition chips).
    Env: `NEXT_PUBLIC_CONVEX_URL`, `NEXT_PUBLIC_MAP_SERVER=https://maps.<domain>`.
-2. **DM desktop app** (Tauri, reusing the React components): map picker
+2. **GM desktop app** (Tauri, reusing the React components): map picker
    (`searchMaps`/`listTags`), encounter builder, combat control surface
    (damage/heal input, next turn, reveal, conditions), table controls
    (setActiveMap/grid/banner), roster + `addMemberByEmail`.
@@ -205,7 +205,7 @@ included scaffolds) into the repo root so Claude Code has full context._
 
 The player web app is built and deployed. Next up, in rough order:
 
-1. **The DM desktop app** (Tauri, reusing these React components) — see
+1. **The GM desktop app** (Tauri, reusing these React components) — see
    step 2 of the client build plan above.
 2. **AI portrait generation** for NPCs. The upload half is done
    (`npcs.setPortrait`, direct-to-storage). Generation needs an image

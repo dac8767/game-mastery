@@ -9,9 +9,9 @@ import { Id } from "./_generated/dataModel";
  * Same Password-provider pattern as the home app: no public signup page in
  * the UI, and Cloudflare Access already gates the map server separately.
  *
- * Roles are structural, not stored. You are "the DM" of a campaign iff
+ * Roles are structural, not stored. You are "the GM" of a campaign iff
  * campaign.dmId === your userId, and roles are per-campaign — the same
- * person can DM one group and play in another with no flag to keep in
+ * person can GM one group and play in another with no flag to keep in
  * sync. Nothing in the app can grant a role to its own caller.
  *
  * Platform admin is the one cross-campaign power, and it is deliberately
@@ -91,7 +91,7 @@ export async function hasActiveAdmin(
 }
 
 /**
- * Throws unless the caller is the DM of the campaign — or an admin with
+ * Throws unless the caller is the GM of the campaign — or an admin with
  * the override active, so a broken campaign can be repaired.
  * Every game-state mutation goes through this.
  */
@@ -106,14 +106,14 @@ export async function requireDm(
   }
   if (campaign.dmId === userId) return userId;
   if (await hasActiveAdmin(ctx, userId)) return userId;
-  throw new Error("Only the DM can do that");
+  throw new Error("Only the GM can do that");
 }
 
 /**
- * Throws unless the caller is the DM, a member of the campaign, or an
+ * Throws unless the caller is the GM, a member of the campaign, or an
  * admin with the override active.
  *
- * Returns whether the caller is the DM so queries can shape output, and
+ * Returns whether the caller is the GM so queries can shape output, and
  * whether that came from admin rather than ownership so the UI can say
  * so out loud — borrowed authority should never look like your own.
  */

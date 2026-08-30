@@ -3,7 +3,7 @@
 import { safeBoxHref } from "./boxHtml";
 
 /**
- * The DM's prep list: ordering, and what a due date means today.
+ * The GM's prep list: ordering, and what a due date means today.
  *
  * Pure arithmetic and string comparison — no React, no Convex — because
  * both halves fail quietly. A reorder that puts an item back where it

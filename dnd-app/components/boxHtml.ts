@@ -3,7 +3,7 @@
  *
  * The notebook's boxes are private — one person's page, rendered only
  * for them — so their HTML went to the database and back untouched. A
- * SESSION's player notes are not: any member may write them and the DM
+ * SESSION's player notes are not: any member may write them and the GM
  * reads them, which makes a box exactly the problem notes already
  * solved. Markup written by one person and rendered in another's
  * browser is a script running as them unless something rebuilds it.

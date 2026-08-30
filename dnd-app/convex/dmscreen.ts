@@ -5,13 +5,13 @@ import { requireDm } from "./auth";
 import { sanitizeBoxHtml } from "../components/boxHtml";
 
 /**
- * The DM Screen's storage: the live arrangement, named workspaces, and
+ * The GM Screen's storage: the live arrangement, named workspaces, and
  * the notes the note windows show.
  *
- * Everything here goes through requireDm — this is the DM's side of
+ * Everything here goes through requireDm — this is the GM's side of
  * the table — and every row is ALSO keyed by userId, so an admin
  * opening a broken campaign gets their own scratch arrangement rather
- * than sitting in, or overwriting, the DM's.
+ * than sitting in, or overwriting, the GM's.
  *
  * The layout is a JSON string the client's parseLayout distrusts
  * completely (see components/dmScreenModel.ts). The server's only
@@ -140,7 +140,7 @@ export const saveWorkspace = mutation({
  *
  * The row's OWN campaign is what gets authorised — an id is all a
  * caller needs to name any row, and trusting a campaignId argument
- * would let the DM of one campaign edit workspaces in another.
+ * would let the GM of one campaign edit workspaces in another.
  */
 async function ownedWorkspace(
   ctx: Parameters<typeof requireDm>[0],
@@ -240,7 +240,7 @@ export const updateNote = mutation({
         throw new Error("That note is too large to store.");
       }
       // Rebuilt from the allowlist like every other stored HTML. The
-      // DM's own browser renders this back, and "it is my own text" is
+      // GM's own browser renders this back, and "it is my own text" is
       // one pasted rich-text snippet away from being untrue.
       patch.html = sanitizeBoxHtml(args.html);
     }

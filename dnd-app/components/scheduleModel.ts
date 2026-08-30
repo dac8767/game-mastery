@@ -1,7 +1,7 @@
 /**
  * Finding a night everyone can play.
  *
- * The DM offers some days; everyone paints the times they are free on
+ * The GM offers some days; everyone paints the times they are free on
  * them; the tool says which times survive. That is the whole of it, and
  * all the interesting parts are arithmetic:
  *
@@ -19,7 +19,7 @@
  */
 
 export interface ScheduleWindow {
-  /** ISO "YYYY-MM-DD", the days the DM offered. */
+  /** ISO "YYYY-MM-DD", the days the GM offered. */
   days: string[];
   /** Minutes from midnight. 540 is 9:00 AM. */
   startMinute: number;

@@ -662,7 +662,7 @@ function actorToNpc(doc, campaignId) {
     alignment: clean(details.alignment) || undefined,
     description: bio,
     // The stat-block facts Foundry has and the NPC table has no column
-    // for. Better in a field a DM reads than dropped.
+    // for. Better in a field a GM reads than dropped.
     abilities: facts.length > 0 ? facts.join(" · ") : undefined,
     // A Foundry image path, not a URL. See the header.
     portraitPath: relativeImage(doc.img),
@@ -2018,7 +2018,7 @@ if (monsters.length > 0) {
 }
 if (locations.length > 0) {
   console.log(
-    "The locations import runs a DM-gated mutation, so it needs to run as\n" +
+    "The locations import runs a GM-gated mutation, so it needs to run as\n" +
       "you — see SETUP-CONVEX.md for where YOUR_USER_ID comes from.\n"
   );
 }

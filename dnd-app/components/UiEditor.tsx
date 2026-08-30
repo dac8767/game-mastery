@@ -64,7 +64,7 @@ interface UiState {
   /** Effective layout numbers. */
   layout: Map<string, number>;
   editing: boolean;
-  /** Null for anyone who may not edit — a player, or a DM previewing. */
+  /** Null for anyone who may not edit — a player, or a GM previewing. */
   setEditing: ((on: boolean) => void) | null;
   /**
    * WHY it is null, when it is.
@@ -130,9 +130,9 @@ export function UiProvider({
   children,
 }: {
   campaignId: Id<"campaigns">;
-  /** The DM, and not previewing as a player. */
+  /** The GM, and not previewing as a player. */
   canEdit: boolean;
-  /** The DM, but looking at their own game as a player would. */
+  /** The GM, but looking at their own game as a player would. */
   previewing: boolean;
   children: ReactNode;
 }) {
@@ -721,7 +721,7 @@ export function EditModeSwitch() {
   const ui = useUi();
   const stopPreview = useMutation(api.settings.saveMySettings);
 
-  // The DM, looking at their own game as a player would. Say so, and
+  // The GM, looking at their own game as a player would. Say so, and
   // put the way back HERE — the toggle is at the bottom of the sidebar,
   // and "turn off View as player" written in a paragraph is a treasure
   // hunt when it could be a button.
@@ -736,7 +736,7 @@ export function EditModeSwitch() {
           Stop viewing as a player
         </button>
         <span className="settings-note">
-          Edit mode is the DM&apos;s, and you are currently looking at this
+          Edit mode is the GM&apos;s, and you are currently looking at this
           campaign the way a player does.
         </span>
       </div>
@@ -746,7 +746,7 @@ export function EditModeSwitch() {
   if (!ui.setEditing) {
     return (
       <p className="settings-note">
-        Edit mode is the DM&apos;s — it changes what everyone in this
+        Edit mode is the GM&apos;s — it changes what everyone in this
         campaign sees, so only the person running it can turn it on.
       </p>
     );

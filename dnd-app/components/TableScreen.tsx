@@ -7,7 +7,7 @@ import { CombatPanel } from "@/components/CombatPanel";
 
 /**
  * The player's table: one subscription to maps.getTableState drives the
- * whole screen. When the DM switches maps, toggles the grid, or posts a
+ * whole screen. When the GM switches maps, toggles the grid, or posts a
  * banner, every player's screen follows instantly.
  *
  * Image URLs are `${NEXT_PUBLIC_MAP_SERVER}/${webPath}` — served from the
@@ -69,7 +69,7 @@ export function TableScreen({ campaignId }: { campaignId: Id<"campaigns"> }) {
         </>
       ) : (
         <div className="empty-table">
-          The table is empty — waiting for the DM to set a scene.
+          The table is empty — waiting for the GM to set a scene.
         </div>
       )}
 

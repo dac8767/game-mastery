@@ -21,7 +21,7 @@ import {
  * Tier 1 is a region — towns and cities marked on it as pins. Click a
  * pin for the place's details and pictures; DOUBLE-click one whose
  * location has a map of its own and you zoom into that map, where the
- * same pattern repeats. It goes down as far as the DM builds it, to a
+ * same pattern repeats. It goes down as far as the GM builds it, to a
  * battle map if they want.
  *
  * Which map you are looking at is local state, not a route: descending
@@ -433,7 +433,7 @@ function LocationDetail({
         <>
           <div className="detail-field dm-field">
             <div className="detail-label">
-              DM notes<span className="dm-tag">DM only</span>
+              GM notes<span className="dm-tag">GM only</span>
             </div>
             <textarea
               className="detail-input"

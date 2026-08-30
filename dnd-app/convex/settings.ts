@@ -11,10 +11,10 @@ import { isAdminEligible, requireDm, requireMember, requireUser } from "./auth";
  * something a client can lie about. Changing your theme changes nothing
  * for anyone else.
  *
- * Deliberately absent: a DM/player role switch. Authority in this app is
+ * Deliberately absent: a GM/player role switch. Authority in this app is
  * structural (campaign.dmId === userId) precisely so it cannot desync
- * from the data, and a settable role would hand every player the DM's
- * secrets. `viewAsPlayer` is the safe direction — a DM choosing to be
+ * from the data, and a settable role would hand every player the GM's
+ * secrets. `viewAsPlayer` is the safe direction — a GM choosing to be
  * served the player's view — and is honoured by npcs.listForCampaign so
  * the preview is real rather than cosmetic.
  */
@@ -225,7 +225,7 @@ export const saveMySettings = mutation({
  *
  * Lives on `profiles` rather than `userSettings` because it is the one
  * thing on this page other people read: a campaign card says who runs
- * it, and until this is set it can only say "the DM".
+ * it, and until this is set it can only say "the GM".
  */
 export const setMyName = mutation({
   args: { displayName: v.string() },
@@ -277,7 +277,7 @@ export const me = query({
  *
  * NOT personal, unlike everything above it in this file. The rest of
  * this module is "your theme, your sidebar, nobody else's"; this is the
- * words on the screen for one campaign, so the DM writes it and every
+ * words on the screen for one campaign, so the GM writes it and every
  * member reads it. It lives here because a new convex/ module cannot be
  * added without running codegen, which the sandbox has no network for.
  */
@@ -292,8 +292,8 @@ const UI_ENTRIES = 500;
 /**
  * The overrides for a campaign, for anyone who is in it.
  *
- * Not DM-gated: the words on the screen are not a secret, and a player
- * who could not read them would see the shipped labels while the DM saw
+ * Not GM-gated: the words on the screen are not a secret, and a player
+ * who could not read them would see the shipped labels while the GM saw
  * their own — two people describing different buttons to each other.
  */
 export const getUiOverrides = query({
@@ -312,7 +312,7 @@ export const getUiOverrides = query({
 });
 
 /**
- * Replace a campaign's overrides. DM only, like every other decision
+ * Replace a campaign's overrides. GM only, like every other decision
  * about how this campaign's screens are laid out.
  *
  * The whole set at once rather than one entry at a time: edit mode

@@ -142,8 +142,8 @@ export function SidebarDesigner() {
       </p>
       <p className="settings-note">
         A named section folds up: click its heading in the sidebar and it
-        stays folded until you open it again. <strong>DM only</strong>{" "}
-        hides a whole section while you are not the DM of the campaign
+        stays folded until you open it again. <strong>GM only</strong>{" "}
+        hides a whole section while you are not the GM of the campaign
         you are in — including while you are viewing as a player, which
         is what it is for. It is a preference, not a permission: this is
         your sidebar and nobody else has one built from it, and what a
@@ -240,10 +240,10 @@ export function SidebarDesigner() {
                       }
                     />
                     <span>
-                      DM only
+                      GM only
                       <span className="settings-note">
                         {" "}
-                        — gone from your sidebar unless you are the DM
+                        — gone from your sidebar unless you are the GM
                         here
                       </span>
                     </span>
@@ -286,7 +286,7 @@ export function SidebarDesigner() {
                               {nav.slug === undefined && (
                                 <span className="soon">soon</span>
                               )}
-                              {nav.dmOnly && <span className="badge">DM</span>}
+                              {nav.dmOnly && <span className="badge">GM</span>}
                             </span>
                             <button
                               type="button"
@@ -385,7 +385,7 @@ export function SidebarDesigner() {
                       {nav.slug === undefined && (
                         <span className="soon">soon</span>
                       )}
-                      {nav.dmOnly && <span className="badge">DM</span>}
+                      {nav.dmOnly && <span className="badge">GM</span>}
                     </span>
                     <button
                       type="button"

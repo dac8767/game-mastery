@@ -57,7 +57,7 @@ import { NpcTable } from "@/components/NpcTable";
 import { SessionTable } from "@/components/SessionTable";
 
 /**
- * The DM Screen — the physical screen you sit behind, made of windows.
+ * The GM Screen — the physical screen you sit behind, made of windows.
  *
  * Premiere's docking, matched to four filmed scenarios: the screen is
  * ONE TILING — windows always fill the whole canvas, edge to edge,
@@ -78,7 +78,7 @@ import { SessionTable } from "@/components/SessionTable";
  * stored layouts — lives in components/dmScreenModel.ts where the unit
  * guard can reach it. This file is pointers and rendering.
  *
- * The DM check here hides a screen; the DATA is gated in
+ * The GM check here hides a screen; the DATA is gated in
  * convex/dmscreen.ts, where every function goes through requireDm.
  */
 
@@ -102,7 +102,7 @@ export function DmScreen({ campaignId }: { campaignId: Id<"campaigns"> }) {
   if (!isDm) {
     return (
       <p className="centered-note">
-        The DM Screen is the DM&apos;s side of the table. Nothing to see
+        The GM Screen is the GM&apos;s side of the table. Nothing to see
         from this chair.
       </p>
     );
@@ -814,7 +814,7 @@ const DEATH_SAVES =
   "restores 1 HP; a nat 1 counts as two failures. Damage while down is " +
   "an automatic failure, and a crit is two.";
 
-/** The old static DM screen, kept whole as one window. */
+/** The old static GM screen, kept whole as one window. */
 function ReferencePanel() {
   return (
     <div className="dm-reference">

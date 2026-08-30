@@ -11,7 +11,7 @@ import { FieldKind } from "@/components/npcColumns";
  *
  * Evaluation happens in the browser against the single subscription, so
  * a condition costs nothing per keystroke. The one rule that is NOT
- * enforced here: DM-only fields are filtered out of the offered field
+ * enforced here: GM-only fields are filtered out of the offered field
  * list, but that is a courtesy — the server already sends players null
  * for them, so a hand-crafted condition on `secret` matches nothing
  * rather than revealing anything.

@@ -1506,7 +1506,7 @@ body.col-resizing {
 
    It used to be three rules keyed on what happened to be beside it,
    one of which gave `:last-child` a left auto-margin so the right-hand
-   group would sit right. For the DM that worked. For a player there IS
+   group would sit right. For the GM that worked. For a player there IS
    no right-hand group — no Delete, no Hide — so Back was the last
    child, took the auto-margin itself, and the way out of the record
    moved to the opposite corner depending on who you were. One margin
@@ -1951,7 +1951,7 @@ body.col-resizing {
   }
 
   /* The sidebar strip sits ABOVE the workspace here, so a full-dvh
-     DM Screen would start a viewport tall and end below one. Let it
+     GM Screen would start a viewport tall and end below one. Let it
      size to content again, with a usable floor on the canvas. */
   .dmscreen {
     height: auto;
@@ -3980,7 +3980,7 @@ body.col-resizing {
   }
 }
 
-/* ---------- DM Screen ---------- */
+/* ---------- GM Screen ---------- */
 
 .dmscreen {
   display: flex;
@@ -3999,7 +3999,7 @@ body.col-resizing {
 }
 
 /*
-  The DM Screen runs nearly edge to edge: the padding every other
+  The GM Screen runs nearly edge to edge: the padding every other
   screen keeps is dead space here, where the windows ARE the screen.
   Scoped to the workspace that contains this screen so the NPC table
   and everything else keep their breathing room.
@@ -4036,7 +4036,7 @@ body.col-resizing {
   flex: 1;
 }
 
-/* Injected ribbon content — the DM Screen's controls standing in the
+/* Injected ribbon content — the GM Screen's controls standing in the
    customizable toolbar. The format bar sheds its own frame: inside the
    ribbon it is a run of buttons among buttons, not a second bar. */
 .rib-extra {
@@ -5195,7 +5195,7 @@ button.cal-day:hover {
   border-radius: 12px;
 }
 
-/* ---------- The condensed bar the DM Screen's windows use ----------
+/* ---------- The condensed bar the GM Screen's windows use ----------
    One row, dropdowns only, asked for by report. It SCROLLS rather
    than wraps — one row is the contract — and each control names
    itself, so there are no labels spending height above it. */
@@ -6283,7 +6283,7 @@ button.cal-day:hover {
   color: var(--text-dim);
 }
 
-/* Retired, not gone. Dim rather than hidden — the DM still edits these
+/* Retired, not gone. Dim rather than hidden — the GM still edits these
    rows — and the left edge marks it, so a scan down the list finds who
    has left without reading five dropdowns. */
 .roster-row.inactive {
@@ -7297,7 +7297,7 @@ button.cal-day:hover {
   align-content: stretch;
 }
 
-/* One thread gets the whole column; the DM keeps two. Either way the
+/* One thread gets the whole column; the GM keeps two. Either way the
    column is full height, so a thread has room to be a thread rather
    than three lines and a scrollbar. */
 .record-notes:not(.split) {
@@ -7448,9 +7448,9 @@ button.cal-day:hover {
 
 /* ---------- Notes as a thread ---------- */
 
-/* A player gets the whole column for the one thread. A DM keeps two
+/* A player gets the whole column for the one thread. A GM keeps two
    sets and needs both beside the record — 33/41 from the design, with
-   DM Notes the taller of the two because that is where a DM writes. */
+   GM Notes the taller of the two because that is where a GM writes. */
 .record-notes.split {
   display: grid;
   grid-template-rows:
@@ -7460,7 +7460,7 @@ button.cal-day:hover {
   min-height: 0;
 }
 
-/* DM Notes on top, when the DM would rather write than read. Order
+/* GM Notes on top, when the GM would rather write than read. Order
    rather than a different DOM: the panes keep their identity, so the
    split handle between them still means the same thing. */
 .record-notes.split.dm-first .note-player {
@@ -7471,7 +7471,7 @@ button.cal-day:hover {
   order: 1;
 }
 
-/* With the order swapped the first ROW is DM Notes, so the ratio has to
+/* With the order swapped the first ROW is GM Notes, so the ratio has to
    swap with it or dragging the handle would resize the wrong pane. */
 .record-notes.split.dm-first {
   grid-template-rows:
@@ -7528,7 +7528,7 @@ button.cal-day:hover {
 }
 
 /* The title reads as a title in both panes. What marks this one as the
-   DM's is the "DM only" tag beside it and the red edge on every card
+   GM's is the "GM only" tag beside it and the red edge on every card
    inside it — a red heading on top of those is a third telling of the
    same thing, and it made the two panes look like different kinds of
    object rather than a pair. */
@@ -8373,7 +8373,7 @@ button.cal-day:hover {
   border-radius: 8px;
 }
 
-/* A dead link stays on the list, faded. Removing it would leave the DM
+/* A dead link stays on the list, faded. Removing it would leave the GM
    wondering whether they had ever made one. */
 .invite-row.dead {
   opacity: 0.5;
@@ -8773,7 +8773,7 @@ button.cal-day:hover {
   min-width: 18rem;
 }
 
-/* The two pages of notes, side by side, DM on the left. Stacked below
+/* The two pages of notes, side by side, GM on the left. Stacked below
    the width where two canvases stop being usable — a 14rem-wide
    notebook page is not a page. */
 /* Two names, one of them current. They replaced a side-by-side split
@@ -8834,7 +8834,7 @@ button.cal-day:hover {
   z-index: 3;
 }
 
-/* The DM's half, marked the way every other DM-only thing in the app
+/* The GM's half, marked the way every other GM-only thing in the app
    is: a red tag and a red edge. A page that looks identical to the one
    the table can read is a page you will paste the wrong thing into. */
 .dm-notes .nb-canvas {
@@ -8996,7 +8996,7 @@ button.cal-day:hover {
   color: var(--accent);
 }
 
-/* ---------- To-Do (DM prep list) ---------- */
+/* ---------- To-Do (GM prep list) ---------- */
 
 .todo {
   display: flex;

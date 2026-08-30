@@ -49,8 +49,8 @@ export const HEADER_KEYS = ["portraitPath", "name", "nickname"];
 /**
  * The notes rail's own fields, pinned out of the arrangeable tabs.
  *
- * `dmNotes` used to be here too, and that is what put two DM Notes on
- * the record: this pinned FIELD, and the DM notes THREAD beside it.
+ * `dmNotes` used to be here too, and that is what put two GM Notes on
+ * the record: this pinned FIELD, and the GM notes THREAD beside it.
  * The thread won — it says who wrote what and when, where the field
  * was one box everybody overwrote — so the field is no longer placed
  * anywhere, and npcs.migrateDmNotes moves what was in it.
@@ -122,7 +122,7 @@ export const NPC_SECTIONS: NpcSection[] = [
   },
   {
     id: "dm",
-    title: "DM only",
+    title: "GM only",
     blurb: "Never sent to a player — the server withholds these entirely.",
     keys: ["secret"],
   },
@@ -144,8 +144,8 @@ export function placedKeys(): string[] {
  * may see `dmNotes` is settled on the server, and a second opinion here
  * could only ever disagree with it.
  *
- * Empty sections are dropped — a player has no DM-only fields, and an
- * empty "DM only" heading would advertise exactly what it is hiding.
+ * Empty sections are dropped — a player has no GM-only fields, and an
+ * empty "GM only" heading would advertise exactly what it is hiding.
  */
 export function arrange(allowed: string[]): NpcSection[] {
   const permitted = new Set(allowed);

@@ -38,7 +38,7 @@ import {
  * type into it — so the buttons and the box can never disagree about
  * what is about to be rolled.
  *
- * A secret roll is the DM's. It never appears in a player's data at
+ * A secret roll is the GM's. It never appears in a player's data at
  * all, so nothing here hides one: what arrives is already what the
  * caller is allowed to see.
  */
@@ -111,7 +111,7 @@ export function DiceRoller({ campaignId }: { campaignId: Id<"campaigns"> }) {
         campaignId,
         notation: what,
         label: label.trim() || undefined,
-        // The server ANDs this with DM status. Sending it from a
+        // The server ANDs this with GM status. Sending it from a
         // player's browser achieves nothing, which is the point.
         secret: secret || undefined,
       });
@@ -462,11 +462,11 @@ function RollFace({
 }
 
 /**
- * The DM's dddice settings.
+ * The GM's dddice settings.
  *
  * A room slug and, for a private room, its passcode. No API key: every
  * browser makes its own dddice guest account, so there is no
- * credential of the DM's to type here and none to leak.
+ * credential of the GM's to type here and none to leak.
  *
  * The passcode does reach the players' browsers — a private room needs
  * it to join, and the players are the ones joining. It goes only to

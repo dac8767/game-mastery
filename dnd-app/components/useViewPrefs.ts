@@ -115,7 +115,7 @@ export function useViewPrefs(
     hydrated.current = true;
   }, [saved, isDm, columns, defaultSort.key, defaultSort.asc]);
 
-  // A DM flipping into the player preview loses the DM-only columns;
+  // A GM flipping into the player preview loses the GM-only columns;
   // flipping back restores them. Not a change the person "made", so it
   // deliberately does not mark the layout dirty.
   useEffect(() => {

@@ -21,7 +21,7 @@ import type { DieRoll } from "@/components/diceModel";
  * nothing here throws upward.
  *
  * Credentials: each browser mints its own dddice GUEST account and
- * keeps it in localStorage. The DM's own API key is never sent to a
+ * keeps it in localStorage. The GM's own API key is never sent to a
  * player, never stored in Convex, and never in the repo. A leaked
  * guest key is a guest key.
  *
@@ -201,7 +201,7 @@ export function DiceCanvas({
   settledRef.current = onSettled;
   const sentRef = useRef<string | null>(null);
   /**
-   * A theme to use when the DM has not named one.
+   * A theme to use when the GM has not named one.
    *
    * Every die needs a theme: it is what carries the mesh and the face
    * values, so a die without one has nothing to draw. Read out of the
@@ -462,7 +462,7 @@ export function DiceCanvas({
     sentRef.current = roll.id;
 
     // A die with no theme has no mesh and nothing to draw, so the
-    // DM's choice falls back to whatever the account actually owns.
+    // GM's choice falls back to whatever the account actually owns.
     const useTheme = theme ?? fallbackThemeRef.current ?? undefined;
     const dice = toDddiceRoll(roll.dice, useTheme);
     if (!dice) {

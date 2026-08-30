@@ -35,7 +35,7 @@ export function TransferDm({
 
   return (
     <section className="settings-block">
-      <h2>Hand over the DM role</h2>
+      <h2>Hand over the GM role</h2>
       <p className="settings-note">
         Made a campaign for someone else to run? Give it to them.
       </p>
@@ -44,13 +44,13 @@ export function TransferDm({
         <p className="settings-note">Loading the table…</p>
       ) : members.length === 0 ? (
         <p className="settings-note">
-          Nobody else is in this campaign yet. Add a player first — the DM has
+          Nobody else is in this campaign yet. Add a player first — the GM has
           to be someone at the table.
         </p>
       ) : (
         <div className="transfer-dm">
           <label className="settings-field">
-            <span>Make DM</span>
+            <span>Make GM</span>
             <select
               value={picked}
               onChange={(e) => {
@@ -87,9 +87,9 @@ export function TransferDm({
           }}
         >
           <div className="modal" role="dialog" aria-modal="true">
-            <h2>Make {target.displayName} the DM?</h2>
+            <h2>Make {target.displayName} the GM?</h2>
             <p>
-              They get full control of <strong>{campaignName}</strong> — DM
+              They get full control of <strong>{campaignName}</strong> — GM
               notes, hidden NPCs, secrets, every setting, and the ability to
               delete it.
             </p>
@@ -132,7 +132,7 @@ export function TransferDm({
                   }
                 }}
               >
-                {busy ? "Handing over…" : `Make ${target.displayName} the DM`}
+                {busy ? "Handing over…" : `Make ${target.displayName} the GM`}
               </button>
             </div>
           </div>

@@ -56,14 +56,14 @@ export const TOOLBAR_BUILTINS: ToolbarBuiltin[] = [
   { key: "viewAsPlayer", label: "View as Player", icon: "◉" },
   { key: "customize", label: "Customize", icon: "⚙", permanent: true },
   /**
-   * The DM Screen's own controls, moved into this bar so they are
+   * The GM Screen's own controls, moved into this bar so they are
    * arranged with everything else. Their RENDERING is injected by the
    * screen (RibbonBar's `extras` prop) because the menus need the
    * screen's state; the registry rows are what make them exist to the
    * palette and the normalizer.
    *
    * Add Window and Workspaces are permanent: a saved layout that lost
-   * them would be a DM Screen with no way to put windows on it. The
+   * them would be a GM Screen with no way to put windows on it. The
    * format bar is removable — that is a choice someone can mean, and
    * the keyboard shortcuts still format without it.
    */

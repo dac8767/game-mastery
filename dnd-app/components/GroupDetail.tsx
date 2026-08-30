@@ -108,7 +108,7 @@ export function GroupDetail({
           Back to Groups
         </button>
 
-        {/* DM only, and behind a confirmation — deleting a group takes
+        {/* GM only, and behind a confirmation — deleting a group takes
             its name off everybody in it, which is a change to the
             roster rather than to this screen. */}
         {isDm &&
@@ -320,7 +320,7 @@ export function GroupDetail({
 /**
  * The group's name, as a field rather than as a heading.
  *
- * A heading with the value baked into it is how a DM quietly loses the
+ * A heading with the value baked into it is how a GM quietly loses the
  * ability to rename a thing from its own record — the NPC record was
  * written that way once and had to be undone. Saved on blur, and only
  * when it actually changed: renaming carries across every NPC that

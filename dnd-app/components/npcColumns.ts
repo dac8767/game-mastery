@@ -161,11 +161,11 @@ export const COLUMNS: ColumnDef[] = [
   { key: "wantsNeeds", label: "Wants & Needs", kind: "longtext", defaultWidth: 190, defaultVisible: false, editable: true },
   { key: "noLastName", label: "No Last Name", kind: "boolean", defaultWidth: 110, defaultVisible: false, editable: true },
 
-  // DM-only. Never offered to a player, and the server sends null for
+  // GM-only. Never offered to a player, and the server sends null for
   // them regardless of what a player's saved layout asks for.
   { key: "hidden", label: "Hidden", kind: "boolean", defaultWidth: 90, defaultVisible: false, dmOnly: true, editable: true },
   { key: "secret", label: "Secret", kind: "longtext", defaultWidth: 200, defaultVisible: false, dmOnly: true, editable: true },
-  // `dmNotes` is NOT a column any more. The record grew a DM Notes
+  // `dmNotes` is NOT a column any more. The record grew a GM Notes
   // thread beside this field, so the screen showed two things with the
   // same name and the same job — and the field was the weaker one: one
   // box everybody overwrites, against a thread that says who wrote
@@ -207,7 +207,7 @@ export type ColumnState = { key: string; width: number; visible: boolean };
  *
  * `columns` defaults to the NPC set. It is a parameter because the
  * Groups screen is the same table over a different set of fields, and
- * a second copy of this function is a second place for the DM rule to
+ * a second copy of this function is a second place for the GM rule to
  * be got wrong.
  */
 export function defaultColumnState(
@@ -226,7 +226,7 @@ export function defaultColumnState(
 /**
  * Reconcile a saved layout against the current column set: drop entries
  * for columns that no longer exist, append ones added since, and strip
- * DM-only columns for players even if their saved layout names them.
+ * GM-only columns for players even if their saved layout names them.
  */
 export function reconcileColumns(
   saved: ColumnState[] | null,

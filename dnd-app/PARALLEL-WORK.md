@@ -24,7 +24,7 @@ Everything else is already well separated: 84 components and 18 Convex
 modules, and a typical feature touches two or three of them. **The
 component layer is not the problem. Three shared files are.**
 
-Two chats working on, say, the DM Screen and the Lookup tables would
+Two chats working on, say, the GM Screen and the Lookup tables would
 today both edit `globals.css`, both append to `integrity.mjs`, and both
 append to `unit.mjs` — three guaranteed merge conflicts per feature,
 in the three largest files in the repo, where a bad conflict resolution
@@ -83,7 +83,7 @@ This is the thing a new chat reads first, and the thing that makes
 "does my work overlap yours?" answerable in ten seconds.
 
 ```markdown
-## dmscreen — The DM Screen
+## dmscreen — The GM Screen
 Owns:    components/DmScreen.tsx, components/dmScreenModel.ts,
          convex/dmscreen.ts, app/styles/tools/dmscreen.css,
          tests/guards/integrity/dmscreen.mjs,
@@ -214,7 +214,7 @@ the trunk they rebase onto.
 `docs/tools/<id>.md`, one per tool: what it is, its invariants, its
 open questions, its known gotchas. Much of this already exists as
 comments in the code, and the valuable half is the part that is not
-obvious from reading it — the DM Screen's "the tree is untouched while
+obvious from reading it — the GM Screen's "the tree is untouched while
 maximized" rule, the ribbon's "permanent builtins re-insert
 themselves", the contentEditable caret rules.
 
@@ -233,7 +233,7 @@ CSS looking for the right section.
 > `npm run guards -- --tool lookup` while iterating, the full suite
 > before pushing.
 >
-> **Chat B** — "work on the DM screen, branch `claude/tool-dmscreen`"
+> **Chat B** — "work on the GM screen, branch `claude/tool-dmscreen`"
 > Same, in six entirely different files.
 >
 > Neither branch touches a file the other touched. Both merge clean.

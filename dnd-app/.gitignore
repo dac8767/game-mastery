@@ -15,7 +15,7 @@ next-env.d.ts
 *.tsbuildinfo
 .DS_Store
 
-# convex snapshots — full database dumps, including DM notes
+# convex snapshots — full database dumps, including GM notes
 backups/
 
 # Foundry artwork. Thousands of files and a few hundred MB, none of it

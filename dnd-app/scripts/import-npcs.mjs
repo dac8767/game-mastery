@@ -207,7 +207,7 @@ const docs = body.map((r) => {
 
     portraitPath: portrait(col(r, "Picture"), name),
 
-    // DM-only
+    // GM-only
     hidden: checked(col(r, "Hide")),
     dmNotes: text(col(r, "DM Notes")),
     secret: text(col(r, "Secret")),
@@ -225,7 +225,7 @@ writeFileSync(outPath, docs.map((d) => JSON.stringify(d)).join("\n") + "\n");
 // A short report, so a silently-empty column is visible before import.
 const counted = (pred) => docs.filter(pred).length;
 console.error(`${docs.length} NPCs -> ${outPath}`);
-console.error(`  hidden (DM-only):   ${counted((d) => d.hidden)}`);
+console.error(`  hidden (GM-only):   ${counted((d) => d.hidden)}`);
 console.error(`  with secret:        ${counted((d) => d.secret)}`);
 console.error(`  with dmNotes:       ${counted((d) => d.dmNotes)}`);
 console.error(`  with description:   ${counted((d) => d.description)}`);

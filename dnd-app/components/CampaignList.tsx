@@ -63,7 +63,7 @@ export function CampaignList() {
         <p className="centered-note">Loading campaigns…</p>
       ) : cards.length === 0 ? (
         <p className="centered-note">
-          You&apos;re not in a campaign yet. Start one above, or ask your DM to
+          You&apos;re not in a campaign yet. Start one above, or ask your GM to
           add you — they need the email you signed up with.
         </p>
       ) : (
@@ -116,7 +116,7 @@ function CampaignCard({
         <span className="campaign-body">
           <span className="name">
             {card.name}
-            {card.isDm && <span className="badge">DM</span>}
+            {card.isDm && <span className="badge">GM</span>}
             {card.viaAdmin && <span className="badge admin">Admin</span>}
           </span>
 
@@ -126,7 +126,7 @@ function CampaignCard({
 
           <span className="campaign-facts">
             <span>
-              <strong>DM</strong> {card.dmName}
+              <strong>GM</strong> {card.dmName}
             </span>
             {card.startDate && (
               <span>

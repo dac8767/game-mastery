@@ -1,10 +1,10 @@
 # D&D Campaign App — Backend (Convex)
 
 Shared backend for two clients:
-- **DM app** (desktop — Tauri recommended, Electron works): full control
+- **GM app** (desktop — Tauri recommended, Electron works): full control
   surface. Encounter prep, combat tracker, map picker, reveal/hide.
 - **Player app** (Next.js web): subscribes to table state + encounter
-  view. Shows the active map, initiative order, and whatever the DM has
+  view. Shows the active map, initiative order, and whatever the GM has
   made visible.
 
 Map images are served from the PowerEdge behind the Cloudflare tunnel
@@ -22,14 +22,14 @@ Map images are served from the PowerEdge behind the Cloudflare tunnel
 
 ## Core design decisions
 
-**Authority is structural.** You are "the DM" of a campaign iff
+**Authority is structural.** You are "the GM" of a campaign iff
 `campaign.dmId === userId`. Every game-state mutation calls `requireDm`;
 there is no role field to desync.
 
 **One subscription per screen.**
 - Player map screen → `maps.getTableState` (active map, grid, banner,
   active encounter pointer)
-- Player/DM combat screen → `combat.getEncounterView` (shaped
+- Player/GM combat screen → `combat.getEncounterView` (shaped
   server-side: players never receive hidden combatants, masked HP values,
   or `dmNotes` — the data physically doesn't leave the server)
 
@@ -84,7 +84,7 @@ script and it'll be written against your actual base structure.
 1. **Player web app** first — it's small: sign-in, campaign select, map
    screen (`getTableState`), combat panel (`getEncounterView`). Gets your
    players onboarded and exercises the whole reactive path.
-2. **DM desktop app** — Tauri + the same React components, plus the
+2. **GM desktop app** — Tauri + the same React components, plus the
    control surfaces: map picker (searchMaps/listTags), encounter builder,
    combat controls. Because both clients speak to the same Convex
    deployment, everything you verify in the web app carries over.

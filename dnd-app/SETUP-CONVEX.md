@@ -254,7 +254,7 @@ full, including the RSA private key that signs your auth tokens — which
 then lives in your terminal scrollback, and in the transcript of any
 screen share or AI session you paste it into. Anyone with that key can
 mint valid sessions for your deployment and impersonate any user,
-including the DM.
+including the GM.
 
 If it does get exposed, rotate immediately — it's free before players
 have accounts, and signs everyone out after:
@@ -323,8 +323,8 @@ Copy your `_id` — you need it in the next step.
 ## Step 7 — Create your first campaign
 
 After signing up you'll land on *"You're not in a campaign yet."* That's
-expected, and it's a real gap rather than a bug: `createCampaign` is a DM
-action, and **the DM app isn't built yet**, so no UI calls it. The player
+expected, and it's a real gap rather than a bug: `createCampaign` is a GM
+action, and **the GM app isn't built yet**, so no UI calls it. The player
 web app only ever *lists* campaigns.
 
 Seed it from the CLI instead. Every game-state function calls
@@ -344,13 +344,13 @@ ignored by `getAuthUserId`.
 
 This creates the campaign **and** its `tableState` document (the single
 doc every player screen subscribes to) in one mutation. Because
-`createCampaign` sets `dmId` to the calling user, you become the DM
+`createCampaign` sets `dmId` to the calling user, you become the GM
 structurally — there's no role field to set.
 
 Run it a second time for your other group.
 
 Refresh http://localhost:3000 and both campaigns should appear with a
-**DM** badge, live, without a reload.
+**GM** badge, live, without a reload.
 
 > On Windows PowerShell, single-quoted JSON won't parse — use
 > `--% ` or escape the double quotes.
@@ -598,7 +598,7 @@ npx convex import --table npcs foundry-import/npcs.jsonl --append
 
 Locations cannot: a pin has to reference the map it sits on, and those
 ids do not exist until the rows are created. So they go through one
-DM-gated mutation, which needs to run **as you**:
+GM-gated mutation, which needs to run **as you**:
 
 ```bash
 npx convex run locations:importLocations "$(cat foundry-import/locations.json)" \
@@ -709,7 +709,7 @@ npx convex import backups/2026-08-18-prod.zip --prod
 ```
 
 Keep the `backups/` directory out of git — snapshots contain the full
-database, DM notes and secrets included.
+database, GM notes and secrets included.
 
 ---
 

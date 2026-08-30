@@ -116,7 +116,7 @@ Why each line is there:
 ## Layout
 
 - `dnd-app/` — Next.js player web app + Convex backend (`dnd-app/convex/`).
-  One Convex project. DM desktop app (Tauri, reusing these React
+  One Convex project. GM desktop app (Tauri, reusing these React
   components) is planned next.
 - `convex-home-app/` — Convex backend scaffold for the Home app (uses the
   R2 component for attachments). Frontend not built yet. Separate Convex
@@ -127,11 +127,11 @@ Why each line is there:
 
 ## dnd-app conventions
 
-- Authority is structural: DM iff `campaign.dmId === userId` (`requireDm`).
+- Authority is structural: GM iff `campaign.dmId === userId` (`requireDm`).
   Every game-state mutation goes through it.
 - Player-facing queries shape data **server-side**: hidden combatants,
   masked HP numbers, and `dmNotes` must never leave the server for
-  non-DM callers (see `combat.getEncounterView`).
+  non-GM callers (see `combat.getEncounterView`).
 - One subscription per screen: `maps.getTableState` for the table,
   `combat.getEncounterView` for combat.
 - `convex/_generated/` is committed so fresh clones typecheck; it is

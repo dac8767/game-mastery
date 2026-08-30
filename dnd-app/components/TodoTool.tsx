@@ -22,7 +22,7 @@ import { parseQuickAdd } from "@/components/quickAdd";
 import { NAV_ITEM_BY_ID } from "@/components/navItems";
 
 /**
- * The DM's prep list, built after Vikunja.
+ * The GM's prep list, built after Vikunja.
  *
  * What was here before was one flat checklist, and it was good at the
  * twenty seconds between remembering something and forgetting it again.
@@ -44,7 +44,7 @@ import { NAV_ITEM_BY_ID } from "@/components/navItems";
  *                         instead — see TODO_CHILDREN in navItems.ts.
  *   nested projects       Vikunja nests them arbitrarily deep. That
  *                         earns its keep for a team tracking a product
- *                         and costs a DM a tree to maintain instead of
+ *                         and costs a GM a tree to maintain instead of
  *                         a list to read.
  *   Gantt and Kanban      two of Vikunja's four views. A prep list is
  *                         not a schedule and not a pipeline; List and
@@ -52,7 +52,7 @@ import { NAV_ITEM_BY_ID } from "@/components/navItems";
  *                         checklist actually reads in.
  *   assignees, teams      this list has one reader.
  *
- * The whole tool is DM-only, and convex/todo.ts refuses a non-DM caller
+ * The whole tool is GM-only, and convex/todo.ts refuses a non-GM caller
  * outright rather than returning an empty list. Nothing here re-derives
  * that; a player who reaches this screen sees the error the server
  * gave, which is the honest thing for a screen that is not theirs.
@@ -879,7 +879,7 @@ const PROJECT_CARDS = 5;
  *
  * "Nothing here yet." on its own was the whole of it, and a to-do tool
  * whose first screen is one sentence and a text box does not tell you
- * what it is for. These are real DM prep tasks, and clicking one adds
+ * what it is for. These are real GM prep tasks, and clicking one adds
  * it — which teaches the syntax by showing what it produces rather
  * than by explaining it.
  */

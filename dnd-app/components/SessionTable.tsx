@@ -53,7 +53,7 @@ import {
  *     its own default sort — newest first, because a session log is a
  *     diary rather than a reference
  *   - the row is the night's facts; the NOTES behind the expand button
- *     are two notebook pages, and the DM's is withheld by the server
+ *     are two notebook pages, and the GM's is withheld by the server
  *
  * Every row here is an ordinary document, which after Groups is worth
  * saying out loud: no synthetic keys, no rows that become real when you
@@ -223,7 +223,7 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
     []
   );
 
-  /** The night's facts are the DM's record of it. */
+  /** The night's facts are the GM's record of it. */
   const canEdit = (def: ColumnDef) => isDm && Boolean(def.editable);
 
   function sortOn(def: ColumnDef) {
@@ -341,7 +341,7 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
               type="button"
               className="npc-btn primary"
               disabled={!isDm}
-              title={isDm ? undefined : "Only the DM can add a session"}
+              title={isDm ? undefined : "Only the GM can add a session"}
               onClick={async () => {
                 try {
                   setError(null);

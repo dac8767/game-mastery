@@ -2,11 +2,11 @@
  * The campaign's layout for an opened NPC.
  *
  * npcSections.ts is the arrangement the app ships with. This is the one
- * the DM builds instead: their own tabs, their own choice of fields,
+ * the GM builds instead: their own tabs, their own choice of fields,
  * their own order and widths, applied to every NPC in the campaign so
  * the record reads the same way every time you open one.
  *
- * The template stores only what the DM decided. It is never the
+ * The template stores only what the GM decided. It is never the
  * authority on what a field IS — that is npcColumns.ts — and it is
  * never the authority on who may see one, which is the server's. A
  * template naming `dmNotes` does not show `dmNotes` to a player: the
@@ -137,7 +137,7 @@ export function tabId(title: string, index: number): string {
 /**
  * The app's own arrangement, as an editable template.
  *
- * The starting point for a DM who opens the designer: what they were
+ * The starting point for a GM who opens the designer: what they were
  * already looking at, rather than an empty page they have to rebuild
  * before the record works again.
  */
@@ -169,7 +169,7 @@ export function defaultTemplate(
  *
  * The second case is the one that matters. A new field the template does
  * not mention would be invisible in every record in the campaign — not
- * missing from a tab, missing from the app — and the DM would have no
+ * missing from a tab, missing from the app — and the GM would have no
  * way to notice, because the designer is built from the template too. So
  * unplaced keys are appended to the last tab. Visible in the wrong place
  * beats gone.
@@ -247,7 +247,7 @@ export function templateKeys(template: NpcTemplate): string[] {
  * The template as this viewer sees it: only the fields they were sent.
  *
  * Tabs left with nothing in them are dropped. A player looking at a
- * campaign whose DM made a "Secrets" tab should not find the tab there,
+ * campaign whose GM made a "Secrets" tab should not find the tab there,
  * empty — the outline of what was withheld is still information.
  */
 export function templateFor(

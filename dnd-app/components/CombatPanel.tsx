@@ -31,7 +31,7 @@ function statusFromHp(currentHp: number, maxHp: number): HpStatus {
  * Live initiative tracker — one subscription to combat.getEncounterView.
  *
  * The server shapes the payload per caller: players never receive hidden
- * combatants, masked HP numbers, or DM notes, so this component just
+ * combatants, masked HP numbers, or GM notes, so this component just
  * renders whatever arrives. Combatants with numeric HP get a bar; masked
  * ones get their narrative status bucket instead.
  */

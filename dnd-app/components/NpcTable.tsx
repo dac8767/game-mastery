@@ -77,9 +77,9 @@ const LINK_TITLES: Record<NonNullable<ColumnDef["linksTo"]>, string> = {
  *
  * Layout is per-person (convex/views.ts) — columns, widths, order,
  * sort, group, and filters are yours alone and follow you between
- * machines. The one thing personal preference cannot reach is the DM
+ * machines. The one thing personal preference cannot reach is the GM
  * boundary: hidden NPCs never arrive for a player, `secret` and
- * `dmNotes` arrive as null, and DM-only columns are not offered.
+ * `dmNotes` arrive as null, and GM-only columns are not offered.
  */
 
 type NpcListResult = FunctionReturnType<typeof api.npcs.listForCampaign>;
@@ -302,7 +302,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
     [isDm]
   );
 
-  /** Fields a condition may target — DM-only columns only for the DM. */
+  /** Fields a condition may target — GM-only columns only for the GM. */
   const filterableFields = useMemo(
     () => COLUMNS.filter((c) => isDm || !c.dmOnly),
     [isDm]
@@ -729,7 +729,7 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
                     </button>
 
                     <span className="column-name">{def.label}</span>
-                    {def.dmOnly && <span className="dm-tag">DM</span>}
+                    {def.dmOnly && <span className="dm-tag">GM</span>}
 
                     {/* Grip is a hint, not the handle — the whole row is
                         draggable, which is a much larger target. */}
@@ -1148,7 +1148,7 @@ function Row({
               .filter(Boolean)
               .join(" ")}
             title={text || undefined}
-            /* Single click edits, for a DM. It used to take two, and
+            /* Single click edits, for a GM. It used to take two, and
                the name cell opened the record instead — so the one
                cell every row has was the one you could not edit
                without knowing to double-click it. */

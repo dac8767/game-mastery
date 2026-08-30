@@ -15,7 +15,7 @@ import { Id } from "@/convex/_generated/dataModel";
 
 const VISIBILITY_LABEL: Record<string, string> = {
   everyone: "Everyone",
-  dmOnly: "DM only",
+  dmOnly: "GM only",
   private: "Private",
 };
 
@@ -116,7 +116,7 @@ export function ChatTool({ campaignId }: { campaignId: Id<"campaigns"> }) {
                 const name = window.prompt("Channel name", "table-talk");
                 if (name === null) return;
                 const dmOnly = window.confirm(
-                  "DM-only channel?\n\nOK = only you can see it.\nCancel = everyone in the campaign can."
+                  "GM-only channel?\n\nOK = only you can see it.\nCancel = everyone in the campaign can."
                 );
                 void run(() =>
                   createChannel({

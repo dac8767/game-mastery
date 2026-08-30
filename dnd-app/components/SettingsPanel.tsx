@@ -28,7 +28,7 @@ import { SourcesPanel } from "@/components/SourcesPanel";
  *
  * The division is by WHOSE setting a thing is rather than by subject.
  * Most of this page is personal and stops at your own browser; the
- * Campaign tab is shared and DM-only, and says so at the top rather
+ * Campaign tab is shared and GM-only, and says so at the top rather
  * than relying on you to remember which kind you are looking at.
  *
  * The theme list is shared with the ribbon's theme control rather than
@@ -57,7 +57,7 @@ export function SettingsPanel({
   const played = campaigns.filter((c) => !c.isDm && !c.viaAdmin);
   const borrowed = campaigns.filter((c) => c.viaAdmin);
 
-  // Admin override borrows DM authority, and the DM tabs are how you use
+  // Admin override borrows GM authority, and the GM tabs are how you use
   // it — so they open on the same terms the rest of the app grants it.
   const isDm = Boolean(current?.isDm || settings.adminOverride);
   const tabs = visibleTabs(isDm);
@@ -142,8 +142,8 @@ export function SettingsPanel({
             <h2>Your name</h2>
             <p className="settings-note">
               What everyone else sees you called — on a campaign card, as the
-              DM of the games you run, and beside anything you write. Until you
-              set it you show up as &ldquo;the DM&rdquo;.
+              GM of the games you run, and beside anything you write. Until you
+              set it you show up as &ldquo;the GM&rdquo;.
             </p>
             <NameField current={settings.displayName} />
           </section>
@@ -151,16 +151,16 @@ export function SettingsPanel({
           <section className="settings-block">
             <h2>Roles</h2>
             <p className="settings-note">
-              Roles are per campaign, so you hold several at once: DM of the
+              Roles are per campaign, so you hold several at once: GM of the
               ones you created, player in the ones you were added to. There is
-              nothing to switch — you are the DM of a campaign because you own
+              nothing to switch — you are the GM of a campaign because you own
               it.
             </p>
 
             <ul className="role-list">
               {owned.map((c) => (
                 <li key={c._id}>
-                  <span className="badge">DM</span> {c.name}
+                  <span className="badge">GM</span> {c.name}
                 </li>
               ))}
               {played.map((c) => (
@@ -207,8 +207,8 @@ export function SettingsPanel({
                   <strong>Admin override</strong>
                   <br />
                   <span className="settings-note">
-                    Opens <em>every</em> campaign with DM-level access,
-                    including secrets and DM notes, so you can diagnose and
+                    Opens <em>every</em> campaign with GM-level access,
+                    including secrets and GM notes, so you can diagnose and
                     repair. Off by default and meant to be turned off again —
                     leaving it on would quietly spoil any campaign you&apos;re
                     only a player in. Campaigns you reach this way are labelled{" "}
@@ -218,7 +218,7 @@ export function SettingsPanel({
               </label>
             </section>
           )}
-          {/* The DM controls, on the person rather than in a tab of
+          {/* The GM controls, on the person rather than in a tab of
               their own. They only ever applied to one person, and a
               tab that appears and disappears as the campaign changes
               hands is a tab most people never see exist. */}
@@ -242,7 +242,7 @@ export function SettingsPanel({
                   <span className="settings-note">
                     Serves you the player&apos;s view so you can check what
                     you&apos;re giving away. The server genuinely withholds the
-                    data — hidden NPCs and DM fields never reach the browser — so
+                    data — hidden NPCs and GM fields never reach the browser — so
                     this is a real preview, not a mask. It outranks admin access,
                     so it stays truthful either way. You can still edit.
                   </span>
@@ -349,7 +349,7 @@ export function SettingsPanel({
             {/* The switch first, the explanation after. It was the
                 other way round, and the one line saying WHY the switch
                 was missing sat under six lines of prose about what the
-                switch does — so a DM previewing as a player read the
+                switch does — so a GM previewing as a player read the
                 whole block and concluded there was no button. */}
             <EditModeSwitch />
             <p className="settings-note">

@@ -135,7 +135,7 @@ export function wouldCycle(
  * Deleting `id` promotes its children to `id`'s parent.
  *
  * Returns the reparenting each child needs. Deleting a city should not
- * silently take every district in it — the DM asked to remove one
+ * silently take every district in it — the GM asked to remove one
  * location, and a cascade is a different, much larger request.
  */
 export function reparentOnDelete(

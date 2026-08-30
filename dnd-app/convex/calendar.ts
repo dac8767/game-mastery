@@ -22,8 +22,8 @@ import {
  *
  * One document per campaign, and unlike the Notebook it is shared: the
  * date is a fact about the world, not a private note, so every member
- * reads the same one and only the DM writes it. Nothing here is
- * DM-only — there is no secret half of a date — so there is no output
+ * reads the same one and only the GM writes it. Nothing here is
+ * GM-only — there is no secret half of a date — so there is no output
  * shaping, just the authority check on the writes.
  *
  * The rules live in components/calendarModel.ts and are IMPORTED rather
@@ -201,7 +201,7 @@ export const listEvents = query({
   },
 });
 
-/** DM: put something on a day, or change it. */
+/** GM: put something on a day, or change it. */
 export const saveEvent = mutation({
   args: {
     eventId: v.optional(v.id("calendarEvents")),
@@ -267,8 +267,8 @@ export const deleteEvent = mutation({
 /**
  * When are we playing next.
  *
- * The DM offers days and hours; everyone marks the cells that work.
- * Nothing here is DM-only in the sense the NPC screen means it — the
+ * The GM offers days and hours; everyone marks the cells that work.
+ * Nothing here is GM-only in the sense the NPC screen means it — the
  * whole point is that the group sees each other's answers — so there
  * is no output shaping, only the authority check on who may move the
  * goalposts.
@@ -318,7 +318,7 @@ export const getSchedule = query({
       .take(MAX_RESPONDENTS);
     const byUser = new Map(answers.map((a) => [a.userId, a]));
 
-    // Only cells still inside the window count. A day the DM withdrew
+    // Only cells still inside the window count. A day the GM withdrew
     // leaves everyone's marks on it behind, and counting them would
     // report agreement on a date nobody is being offered.
     const live = new Set<string>();
@@ -348,7 +348,7 @@ export const getSchedule = query({
   },
 });
 
-/** DM: choose the days and the hours on offer. */
+/** GM: choose the days and the hours on offer. */
 export const setWindow = mutation({
   args: {
     campaignId: v.id("campaigns"),
@@ -385,7 +385,7 @@ export const setWindow = mutation({
  *
  * An empty list is stored rather than deleted. "None of these work"
  * and "hasn't answered" are different answers, and the second is the
- * one the DM chases.
+ * one the GM chases.
  */
 export const setAvailability = mutation({
   args: {
@@ -409,7 +409,7 @@ export const setAvailability = mutation({
     });
 
     // Bounded by the grid rather than by a number: the only slots that
-    // can be stored are the ones the DM is actually offering, so a
+    // can be stored are the ones the GM is actually offering, so a
     // hand-made call cannot fill the table with keys nothing renders.
     const live = new Set<string>();
     for (const day of window.days) {
@@ -436,7 +436,7 @@ export const setAvailability = mutation({
   },
 });
 
-/** DM: clear everyone's answers, to ask again about new days. */
+/** GM: clear everyone's answers, to ask again about new days. */
 export const clearAllAvailability = mutation({
   args: { campaignId: v.id("campaigns") },
   handler: async (ctx, args) => {

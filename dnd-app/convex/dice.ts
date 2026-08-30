@@ -5,7 +5,7 @@ import { requireDm, requireMember } from "./auth";
 import { MAX_DICE, parseRoll, rollParsed } from "../components/diceModel";
 
 /**
- * The dice roller: shared rolls for the table, private ones for the DM.
+ * The dice roller: shared rolls for the table, private ones for the GM.
  *
  * The dice are thrown HERE, on the server, not in the browser. A roll
  * everyone can see is only worth seeing if nobody could have chosen it,
@@ -13,9 +13,9 @@ import { MAX_DICE, parseRoll, rollParsed } from "../components/diceModel";
  * that can post a 20 every time. The notation is re-parsed here too —
  * the string is the only thing the client is trusted with.
  *
- * `secret` is the DM's private roll, and it is filtered on the way out
+ * `secret` is the GM's private roll, and it is filtered on the way out
  * of listRolls rather than hidden in the UI: a player must not be able
- * to learn that the DM rolled at all, let alone what it was. Same rule
+ * to learn that the GM rolled at all, let alone what it was. Same rule
  * as hidden NPCs and dmOnly channels.
  *
  * Math.random inside a mutation is Convex's seeded source — a fresh
@@ -57,7 +57,7 @@ async function rollerNames(
 /**
  * The campaign's recent rolls, newest first.
  *
- * A player gets the table's rolls. The DM gets those plus their own
+ * A player gets the table's rolls. The GM gets those plus their own
  * secret ones — nobody else's, because a secret roll belongs to
  * whoever threw it.
  */
@@ -123,7 +123,7 @@ export const rollDice = mutation({
       );
     }
 
-    // Only the DM rolls in secret. A player asking for one is asking
+    // Only the GM rolls in secret. A player asking for one is asking
     // for a roll nobody can check, which is the opposite of the point.
     const secret = Boolean(args.secret) && isDm;
 
@@ -156,7 +156,7 @@ export const rollDice = mutation({
 });
 
 /**
- * Clear the log. The DM's alone — it is the shared record of the
+ * Clear the log. The GM's alone — it is the shared record of the
  * table's rolls, so one player cannot wipe an inconvenient one.
  */
 export const clearRolls = mutation({
@@ -187,7 +187,7 @@ export const clearRolls = mutation({
  * dddice's own share links put the same thing in a URL.
  *
  * There is deliberately no API key in this table. Each browser mints
- * its own dddice guest account, so the DM's key never leaves the DM's
+ * its own dddice guest account, so the GM's key never leaves the GM's
  * machine — and a guest key that leaks is a guest key.
  */
 export const getRoom = query({
@@ -212,7 +212,7 @@ export const getRoom = query({
   },
 });
 
-/** The DM's setting: which room the table's dice land in. */
+/** The GM's setting: which room the table's dice land in. */
 export const setRoom = mutation({
   args: {
     campaignId: v.id("campaigns"),

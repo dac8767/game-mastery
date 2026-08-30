@@ -7,13 +7,13 @@ import { requireDm, requireMember } from "./auth";
  * Locations — the tree of places, and the maps that link them.
  *
  * The visibility rule is the same one the rest of the app runs on and
- * it is enforced here rather than in the client: a non-DM caller never
+ * it is enforced here rather than in the client: a non-GM caller never
  * receives a hidden location, its dmNotes, or the hidden flag itself.
  * Shaping this in the component would mean the data had already crossed
  * the wire, and "the UI doesn't render it" is not a boundary.
  *
  * Hiding a location deliberately does NOT hide its children. A hidden
- * city with a visible district is a real thing a DM wants — the players
+ * city with a visible district is a real thing a GM wants — the players
  * know the district, not what it belongs to — and the client's tree
  * surfaces a child whose parent is missing at the root instead of
  * losing it.
@@ -142,7 +142,7 @@ export const updateLocation = mutation({
 /**
  * Delete one location, and PROMOTE its children to its parent.
  *
- * Not a cascade: the DM asked to remove one place, and taking every
+ * Not a cascade: the GM asked to remove one place, and taking every
  * district in a city with it is a much larger request that should be
  * made explicitly, one location at a time.
  */
@@ -229,7 +229,7 @@ export const addPicture = mutation({
 
     const pictures = loc.pictureIds ?? [];
     if (pictures.length >= MAX_PICTURES) {
-      // Refuse rather than silently dropping the upload the DM just
+      // Refuse rather than silently dropping the upload the GM just
       // waited for — and delete the orphaned file, since nothing else
       // will ever reference it.
       await ctx.storage.delete(args.storageId);

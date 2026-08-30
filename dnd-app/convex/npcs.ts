@@ -36,10 +36,10 @@ export const listForCampaign = query({
       args.campaignId
     );
 
-    // A DM previewing the player view is served as a player, so the
+    // A GM previewing the player view is served as a player, so the
     // preview is real: the withheld data genuinely never leaves the
-    // server. Mutations still check actual DM status, so previewing
-    // does not lock the DM out of editing.
+    // server. Mutations still check actual GM status, so previewing
+    // does not lock the GM out of editing.
     const { viewAsPlayer } = await getSettings(ctx, userId);
     const isDm = isCampaignDm && !viewAsPlayer;
 
@@ -53,12 +53,12 @@ export const listForCampaign = query({
     const truncated = rows.length > MAX_NPCS;
     const page = truncated ? rows.slice(0, MAX_NPCS) : rows;
 
-    // The DM/player split, enforced here so the data physically never
+    // The GM/player split, enforced here so the data physically never
     // leaves the server for a player:
     //   - `hidden` NPCs are dropped from the list entirely
     //   - `dmNotes` and `secret` come back null
     // The row shape stays uniform either way so the table can render one
-    // set of columns; the DM-only columns are simply empty for players.
+    // set of columns; the GM-only columns are simply empty for players.
     // Resolving a storage URL is async, so the shaping runs in parallel
     // rather than sequentially per row.
     const npcs = await Promise.all(
@@ -114,7 +114,7 @@ export const listForCampaign = query({
           ? await ctx.storage.getUrl(n.portraitId)
           : null,
 
-        // DM-only from here down.
+        // GM-only from here down.
         hidden: isDm ? n.hidden : false,
         dmNotes: isDm ? (n.dmNotes ?? null) : null,
         secret: isDm ? (n.secret ?? null) : null,
@@ -130,7 +130,7 @@ export const listForCampaign = query({
 });
 
 /**
- * Optional text that the DM may also clear.
+ * Optional text that the GM may also clear.
  *
  * `null` means "empty this field" and is translated to `undefined`
  * before the patch, because Convex removes a field patched with
@@ -140,7 +140,7 @@ const clearableText = v.optional(v.union(v.string(), v.null()));
 const clearableNumber = v.optional(v.union(v.number(), v.null()));
 
 /**
- * DM: edit any field on an NPC.
+ * GM: edit any field on an NPC.
  *
  * Required fields (name, the array fields, the booleans) take no `null`,
  * so there is no way to patch an NPC into a shape the schema rejects.
@@ -189,9 +189,9 @@ export const updateNpc = mutation({
     playerNotes: clearableText,
     portraitPath: clearableText,
 
-    // DM-only fields — reachable only through this DM-gated mutation.
+    // GM-only fields — reachable only through this GM-gated mutation.
     // `dmNotes` is deliberately not among them: it stopped being a
-    // field on the record when the DM notes thread replaced it, and an
+    // field on the record when the GM notes thread replaced it, and an
     // argument nothing sends is a way in nobody is watching.
     hidden: v.optional(v.boolean()),
     secret: clearableText,
@@ -201,22 +201,22 @@ export const updateNpc = mutation({
     if (!npc) throw new Error("NPC not found");
 
     /**
-     * The DM, or the player who created this one.
+     * The GM, or the player who created this one.
      *
      * A player who can add an NPC but cannot type a name into it has
      * been given a button, not a feature. So the creator keeps writing
      * to the NPC they made — but only to the ORDINARY fields. The
-     * DM-only three are refused below whoever asks, which is what keeps
-     * "a player made this" from becoming "a player can write the DM's
+     * GM-only three are refused below whoever asks, which is what keeps
+     * "a player made this" from becoming "a player can write the GM's
      * notes on it".
      *
-     * The DM check comes first and `createdBy` is only set for a
+     * The GM check comes first and `createdBy` is only set for a
      * player's NPC, so "no creator" can never read as "anyone".
      */
     const { userId, isDm } = await requireMember(ctx, npc.campaignId);
     const isCreator = npc.createdBy !== undefined && npc.createdBy === userId;
     if (!isDm && !isCreator) {
-      throw new Error("Only the DM can edit that NPC");
+      throw new Error("Only the GM can edit that NPC");
     }
 
     const { npcId, ...rest } = args;
@@ -224,7 +224,7 @@ export const updateNpc = mutation({
     if (!isDm) {
       for (const key of DM_ONLY_FIELDS) {
         if (rest[key] !== undefined) {
-          throw new Error("Only the DM can change that");
+          throw new Error("Only the GM can change that");
         }
       }
     }
@@ -241,14 +241,14 @@ export const updateNpc = mutation({
 });
 
 /**
- * The fields only the DM may write, named once.
+ * The fields only the GM may write, named once.
  *
  * The same three the query strips on the way out, so the boundary reads
  * the same in both directions. Listed as a const rather than checked
- * inline because a fourth DM-only field added to the schema and not to
+ * inline because a fourth GM-only field added to the schema and not to
  * this list is a field a player could write — and that is exactly the
  * silent kind of failure the guards exist for, so integrity.mjs
- * compares this list against the DM-only columns.
+ * compares this list against the GM-only columns.
  */
 const DM_ONLY_FIELDS = ["hidden", "secret"] as const;
 
@@ -282,7 +282,7 @@ export const setPlayerNotes = mutation({
 });
 
 /**
- * DM: add a new NPC to the campaign.
+ * GM: add a new NPC to the campaign.
  *
  * Seeds only the fields the schema requires and leaves the rest empty —
  * the record then gets filled in through the same editor as any other
@@ -306,7 +306,7 @@ export const createNpc = mutation({
       familyMembers: [],
       place: [],
       /**
-       * A DM's new NPC starts hidden — they decide when the table meets
+       * A GM's new NPC starts hidden — they decide when the table meets
        * them. A PLAYER's does not, and cannot: hidden NPCs are withheld
        * from players server-side, so one created hidden would vanish the
        * instant it was made, with no way for its author to reach it.
@@ -319,9 +319,9 @@ export const createNpc = mutation({
 });
 
 /**
- * DM: delete an NPC, and everything hanging off it.
+ * GM: delete an NPC, and everything hanging off it.
  *
- * DM-only even for an NPC a player created. Deleting is the one action
+ * GM-only even for an NPC a player created. Deleting is the one action
  * here that cannot be undone by the person it surprises, and a roster
  * everyone can delete from is a roster that quietly loses people.
  *
@@ -353,7 +353,7 @@ export const deleteNpc = mutation({
 });
 
 /**
- * DM: upload a portrait.
+ * GM: upload a portrait.
  *
  * Two steps, which is Convex's upload shape: mint a short-lived URL,
  * POST the file straight to storage, then hand the id back. The file
@@ -370,7 +370,7 @@ export const generatePortraitUploadUrl = mutation({
   },
 });
 
-/** DM: attach an uploaded image, or clear the portrait entirely. */
+/** GM: attach an uploaded image, or clear the portrait entirely. */
 export const setPortrait = mutation({
   args: {
     npcId: v.id("npcs"),
@@ -423,7 +423,7 @@ const MAX_TABS = 12;
 const MAX_TITLE = 40;
 
 /**
- * DM: replace the campaign's layout.
+ * GM: replace the campaign's layout.
  *
  * Sent whole rather than patched: the designer edits a draft and saves
  * it, and a per-move mutation would be one write per drag. The shape
@@ -477,7 +477,7 @@ export const saveTemplate = mutation({
   },
 });
 
-/** DM: go back to the arrangement the app ships with. */
+/** GM: go back to the arrangement the app ships with. */
 export const resetTemplate = mutation({
   args: { campaignId: v.id("campaigns") },
   handler: async (ctx, args) => {
@@ -497,7 +497,7 @@ export const resetTemplate = mutation({
 /**
  * The notes on one NPC.
  *
- * DM notes are filtered out SERVER-SIDE for anyone who is not the DM.
+ * GM notes are filtered out SERVER-SIDE for anyone who is not the GM.
  * That is the rule the whole app runs on: a player's browser never
  * receives what it is not allowed to render, so there is nothing for a
  * devtools console to reveal.
@@ -560,7 +560,7 @@ export const listNotes = query({
 
 const channelValidator = v.union(v.literal("player"), v.literal("dm"));
 
-/** Only the DM may write in — or read — the DM channel. */
+/** Only the GM may write in — or read — the GM channel. */
 async function requireChannel(
   ctx: Parameters<typeof requireDm>[0],
   campaignId: Id<"campaigns">,
@@ -617,9 +617,9 @@ export const addNote = mutation({
 });
 
 /**
- * Move the old `dmNotes` FIELD into the DM notes thread.
+ * Move the old `dmNotes` FIELD into the GM notes thread.
  *
- * The record grew a DM Notes thread beside a `dmNotes` text field that
+ * The record grew a GM Notes thread beside a `dmNotes` text field that
  * predated it, so the screen showed two things with the same name and
  * the same purpose. The field is the one that goes — a thread says who
  * wrote what and when, and a field is one box everybody overwrites.
@@ -636,7 +636,7 @@ export const addNote = mutation({
  *
  * INTERNAL, and it takes no identity.
  *
- * It was a public DM-gated mutation run with `--identity`, which meant
+ * It was a public GM-gated mutation run with `--identity`, which meant
  * the command to run it carried a YOUR_USER_ID placeholder — a
  * paste-ready line that is not actually paste-ready, and pasting it
  * gets "Unable to decode ID: Invalid ID length 12" from deep inside
@@ -644,9 +644,9 @@ export const addNote = mutation({
  * browser at all, so the gate it needed was the one thing making it
  * awkward to run.
  *
- * The notes are authored by the campaign's DM rather than by whoever
- * ran the command, which is also more correct: these are the DM's
- * notes, and they were the DM's before this moved them.
+ * The notes are authored by the campaign's GM rather than by whoever
+ * ran the command, which is also more correct: these are the GM's
+ * notes, and they were the GM's before this moved them.
  */
 export const migrateDmNotes = internalMutation({
   args: { campaignId: v.id("campaigns") },
@@ -728,8 +728,8 @@ export const migrateDmNotes = internalMutation({
 /**
  * Edit a note you wrote.
  *
- * The author, and nobody else — not the DM. A note says who wrote it,
- * so a DM able to rewrite one would make the attribution a lie.
+ * The author, and nobody else — not the GM. A note says who wrote it,
+ * so a GM able to rewrite one would make the attribution a lie.
  */
 export const editNote = mutation({
   args: {
@@ -745,7 +745,7 @@ export const editNote = mutation({
     if (note.authorId !== userId) {
       throw new Error("Only whoever wrote a note can change it");
     }
-    // Still a member, and still allowed in that channel: a DM who
+    // Still a member, and still allowed in that channel: a GM who
     // handed the campaign over keeps their notes but loses the room.
     await requireChannel(ctx, note.campaignId, note.channel);
 

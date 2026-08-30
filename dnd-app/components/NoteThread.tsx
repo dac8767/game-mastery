@@ -17,7 +17,7 @@ import {
 /**
  * A thread of notes on one NPC.
  *
- * Two of these on a DM's screen — the table's pad and the DM's own —
+ * Two of these on a GM's screen — the table's pad and the GM's own —
  * and one on a player's, filling the column.
  *
  * The body is HTML, written in a contentEditable and rendered back with
@@ -66,7 +66,7 @@ export function NoteThread({
    * sentences were reported for removal one after the other —
    * "Everyone at the table writes here…" and "You can edit Player
    * Notes…" — and the shape of both was a pane explaining itself to
-   * the people who use it every week. The DM pane keeps its blurb
+   * the people who use it every week. The GM pane keeps its blurb
    * because "never sent to a player" is a promise, not an explanation.
    */
   blurbId?: string;
@@ -106,7 +106,7 @@ export function NoteThread({
         <h3>
           <UiText id={titleId} />
         </h3>
-        {channel === "dm" && <span className="dm-tag">DM only</span>}
+        {channel === "dm" && <span className="dm-tag">GM only</span>}
       </header>
       {/* One padded box for everything below the title band, so the
           blurb, the notes and the composer share a left edge. They used
@@ -158,7 +158,7 @@ export function NoteThread({
           />
         ) : (
           /* A toolbar and an empty box sat under every thread whether
-             or not anybody was writing, which on the DM's split column
+             or not anybody was writing, which on the GM's split column
              is two editors taking half the height of both panes for
              nothing. */
           <button

@@ -39,13 +39,13 @@ import {
  *   Player notes   the shared account of the night, which any member
  *                  may write. The same rule the NPC record's player
  *                  notes run on.
- *   DM notes       what you knew and the table did not. The DM's alone,
+ *   GM notes       what you knew and the table did not. The GM's alone,
  *                  and withheld by the SERVER — sessions.getNotes never
- *                  queries the DM side for a non-DM caller, so there is
+ *                  queries the GM side for a non-GM caller, so there is
  *                  no version of this screen, and no devtools tab, in
  *                  which a player has that text.
  *
- * They are TABS rather than two panes side by side. A DM reads one at
+ * They are TABS rather than two panes side by side. A GM reads one at
  * a time — you are either writing what happened or writing what you
  * are not telling them — and the split made both halves narrow to show
  * a second page that was usually not the one being looked at. It also
@@ -142,7 +142,7 @@ export function SessionDetail({
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  /* Which page is open. The DM's own first — it is the one they are
+  /* Which page is open. The GM's own first — it is the one they are
      writing during a session, and the player page is the one they read
      back afterwards. A player never sees the tabs at all. */
   const [tab, setTab] = useState<NoteSide>("dm");
@@ -227,10 +227,10 @@ export function SessionDetail({
     onFollowLink: (href: string) => router.push(href),
   });
 
-  /* Whether there IS a DM page to show. Rendered only when the SERVER
-     sent one: a player's request never queries the DM side, so `dm`
+  /* Whether there IS a GM page to show. Rendered only when the SERVER
+     sent one: a player's request never queries the GM side, so `dm`
      comes back null rather than empty — and an empty page would say
-     "the DM has not written anything", which is a different claim from
+     "the GM has not written anything", which is a different claim from
      "this is not yours to see". */
   const hasDm = notes?.dm !== null && notes?.dm !== undefined;
 
@@ -238,7 +238,7 @@ export function SessionDetail({
    * Which page you are on — and so which page a new box lands on.
    *
    * The visible tab, which is the only answer that needs no explaining.
-   * It was "whichever side you are" before, which meant a DM had no way
+   * It was "whichever side you are" before, which meant a GM had no way
    * to put a picture on the player page at all.
    */
   const side: NoteSide = hasDm && tab === "dm" ? "dm" : "player";
@@ -348,7 +348,7 @@ export function SessionDetail({
                 className={`session-tab${tab === "dm" ? " on" : ""}`}
                 onClick={() => setTab("dm")}
               >
-                DM notes <span className="dm-tag">DM</span>
+                GM notes <span className="dm-tag">GM</span>
               </button>
               <button
                 type="button"

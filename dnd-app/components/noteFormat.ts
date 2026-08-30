@@ -3,8 +3,8 @@
  *
  * Notes are rich text written by one person and rendered in everyone
  * else's browser. That is the whole security problem in one sentence:
- * a player writing a note is handing markup to the DM's browser, and
- * unsanitised HTML there is a script running as the DM. So the body is
+ * a player writing a note is handing markup to the GM's browser, and
+ * unsanitised HTML there is a script running as the GM. So the body is
  * rebuilt from an allowlist on the way IN — on the server, in the
  * mutation, not here in the editor where a hand-made call would skip
  * it entirely.

@@ -8,7 +8,7 @@ import { Id } from "@/convex/_generated/dataModel";
 /**
  * What the campaign's card shows: its picture and its two dates.
  *
- * Campaign-wide and DM-only, like the rules edition beside it. The
+ * Campaign-wide and GM-only, like the rules edition beside it. The
  * fields save on blur rather than behind a Save button — there is no
  * partial state worth protecting here, and a Save button people forget
  * to press is a setting that silently did not happen.

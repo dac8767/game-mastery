@@ -20,16 +20,16 @@ import { sanitizeBoxHtml } from "../components/boxHtml";
  *            the same rule the NPC record's player notes run on, and the
  *            reason it is called the player side rather than the public
  *            one.
- *   dm       what the DM knew and the table did not. DM-only, and the
+ *   dm       what the GM knew and the table did not. GM-only, and the
  *            interesting half of this file.
  *
- * The DM side is withheld the strongest way available here: a non-DM
+ * The GM side is withheld the strongest way available here: a non-GM
  * request never QUERIES it. Fetching both sides and returning one would
- * mean the DM's notes had been read out of the database on a player's
+ * mean the GM's notes had been read out of the database on a player's
  * behalf and were sitting in a variable one careless edit from the wire.
  * `by_session_side` exists so the query itself can be narrow.
  *
- * A DM previewing as a player is served as a player, exactly as the
+ * A GM previewing as a player is served as a player, exactly as the
  * roster is, so the preview genuinely shows what a player would see.
  */
 
@@ -64,7 +64,7 @@ async function ownedBox(
 /**
  * Who may write this side.
  *
- * The DM side is the DM's. The player side is any member's, which is
+ * The GM side is the GM's. The player side is any member's, which is
  * the same rule playerNotes runs on: the shared account of the night is
  * written by the people who were there, not dictated to them.
  */
@@ -119,8 +119,8 @@ export const listForCampaign = query({
  * One session's notes.
  *
  * `dm` comes back as null for a player — not as an empty array, which
- * would read as "the DM has not written anything" and is a different
- * claim from "this is not yours to see". The client shows no DM section
+ * would read as "the GM has not written anything" and is a different
+ * claim from "this is not yours to see". The client shows no GM section
  * at all rather than an empty one.
  */
 export const getNotes = query({
@@ -230,8 +230,8 @@ export const createSession = mutation({
  * reports every record as skipped. The date half of that test is what
  * stops a renumbered campaign from being imported into twice.
  *
- * `dmNotes` lands as the session's DM page, through the same
- * sanitizer every stored page goes through. The DM side stays behind
+ * `dmNotes` lands as the session's GM page, through the same
+ * sanitizer every stored page goes through. The GM side stays behind
  * getNotes' gate like any other; importing does not change who may
  * read it.
  */
@@ -299,7 +299,7 @@ export const importRecords = internalMutation({
  * has to reach records imported by an earlier run, which the
  * skip-if-present rule there deliberately will not do.
  *
- * Keyed on the DATE, never the number. Session numbers are the DM's
+ * Keyed on the DATE, never the number. Session numbers are the GM's
  * to change — renumbering after a correction is normal, and it has
  * already happened once — and a summary matched by number lands on
  * whatever now holds that number, silently describing the wrong
@@ -426,7 +426,7 @@ export const deleteSession = mutation({
  * where an upsert will do.
  *
  * Sanitised like every other stored HTML on this screen. The player
- * page is written by any member and read by the DM, which is the
+ * page is written by any member and read by the GM, which is the
  * direction that matters.
  */
 export const setBody = mutation({
@@ -494,7 +494,7 @@ export const addBox = mutation({
       // Rebuilt here, in the mutation, rather than in the editor: a
       // hand-made call would skip an editor-side sanitiser entirely,
       // and the player side is written by any member and read by the
-      // DM. See components/boxHtml.ts.
+      // GM. See components/boxHtml.ts.
       html: html === undefined ? undefined : sanitizeBoxHtml(html),
       sessionId,
       order,
@@ -525,7 +525,7 @@ export const updateBox = mutation({
   },
   handler: async (ctx, args) => {
     const { box, session } = await ownedBox(ctx, args.boxId);
-    // The box says which side it is on, so a player cannot reach a DM
+    // The box says which side it is on, so a player cannot reach a GM
     // box by knowing its id.
     await requireWriter(ctx, session.campaignId, box.side);
 

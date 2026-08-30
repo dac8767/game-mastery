@@ -6,7 +6,7 @@ import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 
 /**
- * The party, as the DM knows it before anyone signs up.
+ * The party, as the GM knows it before anyone signs up.
  *
  * A campaign exists at a table long before it exists in an app, so the
  * roster is typed here rather than assembled out of accounts: a person's
@@ -41,7 +41,7 @@ export function CampaignRoster({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // A DM-run sheet has no player at all; the roster is the people at the
+  // A GM-run sheet has no player at all; the roster is the people at the
   // table, so those are listed under Tools rather than here.
   const party = (characters ?? []).filter(
     (c) => c.playerId || c.playerName

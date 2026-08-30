@@ -13,7 +13,7 @@ import { inviteMessage } from "@/components/inviteModel";
  * The one page in the app that shows something to a stranger, because
  * it has to: the person clicking has no account, and "sign up to find
  * out what you have been invited to" is not an invitation. So it names
- * the campaign and the DM first, and asks for an account second.
+ * the campaign and the GM first, and asks for an account second.
  *
  * The token stays in the URL the whole way through. Signing up
  * navigates nowhere — the sign-in form swaps itself for the Join button

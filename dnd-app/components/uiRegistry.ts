@@ -155,12 +155,12 @@ export const TEXT_PIECES: TextPiece[] = [
     screen: "NPC record",
   },
   { id: "record.notes.player.title", value: "Player Notes", screen: "NPC record" },
-  { id: "record.notes.dm.title", value: "DM Notes", screen: "NPC record" },
+  { id: "record.notes.dm.title", value: "GM Notes", screen: "NPC record" },
   {
     id: "record.notes.dm.blurb",
     value: "Yours. Never sent to a player.",
     screen: "NPC record",
-    note: "The helper line under the DM Notes title",
+    note: "The helper line under the GM Notes title",
   },
   {
     id: "record.notes.add",
@@ -220,7 +220,7 @@ export const LAYOUT_PIECES: LayoutPiece[] = [
     min: 0,
     max: 1,
     step: 1,
-    note: "1 puts DM Notes above Player Notes",
+    note: "1 puts GM Notes above Player Notes",
   },
 ];
 

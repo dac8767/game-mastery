@@ -20,7 +20,7 @@ export default function DmScreenPage() {
         <SignInForm />
       </Unauthenticated>
       <Authenticated>
-        <AppShell campaignId={campaignId} breadcrumb="DM Screen">
+        <AppShell campaignId={campaignId} breadcrumb="GM Screen">
           <DmScreen campaignId={campaignId} />
         </AppShell>
       </Authenticated>

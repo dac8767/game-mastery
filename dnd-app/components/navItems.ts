@@ -34,7 +34,7 @@ export type NavItem = {
   /** Path segment under /campaign/[id]. "" is the campaign itself. */
   slug?: string;
   /**
-   * Only shown to the campaign's DM.
+   * Only shown to the campaign's GM.
    *
    * This hides a link; it does not protect anything. Nothing behind a
    * dmOnly screen may rely on it — authority in this app is structural
@@ -121,14 +121,14 @@ export const TOOL_ITEMS: NavItem[] = [
   { id: "notebook", label: "Notebook", icon: "✎", art: "notepad", slug: "notebook" },
   {
     id: "dm-screen",
-    label: "DM Screen",
+    label: "GM Screen",
     icon: "▤",
     art: "trifold",
     slug: "dm-screen",
     dmOnly: true,
   },
   { id: "scheduler", label: "Scheduler", icon: "⏱", slug: "scheduler" },
-  // dmOnly because the whole tool is: convex/todo.ts refuses a non-DM
+  // dmOnly because the whole tool is: convex/todo.ts refuses a non-GM
   // caller rather than shaping the rows, since a prep list has no
   // player-facing version. The flag hides the link; the server is what
   // enforces it.

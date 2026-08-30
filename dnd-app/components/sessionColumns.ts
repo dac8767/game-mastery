@@ -112,7 +112,7 @@ export const SESSION_COLUMN_BY_KEY = new Map(
 /** How a campaign levels. Mirrors campaigns.leveling; absent is xp. */
 export type Leveling = "xp" | "milestone";
 
-/** What each mode is called where the DM has to choose one. */
+/** What each mode is called where the GM has to choose one. */
 export const LEVELING_MODES: { value: Leveling; label: string; note: string }[] =
   [
     {
@@ -254,7 +254,7 @@ export function sessionPatch(
  * Two sources, because neither alone is the answer. `members` are the
  * accounts in the campaign, which misses the friend who has a character
  * and never signed up; `characters` carry a `playerName` typed by the
- * DM, which misses the member who has not made one yet. The union is
+ * GM, which misses the member who has not made one yet. The union is
  * the table.
  *
  * Free text stays free: this is a list of OPTIONS, not a set of allowed
@@ -262,7 +262,7 @@ export function sessionPatch(
  * that refused them would be worse than the one that made you type
  * everybody.
  *
- * Anybody the DM has marked inactive is left out of both sources. That
+ * Anybody the GM has marked inactive is left out of both sources. That
  * is what the flag is for — the person who left at session 30 should
  * not be the first suggestion when you write up session 60 — and it is
  * only the SUGGESTIONS that lose them. A name already typed on a past

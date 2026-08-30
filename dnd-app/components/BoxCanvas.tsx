@@ -22,7 +22,7 @@ import {
  * resized where you want them.
  *
  * This is the Notebook's canvas, lifted out of NotebookTool so a session
- * can have two of them — its player notes and its DM notes — with the
+ * can have two of them — its player notes and its GM notes — with the
  * same formatting, the same tables and the same images rather than a
  * second implementation that is nearly the same. Everything the two
  * uses disagree about is a prop: where the boxes come from, who may

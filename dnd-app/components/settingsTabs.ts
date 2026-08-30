@@ -12,7 +12,7 @@
  * The division is by WHOSE setting it is, not by subject:
  *
  *   System       how the app behaves for you, everywhere in it
- *   User         you: your name, your access, and the DM controls if
+ *   User         you: your name, your access, and the GM controls if
  *                you run this game — they belong to a person, not to a
  *                separate tab that only ever had one occupant
  *   Campaign     this campaign as a thing: its name, its picture, its
@@ -57,7 +57,7 @@ export interface SettingsTabDef {
   label: string;
   /** One line under the heading, saying whose settings these are. */
   blurb: string;
-  /** Only the DM has anything to change here. */
+  /** Only the GM has anything to change here. */
   dmOnly?: boolean;
 }
 
@@ -71,7 +71,7 @@ export const SETTINGS_TABS: SettingsTabDef[] = [
     id: "user",
     label: "User",
     blurb:
-      "You: your name, what you can reach, and — if you run this game — the DM controls.",
+      "You: your name, what you can reach, and — if you run this game — the GM controls.",
   },
   {
     id: "campaign",
@@ -101,7 +101,7 @@ export function visibleTabs(isDm: boolean): SettingsTabDef[] {
 /**
  * The tab to show, given what was selected.
  *
- * A DM-only tab stays selected only while you are the DM. Handing the
+ * A GM-only tab stays selected only while you are the GM. Handing the
  * campaign over on the Game Master tab removes that tab from under you,
  * and without this the page would go blank with the strip still showing
  * a tab that is no longer there.

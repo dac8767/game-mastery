@@ -216,7 +216,7 @@ export function SchedulerTool({
         <p className="centered-note">
           {data.isDm
             ? "No days offered yet — choose some days and hours to get started."
-            : "The DM hasn’t offered any days yet."}
+            : "The GM hasn’t offered any days yet."}
         </p>
       ) : (
         <>
@@ -336,7 +336,7 @@ export function SchedulerTool({
                     />
                     <span className="sched-person">
                       {r.name}
-                      {r.isDm && <span className="badge">DM</span>}
+                      {r.isDm && <span className="badge">GM</span>}
                       {r.userId === data.youId && (
                         <span className="settings-note"> (you)</span>
                       )}
@@ -369,7 +369,7 @@ export function SchedulerTool({
   );
 }
 
-/** The DM's half: which days, and between what hours. */
+/** The GM's half: which days, and between what hours. */
 function WindowForm({
   campaignId,
   window: w,

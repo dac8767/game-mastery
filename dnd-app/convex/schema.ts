@@ -8,14 +8,14 @@ import { authTables } from "@convex-dev/auth/server";
  * Design principles:
  * - Two campaigns (your two groups) share one deployment; every content
  *   table carries campaignId so data never bleeds between groups.
- * - The DM is authoritative: campaign.dmId gates all mutations that
+ * - The GM is authoritative: campaign.dmId gates all mutations that
  *   change game state. Players get read access shaped by visibility
  *   fields (hidden combatants, masked HP).
  * - Map images live on the PowerEdge behind the Cloudflare tunnel; this
  *   schema stores only paths + metadata. Tags use the locked vocabulary
  *   from your existing Make/LLM tagging pipeline.
  * - tableState is the realtime heart of the player view: one document
- *   per campaign that every player client subscribes to. The DM changes
+ *   per campaign that every player client subscribes to. The GM changes
  *   it (active map, active encounter) and all screens follow instantly.
  */
 /**
@@ -132,12 +132,12 @@ export default defineSchema({
     expiresAt: v.number(),
     /** How many people may still come through it. */
     usesLeft: v.number(),
-    /** Set the moment the DM revokes it, so a spent link reads as spent. */
+    /** Set the moment the GM revokes it, so a spent link reads as spent. */
     revokedAt: v.optional(v.number()),
     /**
-     * The character this invite hands over, if the DM built the roster
+     * The character this invite hands over, if the GM built the roster
      * first. Claiming it sets `characters.playerId`, which is what turns
-     * "a name the DM typed" into "an account that owns this sheet".
+     * "a name the GM typed" into "an account that owns this sheet".
      */
     characterId: v.optional(v.id("characters")),
   })
@@ -160,13 +160,13 @@ export default defineSchema({
    * The party. One row per character, whether or not the person playing
    * it has an account yet.
    *
-   * A DM builds the roster before anyone signs up, so `playerId` and
+   * A GM builds the roster before anyone signs up, so `playerId` and
    * `playerName` say different things and both can be absent:
    *
-   *   playerName set, playerId unset   a real person, typed by the DM,
+   *   playerName set, playerId unset   a real person, typed by the GM,
    *                                    waiting to be claimed
    *   playerId set                     claimed; that account owns it
-   *   neither set                      a DM-run sheet, no player at all
+   *   neither set                      a GM-run sheet, no player at all
    *
    * That distinction is why `playerName` exists rather than reusing an
    * empty `playerId`: "nobody plays this" and "the player has not signed
@@ -186,7 +186,7 @@ export default defineSchema({
     /** Uploaded art wins over the map-server path, as NPCs do. */
     portraitId: v.optional(v.id("_storage")),
     portraitPath: v.optional(v.string()),
-    notes: v.optional(v.string()), // DM-visible only
+    notes: v.optional(v.string()), // GM-visible only
     /**
      * Still at the table. ABSENT MEANS ACTIVE — every row predates the
      * field — so read it through isActive() in components/rosterModel,
@@ -214,8 +214,8 @@ export default defineSchema({
    *   quirkPhysical, playerNotes), and they should round-trip once they
    *   are.
    *
-   * DM-only fields — `dmNotes`, `secret`, and the `hidden` flag itself —
-   * are stripped server-side in npcs.listForCampaign for non-DM callers,
+   * GM-only fields — `dmNotes`, `secret`, and the `hidden` flag itself —
+   * are stripped server-side in npcs.listForCampaign for non-GM callers,
    * the same way combat.getEncounterView masks combatants. They must
    * never be sent to a player client.
    *
@@ -228,14 +228,14 @@ export default defineSchema({
     campaignId: v.id("campaigns"),
 
     /**
-     * Who added this NPC, when it was not the DM.
+     * Who added this NPC, when it was not the GM.
      *
-     * Players can create NPCs — someone the party met that the DM has
+     * Players can create NPCs — someone the party met that the GM has
      * not written down yet — and the creator may keep editing the
-     * ordinary fields on the one they made. Absent on every NPC the DM
+     * ordinary fields on the one they made. Absent on every NPC the GM
      * created and on everything imported from Airtable, which is why it
      * is optional and why "no creator" must never read as "anyone may
-     * edit this": updateNpc checks for the DM first.
+     * edit this": updateNpc checks for the GM first.
      */
     createdBy: v.optional(v.id("users")),
 
@@ -300,7 +300,7 @@ export default defineSchema({
     portraitId: v.optional(v.id("_storage")),
     portraitPath: v.optional(v.string()),
 
-    // DM-only — never sent to players (see npcs.listForCampaign)
+    // GM-only — never sent to players (see npcs.listForCampaign)
     hidden: v.boolean(),
     dmNotes: v.optional(v.string()),
     secret: v.optional(v.string()),
@@ -346,13 +346,13 @@ export default defineSchema({
    *
    * The same shape as notebookBoxes and drawn by the same canvas, with
    * one field the notebook has no use for: `side`. The player side is
-   * the shared account of the night; the DM side is what the DM knew
+   * the shared account of the night; the GM side is what the GM knew
    * and the table did not, and it must never leave the server for a
    * player — see sessions.getNotes.
    *
    * A separate table rather than a `side` bolted onto notebookBoxes,
    * because the two have different OWNERS. A notebook box belongs to one
-   * person and being the DM grants nothing over it; a session box
+   * person and being the GM grants nothing over it; a session box
    * belongs to the campaign. Sharing a table would mean every notebook
    * query carrying a filter to keep the two apart, and a filter that is
    * forgotten once is a privacy bug rather than a rendering one.
@@ -385,7 +385,7 @@ export default defineSchema({
   })
     .index("by_session", ["sessionId"])
     // So a player's request can ask for the player side ALONE. Fetching
-    // both and dropping one would mean the DM's notes were read out of
+    // both and dropping one would mean the GM's notes were read out of
     // the database on a player's behalf, one forgotten filter away from
     // the wire.
     .index("by_session_side", ["sessionId", "side"]),
@@ -401,7 +401,7 @@ export default defineSchema({
    * exercise.
    *
    * Its own table rather than two more fields on `sessions`, for the
-   * one reason the boxes are their own table too: the DM side must be
+   * one reason the boxes are their own table too: the GM side must be
    * withheld by NOT BEING QUERIED. Fields on the session row would be
    * read into memory on a player's request — the row is fetched to
    * check the campaign — and the whole guarantee would drop from "the
@@ -445,24 +445,24 @@ export default defineSchema({
   /**
    * Per-person app settings. One document per user, all of it personal.
    *
-   * Note what is NOT here: whether you are a DM. That is structural —
-   * you are the DM of a campaign iff campaign.dmId is your userId — and
+   * Note what is NOT here: whether you are a GM. That is structural —
+   * you are the GM of a campaign iff campaign.dmId is your userId — and
    * it must stay that way. A self-settable role flag would let any
-   * player grant themselves every secret and DM note in the campaign.
+   * player grant themselves every secret and GM note in the campaign.
    *
-   * `viewAsPlayer` is the safe inverse: a DM asking the server to treat
+   * `viewAsPlayer` is the safe inverse: a GM asking the server to treat
    * them as a player so they can see exactly what the table gives away.
    * It only ever removes access, so it is fine to let the caller set it.
    */
   /**
-   * The DM Screen's live arrangement: one row per person per campaign.
+   * The GM Screen's live arrangement: one row per person per campaign.
    *
    * `layout` is JSON, deliberately unvalidated here — the window model
    * keeps changing shape, and a validator would turn every tweak into
    * a migration of a personal preference blob. components/dmscreen.ts
    * owns the shape and its parseLayout trusts nothing on the way in.
    * Per person rather than per campaign, so an admin opening a broken
-   * campaign does not sit in — or overwrite — the DM's arrangement.
+   * campaign does not sit in — or overwrite — the GM's arrangement.
    */
   dmScreens: defineTable({
     campaignId: v.id("campaigns"),
@@ -471,7 +471,7 @@ export default defineSchema({
   }).index("by_campaign_user", ["campaignId", "userId"]),
 
   /**
-   * Named copies of a DM Screen arrangement — Premiere's workspaces.
+   * Named copies of a GM Screen arrangement — Premiere's workspaces.
    * Saving one snapshots the live layout; loading one copies it back.
    */
   dmWorkspaces: defineTable({
@@ -571,7 +571,7 @@ export default defineSchema({
             id: v.string(),
             title: v.string(),
             /**
-             * Folded up, and shown only to the DM. Both are optional
+             * Folded up, and shown only to the GM. Both are optional
              * because both are rare, and because a validator that
              * demanded them would reject every sidebar saved before
              * they existed.
@@ -894,7 +894,7 @@ export default defineSchema({
    * parent's map (x, y) and, if it has one, a map of its own.
    *
    * `x`/`y` are normalized 0..1 rather than pixels, so a pin stays where
-   * the DM put it whatever size the image is displayed at, and survives
+   * the GM put it whatever size the image is displayed at, and survives
    * the map being replaced with a larger scan.
    *
    * `dmNotes` and `hidden` follow the same rule as NPCs and combatants:
@@ -927,7 +927,7 @@ export default defineSchema({
     /** Uploaded pictures of the place itself, not of its map. */
     pictureIds: v.optional(v.array(v.id("_storage"))),
 
-    // DM-only — never sent to players (see locations.listForCampaign)
+    // GM-only — never sent to players (see locations.listForCampaign)
     hidden: v.boolean(),
     dmNotes: v.optional(v.string()),
   })
@@ -935,7 +935,7 @@ export default defineSchema({
     .index("by_parent", ["parentId"]),
 
   /**
-   * The campaign's calendar. One document per campaign, DM-owned.
+   * The campaign's calendar. One document per campaign, GM-owned.
    *
    * Every month is the same length, because `daysPerMonth` is one
    * number — months of differing lengths are a different data model and
@@ -945,7 +945,7 @@ export default defineSchema({
    * its columns.
    */
   /**
-   * The days and hours the DM has offered for the next session.
+   * The days and hours the GM has offered for the next session.
    *
    * One row per campaign: this is "when are we playing next", not a
    * calendar of proposals, and a second open poll would only ever
@@ -989,9 +989,9 @@ export default defineSchema({
    * Notes on an NPC — a thread of them, not one text field.
    *
    * Two channels. `player` is the table's shared pad: anyone in the
-   * campaign writes there and everyone reads it. `dm` is the DM's, and
+   * campaign writes there and everyone reads it. `dm` is the GM's, and
    * is never sent to anyone else — the query filters it out server-side
-   * rather than the client hiding it, like every other DM-only thing
+   * rather than the client hiding it, like every other GM-only thing
    * here.
    *
    * The body is sanitised HTML. It is written by one member and
@@ -1000,7 +1000,7 @@ export default defineSchema({
    * ids on the note rather than markup in it, so the body never carries
    * a URL.
    *
-   * `authorId` is who may edit or delete it. Not the DM, not the
+   * `authorId` is who may edit or delete it. Not the GM, not the
    * campaign owner: the person who wrote it.
    */
   npcNotes: defineTable({
@@ -1019,14 +1019,14 @@ export default defineSchema({
   /**
    * How an opened NPC is laid out, for the whole campaign.
    *
-   * One row per campaign, written by the DM, read by everyone: the
+   * One row per campaign, written by the GM, read by everyone: the
    * point is that every record in the campaign reads the same way, so
    * a per-person version would defeat it. Which FIELDS a given person
    * actually receives is still the server's decision — a template
    * naming dmNotes does not send dmNotes to a player.
    *
    * Only the arrangement is stored. What a field is, and whether it is
-   * DM-only, stays in components/npcColumns.ts, and
+   * GM-only, stays in components/npcColumns.ts, and
    * components/npcTemplate.ts reconciles a stored template against it
    * on the way in and out.
    */
@@ -1175,8 +1175,8 @@ export default defineSchema({
    * Visibility is a property of the channel, checked server-side on
    * every read and every send:
    *   everyone — any member of the campaign
-   *   dmOnly   — only the DM (and an admin with the override active)
-   *   private  — the DM plus the listed members, for whispering to one
+   *   dmOnly   — only the GM (and an admin with the override active)
+   *   private  — the GM plus the listed members, for whispering to one
    *              player without the table seeing it
    *
    * A player must not be able to learn that a dmOnly channel exists, so
@@ -1190,7 +1190,7 @@ export default defineSchema({
       v.literal("dmOnly"),
       v.literal("private")
     ),
-    /** For `private` channels; the DM always has access regardless. */
+    /** For `private` channels; the GM always has access regardless. */
     memberIds: v.optional(v.array(v.id("users"))),
     order: v.number(),
   }).index("by_campaign", ["campaignId"]),
@@ -1300,13 +1300,13 @@ export default defineSchema({
     }),
 
   // One document per campaign: what the players' screens show right now.
-  // Every player client subscribes to this; the DM app mutates it.
+  // Every player client subscribes to this; the GM app mutates it.
   tableState: defineTable({
     campaignId: v.id("campaigns"),
     activeMapId: v.optional(v.id("maps")),
     activeEncounterId: v.optional(v.id("encounters")),
     showGrid: v.boolean(),
-    // Freeform DM broadcast line, e.g. "Roll perception" / "Short rest"
+    // Freeform GM broadcast line, e.g. "Roll perception" / "Short rest"
     banner: v.optional(v.string()),
   }).index("by_campaign", ["campaignId"]),
 
@@ -1314,7 +1314,7 @@ export default defineSchema({
     campaignId: v.id("campaigns"),
     name: v.string(), // "Sky Temple — lightning rooftop"
     status: v.union(
-      v.literal("prep"), // DM building it; invisible to players
+      v.literal("prep"), // GM building it; invisible to players
       v.literal("active"),
       v.literal("ended")
     ),
@@ -1330,7 +1330,7 @@ export default defineSchema({
     kind: v.union(v.literal("pc"), v.literal("npc"), v.literal("monster")),
     characterId: v.optional(v.id("characters")), // linked for PCs
     initiative: v.number(),
-    // Stable tiebreak for equal initiative (DM sets; default 0)
+    // Stable tiebreak for equal initiative (GM sets; default 0)
     tiebreak: v.number(),
     maxHp: v.number(),
     currentHp: v.number(),
@@ -1338,7 +1338,7 @@ export default defineSchema({
     ac: v.optional(v.number()),
     conditions: v.array(v.string()), // "prone", "restrained", ...
     concentrating: v.optional(v.string()), // spell name, if any
-    // Visibility controls (the DM-vs-player split):
+    // Visibility controls (the GM-vs-player split):
     hidden: v.boolean(), // not yet revealed — players don't see it at all
     showHpToPlayers: v.boolean(), // false → players see status bucket only
     dmNotes: v.optional(v.string()), // never sent to players
@@ -1349,8 +1349,8 @@ export default defineSchema({
    *
    * Per campaign rather than per person: renaming "Player Notes" to
    * "Table Notes" is a decision about this game's table, and one that
-   * only reached the DM's own browser would leave everyone else reading
-   * different words for the same box. The DM writes it; everyone reads
+   * only reached the GM's own browser would leave everyone else reading
+   * different words for the same box. The GM writes it; everyone reads
    * it, the way the NPC template already works.
    *
    * Ids are free strings and are NOT validated against the registry
@@ -1365,10 +1365,10 @@ export default defineSchema({
   }).index("by_campaign", ["campaignId"]),
 
   /**
-   * The DM's prep list.
+   * The GM's prep list.
    *
-   * Campaign-scoped and the DM's alone — convex/todo.ts refuses a
-   * non-DM caller outright rather than shaping the rows, because
+   * Campaign-scoped and the GM's alone — convex/todo.ts refuses a
+   * non-GM caller outright rather than shaping the rows, because
    * unlike an NPC or a location there is no player-facing version of
    * this. "Statblock for the lich" is not a thing to show a player a
    * redacted copy of; it is a thing they must not know exists.
@@ -1454,7 +1454,7 @@ export default defineSchema({
    * sessions" are different lists that want reading separately.
    *
    * Deliberately FLAT. Vikunja nests projects inside projects, which
-   * earns its keep for a team tracking a product and costs a DM a tree
+   * earns its keep for a team tracking a product and costs a GM a tree
    * to maintain instead of a list to read.
    */
   todoProjects: defineTable({
@@ -1502,7 +1502,7 @@ export default defineSchema({
    * stored, so the log is a record rather than a claim — a client that
    * rolled for itself could post a 20 every time.
    *
-   * `secret` is the DM's private roll. It is filtered out of listRolls
+   * `secret` is the GM's private roll. It is filtered out of listRolls
    * for everyone else rather than hidden in the UI, so a player cannot
    * learn that a roll happened at all.
    */
