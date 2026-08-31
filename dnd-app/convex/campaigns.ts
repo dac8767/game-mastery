@@ -600,6 +600,25 @@ export const purgeCampaign = internalMutation({
       .take(left);
     if (await sweep(diceRooms)) return await more();
 
+    // The recorder's transcript rows before the recordings they hang
+    // off, same as the boxes before their session. The AUDIO is not
+    // here to sweep — it is a file on the home server, and that
+    // server's own retention is what removes it. A purge that appeared
+    // to delete a campaign's recordings while the audio sat on a disk
+    // in the basement would be the wrong kind of quiet, so this is
+    // said out loud in the Session Recorder's setup notes too.
+    const transcriptChunks = await ctx.db
+      .query("transcriptChunks")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
+      .take(left);
+    if (await sweep(transcriptChunks)) return await more();
+
+    const recordings = await ctx.db
+      .query("recordings")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
+      .take(left);
+    if (await sweep(recordings)) return await more();
+
     const members = await ctx.db
       .query("campaignMembers")
       .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))

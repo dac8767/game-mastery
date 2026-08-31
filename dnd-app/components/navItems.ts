@@ -128,6 +128,18 @@ export const TOOL_ITEMS: NavItem[] = [
     dmOnly: true,
   },
   { id: "scheduler", label: "Scheduler", icon: "⏱", slug: "scheduler" },
+  // dmOnly for the same reason To-Do is, and more so: a transcript of
+  // a session is the whole evening, including what the GM said to one
+  // player while the rest were out of the room. There is no redacted
+  // version of it to give a player, so convex/recorder.ts refuses a
+  // non-GM caller outright rather than shaping the rows.
+  {
+    id: "recorder",
+    label: "Session Recorder",
+    icon: "◉",
+    slug: "recorder",
+    dmOnly: true,
+  },
   // dmOnly because the whole tool is: convex/todo.ts refuses a non-GM
   // caller rather than shaping the rows, since a prep list has no
   // player-facing version. The flag hides the link; the server is what

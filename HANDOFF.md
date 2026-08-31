@@ -66,6 +66,16 @@ included scaffolds) into the repo root so Claude Code has full context._
   WebP under `/srv/maps-web`; passes `.dd2vtt`/`.uvtt` etc. through
   untouched. With 600 Mbps upload this is an optimization (client render
   speed, players' downstream), not a requirement — but run it once anyway.
+- `recorder/` + `RECORDER.md` — the Session Recorder's server half: two
+  more compose services from one image (`recorder-api` receives session
+  audio in thirty-second slices, `recorder-worker` transcribes it with
+  WhisperX and posts the transcript to Convex). Audio lands in
+  `/mnt/Media/game-mastery/sessions/`, beside the maps and for the same
+  reason. **The audio is deliberately never stored in Convex** — the
+  free tier is 1 GB of file storage and one session is ~60 MB, and no
+  Convex action can run for the four hours a transcription takes. The
+  Caddyfile proxies `/recorder/*` to it, so nothing new is exposed;
+  it rides the tunnel that already serves the maps.
 
 ### `convex-home-app/` — Home coordination app backend
 - `SETUP.md` — install order, Convex Auth setup, R2 config, deploy.

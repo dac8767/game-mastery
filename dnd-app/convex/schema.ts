@@ -1562,4 +1562,121 @@ export default defineSchema({
     theme: v.optional(v.string()),
     enabled: v.boolean(),
   }).index("by_campaign", ["campaignId"]),
+
+  /* ---- Session Recorder -------------------------------------------
+   *
+   * One night at the table, recorded, transcribed and summarized.
+   *
+   * The audio is NOT here and never will be. Convex's free tier is a
+   * gigabyte of file storage; four hours of Opus is about sixty
+   * megabytes, so seventeen sessions would fill it and the eighteenth
+   * would fail during a game. The audio lives on the PowerEdge beside
+   * the battle maps, and what crosses into Convex is text — which is
+   * both small and the part anything else in this app can use.
+   *
+   * `audioKey` is therefore a filename on that server, not a
+   * storage id, and this table can name a recording whose file has
+   * been deleted. That is a state the screen shows rather than one it
+   * treats as corruption: a transcript outlives its audio on purpose.
+   */
+  recordings: defineTable({
+    campaignId: v.id("campaigns"),
+    /** What the GM calls it. Defaults to the date it was recorded. */
+    title: v.string(),
+    /**
+     * The status machine in components/recorderModel.ts, as a string.
+     *
+     * A v.union of literals would be tighter, and is deliberately not
+     * used: the value is also written by the home server through an
+     * HTTP action, and a Convex object validator is strict, so a
+     * server running a version this schema has not heard of would have
+     * its POST rejected and the recording would sit in `transcribing`
+     * for ever with no error anywhere. A string that fails the model's
+     * own check renders as "unknown" instead, which is visible.
+     */
+    status: v.string(),
+    /** What the server said when it gave up. Shown verbatim. */
+    error: v.optional(v.string()),
+
+    /** Epoch ms the recording started. Sorts the list. */
+    startedAt: v.number(),
+    /** Wall-clock seconds of audio, as the browser measured it. */
+    durationSec: v.optional(v.number()),
+    /** Bytes uploaded, so "did it all get there" has an answer. */
+    bytes: v.optional(v.number()),
+
+    /**
+     * The file on the home server, relative to its recordings root.
+     * Absent until the upload finishes; absent again if it is pruned.
+     */
+    audioKey: v.optional(v.string()),
+
+    /**
+     * WhisperX's tag for each voice, mapped to a name a person uses.
+     *
+     * Keyed by "SPEAKER_00" and friends, which is a key from outside
+     * this app — see speakerName() in components/recorderModel.ts for
+     * why every read of it goes through hasOwnProperty.
+     */
+    speakers: v.optional(v.record(v.string(), v.string())),
+    /** How many segments the transcript came to, for the list row. */
+    segmentCount: v.optional(v.number()),
+    /** The language WhisperX detected, if it said. */
+    language: v.optional(v.string()),
+
+    /**
+     * The generated notes, section by section, as
+     * SUMMARY_SECTIONS in components/recorderModel.ts describes them.
+     * Absent until somebody asks for a summary — the transcript costs
+     * nothing to make and the summary is a paid API call, so the two
+     * are separate states and not two halves of one.
+     */
+    summary: v.optional(
+      v.object({
+        recap: v.string(),
+        beats: v.array(v.string()),
+        decisions: v.array(v.string()),
+        npcs: v.array(v.string()),
+        loot: v.array(v.string()),
+        threads: v.array(v.string()),
+      })
+    ),
+    /** Which model wrote it, so notes from two eras are tellable apart. */
+    summaryModel: v.optional(v.string()),
+    summarizedAt: v.optional(v.number()),
+
+    /** The session in the log this was the recording OF, once linked. */
+    sessionId: v.optional(v.id("sessions")),
+  })
+    .index("by_campaign", ["campaignId"])
+    // The home server posts back knowing only the id it was handed, so
+    // there is nothing to look up by here — but a recording linked to a
+    // session is looked up from the session's side.
+    .index("by_session", ["sessionId"]),
+
+  /**
+   * The transcript, in rows of roughly 48 KB.
+   *
+   * Not one field on the recording: a Convex document is capped at a
+   * megabyte and a four-hour transcript passes that. Splitting it also
+   * keeps the reactive query cheap — renaming a speaker rewrites the
+   * recording row, not the hour of text hanging off it.
+   *
+   * `index` is the order, assigned by the ingest and never reused.
+   */
+  transcriptChunks: defineTable({
+    campaignId: v.id("campaigns"),
+    recordingId: v.id("recordings"),
+    index: v.number(),
+    segments: v.array(
+      v.object({
+        start: v.number(),
+        end: v.number(),
+        text: v.string(),
+        speaker: v.optional(v.string()),
+      })
+    ),
+  })
+    .index("by_recording", ["recordingId", "index"])
+    .index("by_campaign", ["campaignId"]),
 });

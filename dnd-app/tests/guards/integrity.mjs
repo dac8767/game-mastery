@@ -6487,6 +6487,391 @@ export const integrity = {
       }
     }
 
+    /* ---- Session Recorder ----------------------------------------
+     *
+     * Four boundaries, none of which TypeScript can see across:
+     *
+     *   browser ─► home server ─► Convex ─► Claude
+     *
+     * The browser and the home server share a signature scheme; the
+     * home server and Convex share a secret; the Convex module and the
+     * screen share a set of status strings; and the whole of it is
+     * held together by environment variables named in three files that
+     * have no reason to agree with each other. Every check below is a
+     * place where getting it wrong produces no error at all — an
+     * upload that silently 401s, a status nothing has a label for, a
+     * secret handed to a browser.
+     */
+    {
+      const recSrc = read("convex", "recorder.ts");
+      const recBare = stripComments(recSrc);
+      const modelSrc = read("components", "recorderModel.ts");
+      const httpSrc = stripComments(read("convex", "http.ts"));
+      const toolSrc = read("components", "RecorderTool.tsx");
+      const hookSrc = read("components", "useRecorder.ts");
+
+      // ---- secrets stay on the server -----------------------------
+      //
+      // getConfig exists to tell the screen WHETHER the recorder is
+      // configured, and the whole point is that it answers with
+      // booleans. A refactor that returned the value instead would put
+      // an API key in a browser and change nothing visible.
+      const SECRET_CONSTS = ["UPLOAD_SECRET", "INGEST_SECRET", "API_KEY"];
+      const configBlock = stripComments(
+        blockAfter(recSrc, /export const getConfig\s*=\s*query\(/, "recorder.getConfig")
+      );
+      for (const line of configBlock.split("\n")) {
+        for (const name of SECRET_CONSTS) {
+          // Word boundary on both sides: API_KEY is a substring of
+          // nothing here today, and a check that matched loosely would
+          // stop being about the thing it is named after.
+          if (!new RegExp(`\\b${name}\\b`).test(line)) continue;
+          if (!/!==\s*null|===\s*null/.test(line)) {
+            problems.push(
+              `recorder.getConfig returns ${name} itself rather than whether ` +
+                `it is set — that hands a secret to every browser that opens ` +
+                `the tool`
+            );
+          }
+        }
+      }
+      // A client file may PRINT these names — the setup panel tells
+      // Derek exactly what to set, and that is the whole value of it —
+      // but it may never handle one. The rule is therefore: inside
+      // <code>, fine; anywhere else in the file, a secret has reached
+      // code that ships to a browser. Stripping the <code> spans first
+      // is what separates the two, and it is the same trap the icon
+      // guard hit when a comment ABOUT a rule satisfied the rule.
+      for (const [label, src] of [
+        ["RecorderTool.tsx", toolSrc],
+        ["useRecorder.ts", hookSrc],
+      ]) {
+        const outsideCode = src.replace(/<code>[\s\S]*?<\/code>/g, "");
+        for (const name of [
+          "RECORDER_UPLOAD_SECRET",
+          "RECORDER_INGEST_SECRET",
+          "ANTHROPIC_API_KEY",
+        ]) {
+          if (outsideCode.includes(name)) {
+            problems.push(
+              `${label} names ${name} outside a <code> span. Naming one to a ` +
+                `person is the setup panel's job; handling one in something ` +
+                `that ships to a browser is not — the browser gets a signed ` +
+                `ticket, never a key`
+            );
+          }
+        }
+      }
+      if (!/ticket:\s*await mintTicket\(/.test(recBare)) {
+        problems.push(
+          "recorder.startRecording no longer mints its ticket with " +
+            "mintTicket — the browser is being handed something else"
+        );
+      }
+
+      // ---- the way in from the home server ------------------------
+      //
+      // Every /recorder route is a POST that writes, and each one has
+      // to go through open(), which is the single place the shared
+      // secret is checked. A route added without it is a route anyone
+      // can call.
+      const routes = [
+        ...httpSrc.matchAll(
+          /http\.route\(\{([\s\S]*?)\n\}\);/g
+        ),
+      ].map((m) => m[1]);
+      const recorderRoutes = routes.filter((r) => /path:\s*"\/recorder\//.test(r));
+      if (recorderRoutes.length === 0) {
+        throw new Error("no /recorder routes in convex/http.ts — parser out of date?");
+      }
+      for (const route of recorderRoutes) {
+        const path = /path:\s*"([^"]+)"/.exec(route)?.[1] ?? "?";
+        if (!/await open\(ctx, request\)/.test(route)) {
+          problems.push(
+            `the ${path} route does not go through open(), which is where the ` +
+              `shared secret is checked`
+          );
+        }
+        // A GET would make the ingest secret a READ credential for
+        // transcripts. It is deliberately write-only: a leak should
+        // let someone corrupt a transcript, never read one.
+        if (!/method:\s*"POST"/.test(route)) {
+          problems.push(
+            `${path} is not a POST. The recorder's shared secret grants ` +
+              `writing a transcript, never reading one`
+          );
+        }
+      }
+      if (!/function open\(/.test(httpSrc) || !/secretOk\(/.test(httpSrc)) {
+        problems.push(
+          "convex/http.ts no longer has open()/secretOk() — the recorder's " +
+            "ingest routes are unauthenticated"
+        );
+      }
+      if (!/process\.env\.RECORDER_INGEST_SECRET/.test(httpSrc)) {
+        problems.push(
+          "secretOk no longer compares against RECORDER_INGEST_SECRET"
+        );
+      }
+      // The secret must arrive in a header. A query parameter would put
+      // it in Cloudflare's logs, Caddy's logs and the browser history.
+      if (!/headers\.get\("x-recorder-secret"\)/.test(httpSrc)) {
+        problems.push(
+          "the ingest secret is no longer read from the x-recorder-secret " +
+            "header — a URL ends up in access logs"
+        );
+      }
+
+      // ---- audio only leaves over https ---------------------------
+      //
+      // Checked at the CALL SITE, not by the function existing:
+      // isUploadUrl living in recorderModel.ts and being called by
+      // nothing is exactly the state this is meant to catch.
+      for (const fn of ["startRecording", "deleteRecording"]) {
+        const block = stripComments(
+          blockAfter(recSrc, new RegExp(`export const ${fn}\\s*=\\s*action\\(`), fn)
+        );
+        if (!/isUploadUrl\(/.test(block)) {
+          problems.push(
+            `recorder.${fn} no longer checks isUploadUrl before reaching the ` +
+              `home server — a mistyped RECORDER_UPLOAD_URL would send a ` +
+              `session's audio in the clear`
+          );
+        }
+      }
+
+      // ---- statuses the screen has a word for ---------------------
+      const stages = constArrayStrings(
+        modelSrc,
+        "RECORDER_STAGES",
+        "recorderModel.ts"
+      );
+      const written = new Set(
+        [...recBare.matchAll(/\bstatus:\s*"([a-z]+)"/g)].map((m) => m[1])
+      );
+      if (written.size === 0) {
+        throw new Error("found no status writes in convex/recorder.ts — parser out of date?");
+      }
+      for (const status of written) {
+        if (!stages.includes(status)) {
+          problems.push(
+            `convex/recorder.ts writes status "${status}", which is not in ` +
+              `RECORDER_STAGES — the screen would draw it as an unknown state`
+          );
+        }
+      }
+      for (const stage of stages) {
+        if (!new RegExp(`^\\s*${stage}:`, "m").test(modelSrc)) {
+          problems.push(
+            `RECORDER_STAGES has "${stage}" with no entry in STATUS_LABEL ` +
+              `and STATUS_NOTE`
+          );
+        }
+      }
+
+      // ---- everything from outside is cleaned ---------------------
+      //
+      // Three inputs this app does not control: WhisperX's segments, a
+      // GM's typing, and a model's JSON. Each has a cleaner, and the
+      // cleaner has to be called by the mutation that stores the
+      // result rather than merely exist.
+      for (const [fn, cleaner, why] of [
+        ["ingestTranscript", "cleanSegments", "WhisperX's segments"],
+        ["setSpeakers", "cleanSpeakers", "names typed into the form"],
+        ["saveSummary", "cleanSummary", "the model's JSON"],
+        ["create", "cleanTitle", "the recording's title"],
+      ]) {
+        const block = stripComments(
+          blockAfter(
+            recSrc,
+            new RegExp(`export const ${fn}\\s*=\\s*(?:internal)?[mM]utation\\(`),
+            `recorder.${fn}`
+          )
+        );
+        if (!new RegExp(`${cleaner}\\(`).test(block)) {
+          problems.push(
+            `recorder.${fn} stores ${why} without ${cleaner}() — the row is ` +
+              `then whatever arrived`
+          );
+        }
+      }
+
+      // ---- the notes say a machine wrote them ---------------------
+      const recCss = read("app", "globals.css");
+      if (!/summaryModel|\{model\}/.test(toolSrc) || !toolSrc.includes("rec-credit")) {
+        problems.push(
+          "RecorderTool no longer credits the model that wrote the notes. " +
+            "These get pasted into a campaign's history and read back years " +
+            "later as what happened"
+        );
+      }
+
+      // ---- the styles the screen asks for exist -------------------
+      //
+      // Anchored to the start of a line and followed by a comma or a
+      // brace: ".rec" is a prefix of ".rec-bar", ".record-x" and every
+      // other class here, so an unanchored search would find a rule for
+      // one of them and report the missing one as present.
+      for (const cls of [
+        "rec",
+        "rec-bar",
+        "rec-meter",
+        "rec-seg",
+        "rec-turn",
+        "rec-credit",
+        "rec-status",
+      ]) {
+        if (!new RegExp(`^\\.${cls}\\s*[,{]`, "m").test(recCss)) {
+          problems.push(
+            `globals.css has no .${cls} rule, which RecorderTool renders`
+          );
+        }
+      }
+      const litSeg = /\.rec-seg\.is-lit\s*\{([^}]*)\}/.exec(recCss);
+      if (!litSeg) {
+        problems.push(
+          "no .rec-seg.is-lit rule — the level meter never lights, which is " +
+            "the one check that has to happen before the session, not after"
+        );
+      } else if (!/background/.test(litSeg[1])) {
+        problems.push(
+          "a lit meter segment has no background of its own — it looks " +
+            "identical to a silent one"
+        );
+      }
+
+      // ---- the home server half -----------------------------------
+      const compose = read("..", "map-server", "docker-compose.yml");
+      for (const service of ["recorder-api", "recorder-worker"]) {
+        // Anchored at the service indent: "recorder-api" appears again
+        // inside the worker's depends_on and in the Caddyfile, and a
+        // loose match would find those and call the service defined.
+        if (!new RegExp(`^  ${service}:`, "m").test(compose)) {
+          problems.push(`docker-compose.yml defines no ${service} service`);
+        }
+      }
+      if (!/command:\s*\["python",\s*"worker\.py"\]/.test(compose)) {
+        problems.push(
+          "the recorder-worker service no longer runs worker.py — it would " +
+            "start a second copy of the upload endpoint and transcribe nothing"
+        );
+      }
+      if ((compose.match(/\/data\/sessions/g) ?? []).length < 2) {
+        problems.push(
+          "the two recorder containers no longer share /data/sessions — the " +
+            "queue is that directory, so the worker would see an empty one"
+        );
+      }
+      if (!/recorder_models:/.test(compose)) {
+        problems.push(
+          "no recorder_models volume — every restart re-downloads gigabytes " +
+            "of model weights before it transcribes anything"
+        );
+      }
+
+      const caddy = read("..", "map-server", "Caddyfile");
+      const recAt = caddy.indexOf("handle_path /recorder/*");
+      if (recAt === -1) {
+        problems.push("the Caddyfile no longer proxies /recorder to the recorder");
+      } else {
+        if (!/reverse_proxy recorder-api:8080/.test(caddy)) {
+          problems.push("the /recorder route no longer points at recorder-api:8080");
+        }
+        // Caddy matches handle blocks in written order, so the
+        // catch-all must come last. Above the recorder, every upload
+        // gets the landing text and a 200 — which the browser reads as
+        // a successful upload of nothing.
+        const catchAll = caddy.indexOf("\n\thandle {");
+        if (catchAll !== -1 && catchAll < recAt) {
+          problems.push(
+            "the Caddyfile's catch-all handle now comes BEFORE the recorder " +
+              "route, so every upload is answered with the landing page"
+          );
+        }
+      }
+
+      // Every environment variable the two Python files read has to be
+      // documented in the template Derek copies. A worker silently
+      // falling back to a default is how the wrong model runs for a
+      // month without anyone noticing.
+      const envExample = read("..", "map-server", ".env.example");
+      const serverPy = read("..", "map-server", "recorder", "server.py");
+      const workerPy = read("..", "map-server", "recorder", "worker.py");
+      // Set by the Dockerfile or compose rather than by a person, so
+      // they are not the template's business.
+      const NOT_IN_ENV = ["RECORDER_DATA", "RECORDER_POLL_SECONDS"];
+      const named = new Set();
+      for (const src of [serverPy, workerPy]) {
+        for (const m of src.matchAll(/os\.environ\.get\(\s*"([A-Z_]+)"/g)) {
+          named.add(m[1]);
+        }
+      }
+      if (named.size === 0) {
+        throw new Error("read no env names out of the recorder's Python — parser out of date?");
+      }
+      for (const name of named) {
+        if (NOT_IN_ENV.includes(name)) continue;
+        if (!new RegExp(`^${name}=`, "m").test(envExample)) {
+          problems.push(
+            `map-server/recorder reads ${name} but .env.example does not ` +
+              `mention it — it would silently take its default`
+          );
+        }
+      }
+
+      // Every route that writes or deletes verifies the ticket first.
+      // _verify existing is not the check; being CALLED by each handler
+      // is, because the failure mode is one handler that forgot.
+      //
+      // Split on the decorator rather than matched with one regex. The
+      // first version of this ended its match at a lookahead for the
+      // NEXT decorator, which meant the last route in the file — the
+      // delete — was never matched at all: removing its _verify passed
+      // the guard. Counting the decorators and insisting every one
+      // became a block is what makes that failure loud instead.
+      const pyHandlers = serverPy
+        .split(/\n(?=@app\.)/)
+        .filter((b) => /^@app\./.test(b));
+      const pyDecorators = (serverPy.match(/^@app\./gm) ?? []).length;
+      if (pyHandlers.length !== pyDecorators || pyDecorators === 0) {
+        throw new Error(
+          `read ${pyHandlers.length} of ${pyDecorators} routes out of ` +
+            "server.py — parser out of date?"
+        );
+      }
+      for (const handler of pyHandlers) {
+        const m = /^@app\.(post|delete)\("([^"]+)"\)/.exec(handler);
+        if (!m) continue;
+        if (!/_verify\(/.test(handler)) {
+          problems.push(
+            `map-server/recorder/server.py handles ${m[2]} without calling ` +
+              `_verify — that route would accept anyone's audio`
+          );
+        }
+      }
+      if (!/ID_RE\.match\(/.test(serverPy)) {
+        problems.push(
+          "server.py no longer checks the recording id against ID_RE before " +
+            "using it as a directory name"
+        );
+      }
+      if (!/hmac\.compare_digest\(/.test(serverPy)) {
+        problems.push(
+          "server.py no longer compares the ticket signature with " +
+            "compare_digest"
+        );
+      }
+      if (!workerPy.includes("/recorder/failed")) {
+        problems.push(
+          "the worker no longer reports a failure back to the app — a " +
+            "recording would sit on \"Transcribing\" for ever"
+        );
+      }
+      if (!exists("..", "map-server", "RECORDER.md")) {
+        problems.push("map-server/RECORDER.md is gone — the setup is undocumented");
+      }
+    }
+
     return problems;
   },
 };

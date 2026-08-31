@@ -28,6 +28,27 @@
 		}
 	}
 
+	# Session recorder: audio in from the browser, in slices.
+	#
+	# handle_path STRIPS the /recorder prefix, so the app's
+	# RECORDER_UPLOAD_URL is https://<host>/recorder and the container
+	# sees /chunk/... and /finish/... — which is what server.py routes.
+	#
+	# Above the catch-all `handle` below it on purpose: Caddy matches
+	# handle blocks in the order they are written, and a catch-all first
+	# would answer every upload with the landing text and a 200, which
+	# the browser would read as a successful upload of nothing.
+	handle_path /recorder/* {
+		reverse_proxy recorder-api:8080 {
+			# A four-hour session is hundreds of small POSTs and one
+			# assembly at the end that can take a minute on a spinning
+			# disk. The default 30s write timeout ends that mid-file.
+			transport http {
+				response_header_timeout 5m
+			}
+		}
+	}
+
 	# Root: simple landing that points at the two trees.
 	handle {
 		respond "Map server up. Browse /web/ or /originals/." 200

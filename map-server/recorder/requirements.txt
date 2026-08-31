@@ -1,0 +1,17 @@
+# Deliberately loose rather than exactly pinned.
+#
+# A pin written today against a version that has since been yanked is a
+# build that fails on the one evening it is needed, and this file is not
+# rebuilt often enough for a lockfile to be maintained honestly. What IS
+# worth doing, once a build works: run
+#   docker compose exec recorder-api pip freeze > requirements.lock
+# and keep that beside this file, so the working set can be restored
+# exactly even if the ranges below drift.
+
+fastapi>=0.110
+uvicorn[standard]>=0.27
+
+# The transcriber. Whisper for the words, wav2vec for the timings,
+# pyannote for who was speaking. Only the worker container uses it; it
+# is in the shared image because the two containers are one build.
+whisperx>=3.3

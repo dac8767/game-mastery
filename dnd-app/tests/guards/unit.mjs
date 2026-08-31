@@ -8874,6 +8874,494 @@ export const unit = {
       );
     }
 
+    /* ---- the Session Recorder's pure half ------------------------
+     *
+     * Two of the functions here parse input from outside this repo —
+     * WhisperX's segments and a model's JSON — so most of what follows
+     * is malformed on purpose. The interesting cases are not "does it
+     * work", they are "what does it do with a number where a string
+     * belongs", because that is what will actually arrive one night.
+     */
+    {
+      const rm = await import(
+        pathToFileURL(
+          join(compile("components/recorderModel.ts"), "recorderModel.js")
+        ).href
+      );
+
+      // ---- the status machine ---------------------------------------
+      check(
+        "every stage has a label and a note",
+        rm.RECORDER_STAGES.every(
+          (s) =>
+            typeof rm.STATUS_LABEL[s] === "string" &&
+            rm.STATUS_LABEL[s] !== "" &&
+            typeof rm.STATUS_NOTE[s] === "string" &&
+            rm.STATUS_NOTE[s] !== ""
+        )
+      );
+      check(
+        "and no label or note exists for a stage that does not",
+        Object.keys(rm.STATUS_LABEL).length === rm.RECORDER_STAGES.length &&
+          Object.keys(rm.STATUS_NOTE).length === rm.RECORDER_STAGES.length
+      );
+      check(
+        "a status the server invented is not a status",
+        !rm.isRecorderStatus("thinking") &&
+          !rm.isRecorderStatus(null) &&
+          !rm.isRecorderStatus(3) &&
+          rm.isRecorderStatus("transcribing")
+      );
+      check("an unknown status has no place on the rail", rm.stageIndex("x") === -1);
+      check(
+        "transcribed is a resting state, not a step towards done",
+        rm.isSettled("transcribed") &&
+          rm.isSettled("done") &&
+          rm.isSettled("failed") &&
+          !rm.isSettled("transcribing") &&
+          !rm.isSettled("queued")
+      );
+      check(
+        "the three states the home server owns are the busy ones",
+        rm.isServerBusy("queued") &&
+          rm.isServerBusy("transcribing") &&
+          rm.isServerBusy("summarizing") &&
+          !rm.isServerBusy("recording") &&
+          !rm.isServerBusy("done")
+      );
+
+      // ---- clock and bytes ------------------------------------------
+      check("under a minute", rm.formatClock(7) === "0:07");
+      check("minutes and seconds", rm.formatClock(247) === "4:07");
+      check("an hour appears exactly at one", rm.formatClock(3600) === "1:00:00");
+      check("and pads the minutes once it has", rm.formatClock(3863) === "1:04:23");
+      check("a fraction of a second rounds down", rm.formatClock(59.9) === "0:59");
+      check(
+        "a MediaRecorder that has not started is 0:00, not NaN",
+        rm.formatClock(NaN) === "0:00" &&
+          rm.formatClock(undefined) === "0:00" &&
+          rm.formatClock("4") === "0:00" &&
+          rm.formatClock(-30) === "0:00"
+      );
+      check(
+        "bytes read the way an operating system writes them",
+        rm.formatBytes(0) === "0 B" &&
+          rm.formatBytes(900) === "900 B" &&
+          rm.formatBytes(1024) === "1 KB" &&
+          rm.formatBytes(1536) === "2 KB" &&
+          rm.formatBytes(60 * 1024 * 1024) === "60.0 MB" &&
+          rm.formatBytes(1536 * 1024 * 1024) === "1.5 GB"
+      );
+      check(
+        "kilobytes stay whole and megabytes get their decimal",
+        !rm.formatBytes(5000).includes(".") && rm.formatBytes(5e6).includes(".")
+      );
+      check("and a bad number is nothing, not NaN B", rm.formatBytes(null) === "0 B");
+
+      // ---- cleanSegments: this is a POST body, not a value ----------
+      check(
+        "anything that is not an array is no transcript",
+        rm.cleanSegments(null).length === 0 &&
+          rm.cleanSegments({ segments: [] }).length === 0 &&
+          rm.cleanSegments("[]").length === 0
+      );
+      check(
+        "entries that are not objects are skipped, not thrown on",
+        rm.cleanSegments([null, 3, "hi", { text: "kept" }]).length === 1
+      );
+      check(
+        "a segment with no words is not a segment",
+        rm.cleanSegments([{ start: 0, end: 1, text: "   " }]).length === 0
+      );
+      const repaired = rm.cleanSegments([
+        { start: -5, end: "x", text: "  hello  ", speaker: "  SPEAKER_01  " },
+      ]);
+      check(
+        "a bad start, a bad end and a padded speaker are all repaired",
+        repaired.length === 1 &&
+          repaired[0].start === 0 &&
+          repaired[0].end === 0 &&
+          repaired[0].text === "hello" &&
+          repaired[0].speaker === "SPEAKER_01"
+      );
+      check(
+        "an end before its start is pulled up to it rather than kept",
+        rm.cleanSegments([{ start: 10, end: 2, text: "a" }])[0].end === 10
+      );
+      check(
+        "a null speaker leaves the key off entirely",
+        !("speaker" in rm.cleanSegments([{ start: 0, end: 1, text: "a", speaker: null }])[0]) &&
+          !("speaker" in rm.cleanSegments([{ start: 0, end: 1, text: "a", speaker: "  " }])[0])
+      );
+      check(
+        "one absurd segment cannot blow the document limit",
+        rm.cleanSegments([{ start: 0, end: 1, text: "x".repeat(50000) }])[0].text
+          .length === rm.MAX_SEGMENT_TEXT
+      );
+      check(
+        "and neither can an absurd number of them",
+        rm.cleanSegments(
+          Array.from({ length: 25 }, () => ({ start: 0, end: 1, text: "a" })),
+          10
+        ).length === 10
+      );
+
+      // ---- toTurns --------------------------------------------------
+      const seg = (start, end, text, speaker) =>
+        speaker === undefined
+          ? { start, end, text }
+          : { start, end, text, speaker };
+
+      const merged = rm.toTurns([
+        seg(0, 2, "one", "A"),
+        seg(2, 4, "two", "A"),
+        seg(4, 6, "three", "B"),
+      ]);
+      check(
+        "consecutive segments from one voice become one turn",
+        merged.length === 2 &&
+          merged[0].text === "one two" &&
+          merged[0].end === 4 &&
+          merged[1].speaker === "B"
+      );
+      check(
+        "a long silence ends a turn even for the same voice",
+        rm.toTurns([
+          seg(0, 2, "before", "A"),
+          seg(2 + rm.TURN_GAP + 1, 40, "after", "A"),
+        ]).length === 2
+      );
+      check(
+        "and a gap right at the threshold does not",
+        rm.toTurns([
+          seg(0, 2, "before", "A"),
+          seg(2 + rm.TURN_GAP, 40, "after", "A"),
+        ]).length === 1
+      );
+      check(
+        "a monologue still breaks into readable turns",
+        rm.toTurns(
+          Array.from({ length: 40 }, (_, i) =>
+            seg(i * 2, i * 2 + 2, "w".repeat(100), "A")
+          )
+        ).length > 1
+      );
+      check(
+        "every turn stays inside the character cap",
+        rm
+          .toTurns(
+            Array.from({ length: 40 }, (_, i) =>
+              seg(i * 2, i * 2 + 2, "w".repeat(100), "A")
+            )
+          )
+          .every((t) => t.text.length <= rm.TURN_CHARS)
+      );
+      check(
+        "unattributed segments merge with each other and not with a name",
+        (() => {
+          const t = rm.toTurns([seg(0, 1, "a"), seg(1, 2, "b"), seg(2, 3, "c", "A")]);
+          return t.length === 2 && t[0].speaker === "" && t[0].text === "a b";
+        })()
+      );
+      check("no segments, no turns", rm.toTurns([]).length === 0);
+
+      // ---- who was speaking -----------------------------------------
+      const cast = [
+        seg(0, 10, "long", "B"),
+        seg(10, 12, "short", "A"),
+        seg(12, 30, "longer", "B"),
+        seg(30, 31, "none"),
+      ];
+      check(
+        "tags come back in the order they first speak, once each",
+        JSON.stringify(rm.speakerTags(cast)) === JSON.stringify(["B", "A"])
+      );
+      check(
+        "speaking time adds up per voice, unattributed included",
+        rm.speakingTime(cast).get("B") === 28 &&
+          rm.speakingTime(cast).get("A") === 2 &&
+          rm.speakingTime(cast).get("") === 1
+      );
+
+      // ---- speakerName: the colorOf trap, again ---------------------
+      check(
+        "a named voice prints its name",
+        rm.speakerName("SPEAKER_00", { SPEAKER_00: "  Derek  " }) === "Derek"
+      );
+      check(
+        "WhisperX counts from zero and people do not",
+        rm.speakerName("SPEAKER_00", {}) === "Speaker 1" &&
+          rm.speakerName("SPEAKER_12", null) === "Speaker 13"
+      );
+      check(
+        "no tag at all is unattributed, not Speaker NaN",
+        rm.speakerName("", {}) === "Unattributed" &&
+          rm.speakerName("   ", undefined) === "Unattributed"
+      );
+      check(
+        "a blank stored name falls back rather than printing nothing",
+        rm.speakerName("SPEAKER_00", { SPEAKER_00: "   " }) === "Speaker 1"
+      );
+      check(
+        "a name that is not a string is not a name",
+        rm.speakerName("SPEAKER_00", { SPEAKER_00: 7 }) === "Speaker 1"
+      );
+      // The specific bug this exists for: `names[tag]` on a plain object
+      // returns Object.prototype.toString for this tag — a FUNCTION,
+      // which is truthy, which React then stringifies into the page.
+      check(
+        "a tag named toString does not reach the prototype",
+        typeof rm.speakerName("toString", {}) === "string" &&
+          rm.speakerName("toString", {}) === "toString"
+      );
+      check(
+        "and an unrecognised tag prints itself rather than vanishing",
+        rm.speakerName("MIC_2", {}) === "MIC_2"
+      );
+      // hasOwnProperty is what makes this the answer, and this is the
+      // only case that proves it. Against a PLAIN object the typeof
+      // guard beside it happens to cover the same ground — every
+      // inherited property of one is a function — so removing
+      // hasOwnProperty changed no result and no test. An inherited
+      // STRING is the shape that tells them apart, and the rule it
+      // pins is the real one: a name belongs to this recording's map
+      // or it is not a name.
+      check(
+        "a name inherited rather than owned is not this recording's name",
+        rm.speakerName("SPEAKER_00", Object.create({ SPEAKER_00: "Ghost" })) ===
+          "Speaker 1"
+      );
+      check(
+        "and cleanSpeakers will not store one either",
+        JSON.stringify(
+          rm.cleanSpeakers(Object.create({ SPEAKER_00: "Ghost" }), [
+            "SPEAKER_00",
+          ])
+        ) === "{}"
+      );
+
+      // ---- searching ------------------------------------------------
+      const turns = rm.toTurns([
+        seg(0, 5, "the tower is falling", "SPEAKER_00"),
+        seg(20, 25, "roll initiative", "SPEAKER_01"),
+      ]);
+      check("an empty search is not a filter", rm.searchTurns(turns, "  ").length === 2);
+      check(
+        "the words are searched, case insensitively",
+        rm.searchTurns(turns, "TOWER").length === 1
+      );
+      check(
+        "and so is the name a person actually knows them by",
+        rm.searchTurns(turns, "marcus", { SPEAKER_01: "Marcus" }).length === 1
+      );
+      check(
+        "searching a name nobody has been given finds the fallback",
+        rm.searchTurns(turns, "speaker 2", {}).length === 1
+      );
+      check(
+        "the transcript as text carries the timecode and the name",
+        rm.transcriptText(turns, { SPEAKER_00: "Derek" }).split("\n")[0] ===
+          "[0:00] Derek: the tower is falling"
+      );
+
+      // ---- storing it -----------------------------------------------
+      const many = Array.from({ length: 300 }, (_, i) =>
+        seg(i, i + 1, "w".repeat(400), "A")
+      );
+      const chunks = rm.chunkSegments(many);
+      check(
+        "a long transcript is split rather than stored whole",
+        chunks.length > 1
+      );
+      check(
+        "and no segment is lost or duplicated in the splitting",
+        chunks.flat().length === many.length
+      );
+      check(
+        "every chunk stays inside the budget once it has more than one",
+        chunks.every(
+          (c) =>
+            c.length === 1 ||
+            c.reduce((n, s) => n + s.text.length + 64, 0) <= rm.CHUNK_CHARS
+        )
+      );
+      check(
+        "a segment bigger than the budget gets a row of its own, uncut",
+        (() => {
+          const out = rm.chunkSegments([seg(0, 1, "x".repeat(999), "A")], 100);
+          return out.length === 1 && out[0][0].text.length === 999;
+        })()
+      );
+      check("nothing to chunk is no chunks", rm.chunkSegments([]).length === 0);
+      check(
+        "rows are rejoined by their index, not by the order they arrived",
+        rm
+          .joinChunks([
+            { index: 2, segments: [seg(4, 5, "c", "A")] },
+            { index: 0, segments: [seg(0, 1, "a", "A")] },
+            { index: 1, segments: [seg(2, 3, "b", "A")] },
+          ])
+          .map((s) => s.text)
+          .join("") === "abc"
+      );
+
+      // ---- cleanSummary: this is model output -----------------------
+      check(
+        "no summary at all",
+        rm.cleanSummary(null) === null &&
+          rm.cleanSummary("recap") === null &&
+          rm.cleanSummary([1, 2]) === null &&
+          rm.cleanSummary({}) === null
+      );
+      check(
+        "every section empty is the same as no summary",
+        rm.cleanSummary({ recap: "  ", beats: [], loot: null }) === null
+      );
+      const summary = rm.cleanSummary({
+        recap: "  The   party   went   north.  ",
+        beats: ["one", 7, null, "  two  ", ""],
+        decisions: "not a list",
+        npcs: ["Vex — sold them a map"],
+        loot: [],
+        threads: ["who owns the tower"],
+        extra: "ignored",
+      });
+      check(
+        "a fumbled section is empty rather than fatal to the rest",
+        summary !== null &&
+          summary.decisions.length === 0 &&
+          summary.beats.length === 2 &&
+          summary.beats[1] === "two"
+      );
+      check(
+        "runs of whitespace in the recap collapse",
+        summary.recap === "The party went north."
+      );
+      check(
+        "the shape is exactly the six sections, never the model's extras",
+        summary !== null &&
+          JSON.stringify(Object.keys(summary).sort()) ===
+            JSON.stringify(rm.SUMMARY_SECTIONS.map((s) => s.key).sort())
+      );
+      check(
+        "a runaway list is capped",
+        rm.cleanSummary({
+          beats: Array.from({ length: 400 }, (_, i) => `b${i}`),
+        }).beats.length === rm.MAX_LINES
+      );
+      check(
+        "and so is a runaway line and a runaway recap",
+        rm.cleanSummary({ beats: ["x".repeat(9000)] }).beats[0].length ===
+          rm.MAX_LINE &&
+          rm.cleanSummary({ recap: "x".repeat(90000) }).recap.length ===
+            rm.MAX_RECAP
+      );
+      check(
+        "the notes as text carry only the sections that have anything",
+        (() => {
+          const text = rm.summaryText(summary);
+          return (
+            text.includes("## Recap") &&
+            text.includes("- Vex — sold them a map") &&
+            !text.includes("Loot and rewards")
+          );
+        })()
+      );
+      check(
+        "every prompt section names a field the summary actually has",
+        rm.SUMMARY_SECTIONS.every(
+          (s) =>
+            typeof s.title === "string" &&
+            typeof s.asked === "string" &&
+            s.asked !== "" &&
+            (s.kind === "prose" || s.kind === "list") &&
+            Object.prototype.hasOwnProperty.call(summary, s.key)
+        )
+      );
+
+      // ---- titles and speaker maps ----------------------------------
+      check(
+        "an empty title is the fallback, not an empty row",
+        rm.cleanTitle("") === "Untitled recording" &&
+          rm.cleanTitle("   ") === "Untitled recording" &&
+          rm.cleanTitle(null) === "Untitled recording" &&
+          rm.cleanTitle(42) === "Untitled recording"
+      );
+      check(
+        "a title is collapsed and capped",
+        rm.cleanTitle("  a   b  ") === "a b" &&
+          rm.cleanTitle("x".repeat(400)).length === rm.MAX_TITLE
+      );
+      check(
+        "a name for a voice that is not in this recording is dropped",
+        JSON.stringify(
+          rm.cleanSpeakers({ SPEAKER_00: "Derek", SPEAKER_99: "Ghost" }, [
+            "SPEAKER_00",
+          ])
+        ) === JSON.stringify({ SPEAKER_00: "Derek" })
+      );
+      check(
+        "clearing a name removes the key rather than storing a blank",
+        JSON.stringify(rm.cleanSpeakers({ SPEAKER_00: "   " }, ["SPEAKER_00"])) ===
+          "{}"
+      );
+      check(
+        "a map that is not an object is no map",
+        JSON.stringify(rm.cleanSpeakers(null, ["A"])) === "{}" &&
+          JSON.stringify(rm.cleanSpeakers(["A"], ["A"])) === "{}"
+      );
+      check(
+        "cleanSpeakers does not read the prototype either",
+        JSON.stringify(rm.cleanSpeakers({}, ["toString"])) === "{}"
+      );
+      check(
+        "and it cannot be made to store more voices than a table has",
+        Object.keys(
+          rm.cleanSpeakers(
+            Object.fromEntries(
+              Array.from({ length: 200 }, (_, i) => [`SPEAKER_${i}`, `n${i}`])
+            ),
+            Array.from({ length: 200 }, (_, i) => `SPEAKER_${i}`)
+          )
+        ).length === rm.MAX_SPEAKERS
+      );
+
+      // ---- where the audio is sent ----------------------------------
+      check(
+        "https is the only way audio leaves the browser",
+        rm.isUploadUrl("https://maps.example.com/recorder") &&
+          !rm.isUploadUrl("http://maps.example.com/recorder")
+      );
+      check(
+        "except on the machine the server is running on",
+        rm.isUploadUrl("http://localhost:8080") &&
+          rm.isUploadUrl("http://127.0.0.1:8080")
+      );
+      check(
+        "credentials in the URL are refused",
+        !rm.isUploadUrl("https://user:pass@maps.example.com/recorder")
+      );
+      check(
+        "and so is anything that is not a URL",
+        !rm.isUploadUrl("") &&
+          !rm.isUploadUrl("   ") &&
+          !rm.isUploadUrl(null) &&
+          !rm.isUploadUrl("maps.example.com") &&
+          !rm.isUploadUrl("ftp://maps.example.com")
+      );
+      check(
+        "a trailing slash on the configured URL does not double up",
+        rm.chunkUrl("https://h/recorder/", "abc", 3) ===
+          "https://h/recorder/chunk/abc/3" &&
+          rm.finishUrl("https://h/recorder///", "abc") ===
+            "https://h/recorder/finish/abc"
+      );
+      check(
+        "and the id is escaped rather than pasted into the path",
+        rm.chunkUrl("https://h", "a/b", 0) === "https://h/chunk/a%2Fb/0"
+      );
+    }
+
     return problems;
   },
 };

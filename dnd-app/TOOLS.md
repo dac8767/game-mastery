@@ -280,6 +280,65 @@ Note    Hidden NPCs never arrive for a player; secret and dmNotes
         arrive as null. Shaped server-side in npcs.listForCampaign.
 ```
 
+### recorder — Session Recorder
+```
+Owns    components/RecorderTool.tsx, components/recorderModel.ts,
+        components/useRecorder.ts
+        convex/recorder.ts
+        app/campaign/[campaignId]/recorder/
+        map-server/recorder/ (Dockerfile, server.py, worker.py)
+        map-server/RECORDER.md
+Tables  recordings, transcriptChunks
+Reads   convex/sessions.ts (api.sessions) — to link a recording to a
+        session in the log
+Branch  claude/tool-recorder
+Note    Touches the SHELL (a nav entry) and map-server/ (two compose
+        services, a Caddy route, three env vars), so a chat working on
+        it runs alone.
+```
+Record the night, transcribe it on the home server, summarize it.
+
+**The audio never enters Convex** and that is the whole shape of the
+tool. Free-tier file storage is a gigabyte and one session is about
+sixty megabytes, so the seventeenth would fail during a game — and
+nothing that takes four hours can run inside a Convex action anyway. It
+goes to the PowerEdge, beside the battle maps, which already has the
+disk and the tunnel. `audioKey` is therefore a filename on another
+machine, not a storage id, and a transcript can outlive its audio.
+
+Three trust boundaries, none of which TypeScript can see across:
+
+- The browser is given a **ticket**, never a secret: an HMAC over one
+  recording id and an expiry, minted in `startRecording`, verified by
+  `map-server/recorder/server.py`. It grants uploading and deleting one
+  recording, and stops working the same night.
+- The home server posts the transcript back through `convex/http.ts`,
+  authenticated by a **separate** shared secret. Those routes are all
+  POST on purpose: the ingest secret grants writing a transcript, never
+  reading one.
+- The status strings are written by `convex/recorder.ts` and drawn by
+  the screen from `RECORDER_STAGES`. The integrity guard fails if a
+  status is written that has no label.
+
+GM-only in the strongest sense in the app, To-Do included. A prep list
+is a spoiler; a transcript is the whole evening — the aside to one
+player while the others were getting food, the argument about a
+ruling, everything said believing the laptop was there for the battle
+map. There is no redacted version, so every function refuses a non-GM
+caller and the dm-visibility guard fails on `requireMember` appearing
+anywhere in `convex/recorder.ts`, or on any other module touching
+either table.
+
+Two of the three inputs come from outside this repo — WhisperX's
+segments and a model's JSON — so `components/recorderModel.ts` is
+written to trust none of it and is where the unit guard lives.
+`speakerName` is the `colorOf` lesson repeated: the map's keys are
+WhisperX's, so a tag of `"toString"` has to be a defined answer.
+
+The summary is the only paid step and is opt-in per recording. With no
+`ANTHROPIC_API_KEY` the tool still records, transcribes and reads back;
+`transcribed` is a resting state, not a failure.
+
 ### ribbon — The customizable toolbar
 ```
 Owns    components/RibbonBar.tsx, components/RibbonCustomize.tsx,

@@ -4,6 +4,8 @@
 # obsolete, which is a confusing first thing to see on a fresh install.
 # - cloudflared: outbound tunnel to Cloudflare (no router ports opened)
 # - caddy: static file server for the map library
+# - recorder-api: receives session audio from the browser, in slices
+# - recorder-worker: transcribes it with WhisperX and posts it to Convex
 #
 # Put TUNNEL_TOKEN=<your token> in a .env file next to this compose file.
 #
@@ -41,6 +43,45 @@ services:
       - caddy_data:/data
       - caddy_config:/config
 
+  # ---- the session recorder ---------------------------------------
+  #
+  # Two containers from one image. The endpoint has to answer while a
+  # session is being recorded; the worker is flat out for hours at a
+  # time. Together in one process, a transcription that falls over
+  # takes the uploads with it, in the middle of the game.
+  #
+  # Session audio goes on the media array beside the maps for the same
+  # reason the maps are there: /srv is a few gigabytes and four hours
+  # of a session is sixty megabytes, every fortnight, for ever.
+  recorder-api:
+    build: ./recorder
+    image: game-mastery-recorder:latest
+    container_name: maps-recorder-api
+    restart: unless-stopped
+    env_file: .env
+    networks:
+      - maps
+    volumes:
+      - /mnt/Media/game-mastery/sessions:/data/sessions
+
+  recorder-worker:
+    build: ./recorder
+    image: game-mastery-recorder:latest
+    container_name: maps-recorder-worker
+    restart: unless-stopped
+    command: ["python", "worker.py"]
+    env_file: .env
+    networks:
+      - maps
+    volumes:
+      - /mnt/Media/game-mastery/sessions:/data/sessions
+      # The model weights, which are gigabytes and are downloaded on
+      # first use. Without this volume every restart re-downloads
+      # large-v3 before it transcribes anything.
+      - recorder_models:/root/.cache
+    depends_on:
+      - recorder-api
+
 networks:
   maps:
     driver: bridge
@@ -48,3 +89,4 @@ networks:
 volumes:
   caddy_data:
   caddy_config:
+  recorder_models:

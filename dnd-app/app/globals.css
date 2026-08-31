@@ -10479,3 +10479,755 @@ button.cal-day:hover {
     flex-wrap: wrap;
   }
 }
+
+/* ---------- Session Recorder ----------
+ *
+ * Two states, and the screen is arranged for whichever one you are in.
+ *
+ * DURING a session the only question is whether the microphone is
+ * hearing the whole table, so the capture bar is the top of the screen
+ * and the level meter is a row of blocks big enough to read from the
+ * far end of it. A thin bar in a corner would be technically the same
+ * information and useless at the distance it has to be read from.
+ *
+ * AFTER one, the question is what happened. The notes come first and
+ * the transcript sits under them, because the transcript is four hours
+ * long and is the thing you fall back to rather than the thing you
+ * start with.
+ */
+
+.rec {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  /* Wider than the prep list's 56rem: a transcript line is a paragraph
+     of speech, and at 56rem four hours of them is a very long ribbon. */
+  max-width: 72rem;
+}
+
+/* ---- the capture bar ---- */
+
+.rec-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.8rem 0.9rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+/* Live, the whole bar takes the warning colour. Somebody walking past
+   the laptop should be able to tell the room is being recorded without
+   reading anything, because sometimes that person is a player who has
+   just remembered they are being recorded. */
+.rec-bar.is-live {
+  border-color: var(--bloodied);
+  box-shadow: 0 0 0 1px var(--bloodied) inset;
+}
+
+/* Stopped, but the last slices are still in this tab. Amber rather
+   than red: nothing has gone wrong yet, and nothing will as long as
+   the tab stays open — but closing it now is what loses the night. */
+.rec-bar.is-unsent {
+  border-color: var(--injured);
+}
+
+.rec-bar-main {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.rec-bar-mid {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.rec-go,
+.rec-stop {
+  flex: none;
+  padding: 0.7rem 1.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rec-go {
+  background: var(--bloodied);
+  border-color: var(--bloodied);
+  color: #fff;
+}
+
+.rec-stop {
+  background: var(--bg-inset);
+  color: var(--text);
+}
+
+.rec-go:disabled,
+.rec-stop:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.rec-title-field {
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.rec-clock {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.2rem;
+  color: var(--text);
+}
+
+.rec-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--bloodied);
+  animation: rec-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes rec-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.rec-size,
+.rec-pending {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+/* Waiting parts are the one number worth alarming about: it means the
+   upload has stalled and the audio is only in this tab's memory. */
+.rec-pending {
+  color: var(--injured);
+}
+
+/* ---- the level meter ---- */
+
+.rec-meter {
+  display: flex;
+  gap: 3px;
+  height: 1.1rem;
+  align-items: stretch;
+}
+
+.rec-seg {
+  flex: 1;
+  min-width: 3px;
+  border-radius: 2px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+}
+
+.rec-seg.is-lit {
+  background: var(--healthy);
+  border-color: var(--healthy);
+}
+
+/* The top few blocks are the clipping end. They only differ once lit,
+   so an idle meter is one flat colour rather than a row that looks
+   like something is already wrong. */
+.rec-seg.is-hot.is-lit {
+  background: var(--bloodied);
+  border-color: var(--bloodied);
+}
+
+.rec-device {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.rec-device select {
+  max-width: 13rem;
+  padding: 0.35rem 0.5rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.rec-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.rec-warn {
+  margin: 0;
+  padding: 0.45rem 0.6rem;
+  background: var(--accent-soft);
+  border-radius: 7px;
+  font-size: 0.85rem;
+  color: var(--injured);
+}
+
+/* ---- not set up yet ---- */
+
+.rec-setup {
+  max-width: 44rem;
+  padding: 1rem 1.1rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.rec-setup h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.rec-setup p {
+  margin: 0 0 0.6rem;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.rec-setup code {
+  padding: 0.05rem 0.3rem;
+  background: var(--bg-inset);
+  border-radius: 4px;
+  font-size: 0.85em;
+  color: var(--text);
+}
+
+/* ---- the list and the pane ---- */
+
+.rec-body {
+  display: grid;
+  grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
+  gap: 0.9rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.rec-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  overflow-y: auto;
+}
+
+.rec-list-row {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.55rem 0.65rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.rec-list-row:hover {
+  background: var(--bg-raised);
+}
+
+.rec-list-row.is-open {
+  background: var(--bg-raised);
+  border-color: var(--accent);
+}
+
+.rec-list-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.rec-list-facts {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.rec-chip {
+  align-self: flex-start;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.rec-chip.is-done {
+  border-color: var(--healthy);
+  color: var(--healthy);
+}
+
+.rec-chip.is-failed {
+  border-color: var(--bloodied);
+  color: var(--bloodied);
+}
+
+.rec-chip.is-recording {
+  border-color: var(--bloodied);
+  color: var(--bloodied);
+}
+
+.rec-pane {
+  min-width: 0;
+  overflow-y: auto;
+}
+
+/* ---- one recording ---- */
+
+.rec-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.rec-detail-title {
+  width: 100%;
+  padding: 0.3rem 0.4rem;
+  margin-left: -0.4rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--text);
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.rec-detail-title:hover,
+.rec-detail-title:focus {
+  background: var(--bg-inset);
+  border-color: var(--border);
+  outline: none;
+}
+
+.rec-detail-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.rec-detail-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.rec-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.rec-link select {
+  padding: 0.35rem 0.5rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.rec-danger {
+  padding: 0.35rem 0.7rem;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.rec-danger:hover,
+.rec-danger:focus {
+  border-color: var(--bloodied);
+  color: var(--bloodied);
+}
+
+/* ---- status ---- */
+
+.rec-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.6rem 0.7rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 8px;
+}
+
+.rec-status.is-done {
+  border-left-color: var(--healthy);
+}
+
+.rec-status.is-failed,
+.rec-status.is-unknown {
+  border-left-color: var(--bloodied);
+}
+
+.rec-status.is-transcribing,
+.rec-status.is-summarizing,
+.rec-status.is-queued,
+.rec-status.is-uploading {
+  border-left-color: var(--accent);
+}
+
+.rec-status-name {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.rec-status-note {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+
+.rec-status-error {
+  font-size: 0.82rem;
+  color: var(--bloodied);
+  word-break: break-word;
+}
+
+/* Five ticks for the five states between Stop and the notes. Not a
+   percentage bar: none of these steps has a knowable proportion, and a
+   bar that sat at 60% for two hours would be a lie told slowly. */
+.rec-rail {
+  display: flex;
+  gap: 3px;
+  margin-left: 0.3rem;
+}
+
+.rec-tick {
+  width: 1.1rem;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.rec-tick.is-past {
+  background: var(--accent);
+}
+
+.rec-tick.is-now {
+  background: var(--text);
+}
+
+.rec-spin {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  animation: rec-turn 0.9s linear infinite;
+}
+
+@keyframes rec-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---- the cast ---- */
+
+.rec-cast h3,
+.rec-summary h3,
+.rec-transcript h3 {
+  margin: 0 0 0.3rem;
+  font-size: 0.95rem;
+}
+
+/* The notes are a card and these two are not, which left them running
+   into each other down a long page. A rule above each is enough to
+   separate them without giving the transcript a box it would then
+   scroll inside. */
+.rec-cast,
+.rec-transcript {
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--border);
+}
+
+.rec-cast-note {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.rec-cast-rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.4rem;
+}
+
+.rec-cast-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+/* Just wide enough for "Speaker 12" and a percentage under it. It was
+   7.5rem, which left a visible gutter between the label and the field
+   it belongs to and made the two read as separate columns rather than
+   one row. */
+.rec-cast-tag {
+  flex: none;
+  width: 5.5rem;
+  display: flex;
+  flex-direction: column;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.rec-cast-share {
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.rec-cast-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.3rem 0.45rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+/* ---- the notes ---- */
+
+.rec-summary {
+  padding: 0.85rem 0.95rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.rec-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.4rem;
+}
+
+.rec-summary-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.rec-ghost {
+  padding: 0.3rem 0.65rem;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.rec-ghost:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.rec-ghost:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.rec-sec {
+  margin-top: 0.7rem;
+}
+
+.rec-sec h4 {
+  margin: 0 0 0.25rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.rec-sec p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.rec-sec ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+/* Said out loud on every generated summary, and deliberately not
+   dismissible. These get pasted into a campaign's history and read
+   back years later as what happened; the line saying a machine wrote
+   them has to travel with them. */
+.rec-credit {
+  margin: 0.8rem 0 0;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.rec-empty {
+  margin: 0;
+  font-size: 0.87rem;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+
+.rec-empty code {
+  padding: 0.05rem 0.3rem;
+  background: var(--bg-inset);
+  border-radius: 4px;
+  color: var(--text);
+}
+
+.rec-empty-all {
+  max-width: 34rem;
+  padding: 1rem;
+  background: var(--bg-raised);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+
+/* ---- the transcript ---- */
+
+.rec-transcript-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.rec-search {
+  flex: 1;
+  min-width: 10rem;
+  padding: 0.35rem 0.55rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.rec-count {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.rec-turns {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Speaker and timecode in a fixed column on the left, the words in the
+   rest. A transcript is read by scanning down the names, so they have
+   to line up; interleaving them with the text turns four hours of it
+   into a ragged wall. */
+.rec-turn {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  gap: 0.7rem;
+  padding: 0.4rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.rec-turn-meta {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.rec-turn-who {
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.rec-turn-at {
+  font-variant-numeric: tabular-nums;
+}
+
+.rec-turn-text {
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+/* Stacked, the pane goes under the list and the transcript's left
+   column collapses — 8.5rem of name beside a phone-width paragraph
+   leaves the words in a gutter. */
+@media (max-width: 900px) {
+  .rec-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rec-bar-main {
+    flex-wrap: wrap;
+  }
+
+  .rec-turn {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.15rem;
+  }
+
+  .rec-turn-meta {
+    flex-direction: row;
+    gap: 0.5rem;
+  }
+}

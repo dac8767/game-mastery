@@ -8,7 +8,7 @@
  * the app. Nothing else in the toolchain checks it.
  */
 
-import { read, requirePattern, stripComments } from "./lib.mjs";
+import { read, requirePattern, sourceFiles, stripComments } from "./lib.mjs";
 
 export const dmVisibility = {
   name: "dm-visibility",
@@ -848,6 +848,161 @@ export const dmVisibility = {
         "dice.clearRolls is not GM-gated — one player could wipe the " +
           "table's shared record of a roll they did not like"
       );
+    }
+
+    // ---- convex/recorder.ts ----------------------------------------
+    //
+    // The same rule as the prep list, and for a stronger reason. A
+    // transcript of a session is the whole evening: the aside to one
+    // player while the others were getting food, the argument about a
+    // ruling, whatever anybody said believing the laptop was there for
+    // the battle map. There is no redacted version of that, so every
+    // function refuses a non-GM caller rather than filtering rows.
+    //
+    // Two shapes of hole are specific to this module and neither is
+    // visible to TypeScript: an ingest mutation made public (the home
+    // server's routes have no user behind them, so those functions
+    // check nothing themselves), and an ACTION whose authority lives
+    // in the internal function it calls.
+    {
+      const rec = read("convex", "recorder.ts");
+      const fnBody = (name) => {
+        const at = rec.indexOf(`export const ${name} = `);
+        if (at === -1) throw new Error(`no ${name} in convex/recorder.ts`);
+        const next = rec.indexOf("\nexport const ", at + 1);
+        return rec.slice(at, next === -1 ? undefined : next);
+      };
+
+      // Campaign-addressed: the argument names the campaign, so the
+      // check is against the argument.
+      for (const fn of ["getConfig", "listRecordings", "getRecording"]) {
+        if (!/await requireDm\(ctx, args\.campaignId\)/.test(fnBody(fn))) {
+          problems.push(`recorder.${fn} is not gated on requireDm`);
+        }
+      }
+
+      // Row-addressed: authority comes from the ROW's campaign, never
+      // from the campaignId in the arguments. Trusting that argument
+      // would make somebody else's recording id plus your own campaign
+      // enough to read their session.
+      for (const fn of [
+        "finishUpload",
+        "markFailed",
+        "rename",
+        "setSpeakers",
+        "linkSession",
+        "requestSummary",
+      ]) {
+        if (!/await requireDm\(ctx, rec\.campaignId\)/.test(fnBody(fn))) {
+          problems.push(
+            `recorder.${fn} does not requireDm against the row's own ` +
+              "campaign — a recording id would be all a caller needs"
+          );
+        }
+      }
+      // getRecording takes both, so it has to reject the mismatch
+      // rather than serve one campaign's recording to another's GM.
+      if (!/rec\.campaignId !== args\.campaignId/.test(fnBody("getRecording"))) {
+        problems.push(
+          "recorder.getRecording does not check the row belongs to the " +
+            "campaign asked for"
+        );
+      }
+
+      // The two public ACTIONS cannot call requireDm themselves — an
+      // action has no database — so each one's authority lives in an
+      // internal function, and that function is where it is checked.
+      for (const [action, gate] of [
+        ["startRecording", "create"],
+        ["deleteRecording", "beforeDelete"],
+      ]) {
+        // \b on the end, because "create" is a prefix of every name a
+        // refactor would give the ungated version of it —
+        // createUnchecked, createRow — and an unanchored match would
+        // find the new call and report the old check as still there.
+        if (
+          !new RegExp(`internal\\.recorder\\.${gate}\\b`).test(fnBody(action))
+        ) {
+          problems.push(
+            `recorder.${action} no longer goes through ${gate}, which is ` +
+              "where its GM check lives"
+          );
+        }
+      }
+      for (const gate of ["create", "beforeDelete"]) {
+        if (!/await requireDm\(ctx, (args|rec)\.campaignId\)/.test(fnBody(gate))) {
+          problems.push(
+            `recorder.${gate} does not requireDm, so the action that calls ` +
+              "it is doing no check at all — any signed-in user could open " +
+              "a recording in any campaign"
+          );
+        }
+      }
+
+      // Everything the home server's HTTP routes reach, plus the
+      // summarizer, must stay internal. These functions check nothing
+      // themselves — the route checks the shared secret — so one of
+      // them made public is a transcript anyone can write, or read.
+      for (const fn of [
+        "create",
+        "removeRows",
+        "beforeDelete",
+        "ingestBegin",
+        "ingestTranscript",
+        "ingestFailed",
+        "forIngest",
+        "saveSummary",
+        "summaryFailed",
+        "transcriptFor",
+        "summarize",
+      ]) {
+        if (
+          !new RegExp(
+            `export const ${fn} = internal(Mutation|Query|Action)\\(`
+          ).test(rec)
+        ) {
+          problems.push(
+            `recorder.${fn} is not declared internal. It is reachable from ` +
+              "the home server's routes or from the scheduler, neither of " +
+              "which has a user behind it, so it does no check of its own"
+          );
+        }
+      }
+
+      if (/requireMember/.test(rec)) {
+        problems.push(
+          "convex/recorder.ts uses requireMember — a session transcript has " +
+            "no player-facing version, so a non-GM caller is refused rather " +
+            "than served a filtered one"
+        );
+      }
+
+      // And nothing else in the backend touches the two tables. A
+      // future tool wanting "what did we decide last session" is
+      // exactly the change that would add a player-readable path to a
+      // transcript without anyone thinking of it as one.
+      for (const [file, src] of sourceFiles("convex")) {
+        // schema.ts DEFINES them, campaigns.ts sweeps them on a purge,
+        // and recorder.ts owns them. Everything else is the check.
+        if (
+          file.endsWith("recorder.ts") ||
+          file.endsWith("campaigns.ts") ||
+          file.endsWith("schema.ts") ||
+          file.includes("_generated")
+        ) {
+          continue;
+        }
+        for (const table of ["transcriptChunks", '"recordings"']) {
+          if (src.includes(table)) {
+            problems.push(
+              `${file} reads ${table.replace(/"/g, "")}. Only convex/recorder.ts ` +
+                "may, plus the campaign purge — a transcript reached through " +
+                "another module is a transcript reached without this file's " +
+                "checks"
+            );
+          }
+        }
+      }
     }
 
     return problems;
