@@ -345,10 +345,18 @@ export default defineSchema({
    * A session's notes, as notebook boxes on one of two sides.
    *
    * The same shape as notebookBoxes and drawn by the same canvas, with
-   * one field the notebook has no use for: `side`. The player side is
-   * the shared account of the night; the GM side is what the GM knew
-   * and the table did not, and it must never leave the server for a
-   * player — see sessions.getNotes.
+   * one field the notebook has no use for: `side`, which is the TAB
+   * this box is on. Three tabs are built in — the shared player page,
+   * the GM's notes, and the GM's prep — and a session may carry as many
+   * more as anybody makes; see sessionTabs below.
+   *
+   * A GM-only tab must never leave the server for a player — see
+   * sessions.getNotes.
+   *
+   * Still called `side` because that is what is written in every row
+   * already imported. Renaming the column would be a migration over
+   * Moonbrook's whole history for a word, and the word is not wrong: a
+   * tab is which side of the screen you are writing on.
    *
    * A separate table rather than a `side` bolted onto notebookBoxes,
    * because the two have different OWNERS. A notebook box belongs to one
@@ -359,7 +367,17 @@ export default defineSchema({
    */
   sessionBoxes: defineTable({
     sessionId: v.id("sessions"),
-    side: v.union(v.literal("player"), v.literal("dm")),
+    /**
+     * Which tab: a built-in key ("player", "dm", "prep") or the id of a
+     * sessionTabs row, as a string.
+     *
+     * A string rather than a union, because the set is no longer
+     * closed. What keeps a made-up value out is not this validator but
+     * sessions.resolveTab, which every write goes through and which
+     * answers with the tab's VISIBILITY — a check a literal union never
+     * made in the first place.
+     */
+    side: v.string(),
     type: v.union(v.literal("text"), v.literal("image"), v.literal("table")),
 
     x: v.number(),
@@ -384,10 +402,10 @@ export default defineSchema({
     shading: v.optional(v.string()),
   })
     .index("by_session", ["sessionId"])
-    // So a player's request can ask for the player side ALONE. Fetching
-    // both and dropping one would mean the GM's notes were read out of
-    // the database on a player's behalf, one forgotten filter away from
-    // the wire.
+    // So a player's request can ask for ONE TAB at a time, and only for
+    // the tabs they may see. Fetching the session's boxes and dropping
+    // the GM's would mean those were read out of the database on a
+    // player's behalf, one forgotten filter away from the wire.
     .index("by_session_side", ["sessionId", "side"]),
 
   /**
@@ -401,7 +419,7 @@ export default defineSchema({
    * exercise.
    *
    * Its own table rather than two more fields on `sessions`, for the
-   * one reason the boxes are their own table too: the GM side must be
+   * one reason the boxes are their own table too: a GM-only tab must be
    * withheld by NOT BEING QUERIED. Fields on the session row would be
    * read into memory on a player's request — the row is fetched to
    * check the campaign — and the whole guarantee would drop from "the
@@ -410,11 +428,50 @@ export default defineSchema({
    */
   sessionPages: defineTable({
     sessionId: v.id("sessions"),
-    side: v.union(v.literal("player"), v.literal("dm")),
+    /** Which tab. Same keys as sessionBoxes.side. */
+    side: v.string(),
     html: v.string(),
   })
     .index("by_session", ["sessionId"])
     .index("by_session_side", ["sessionId", "side"]),
+
+  /**
+   * The tabs a session's notes are kept on, past the three built in.
+   *
+   * Asked for as one sentence: a DM Prep tab only the DM can see, and
+   * new tabs anybody can make. The first is a built-in — it is on every
+   * session whether or not anyone has written on it, so it needs no row
+   * — and the rest are these.
+   *
+   * `dmOnly` is the whole point of the row and the reason for the
+   * second index. A hidden tab's TITLE is a secret like its contents:
+   * "Who the traitor is" gives the game away with no boxes on it at
+   * all. So a player's request does not read the hidden rows and then
+   * drop them — `by_session_dmOnly` asks for dmOnly === false and the
+   * hidden titles are never fetched. Same rule the boxes have always
+   * run on, one level up.
+   *
+   * `createdBy` is who may rename and delete it, alongside the DM. A
+   * player who makes a tab for the party's shopping list owns that tab;
+   * they do not own the DM's.
+   *
+   * A tab is not a document with a body. Its boxes and its page live in
+   * sessionBoxes and sessionPages keyed by `side`, exactly as the
+   * built-in tabs' do, so nothing about drawing a page had to learn
+   * that custom tabs exist.
+   */
+  sessionTabs: defineTable({
+    sessionId: v.id("sessions"),
+    title: v.string(),
+    dmOnly: v.boolean(),
+    /** Position after the built-ins. Ties break by creation time. */
+    order: v.number(),
+    createdBy: v.id("users"),
+  })
+    .index("by_session", ["sessionId"])
+    // The narrow one: a non-DM request never asks for the hidden rows,
+    // so it never holds a hidden tab's title.
+    .index("by_session_dmOnly", ["sessionId", "dmOnly"]),
 
   /**
    * What a group IS, as opposed to who is in it.

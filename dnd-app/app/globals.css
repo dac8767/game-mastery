@@ -8776,14 +8776,21 @@ button.cal-day:hover {
 /* The two pages of notes, side by side, GM on the left. Stacked below
    the width where two canvases stop being usable — a 14rem-wide
    notebook page is not a page. */
-/* Two names, one of them current. They replaced a side-by-side split
+/* The names, one of them current. They replaced a side-by-side split
    that made both pages narrow to show a second one you were usually
    not looking at — and left no answer to which page a new box went on.
    The strip's own bottom rule runs the full width; the open tab breaks
    it, which is the whole trick that makes a tab read as attached to
-   what is under it. */
+   what is under it.
+
+   Wrapping, because the strip is no longer two buttons wide: three
+   built-ins and up to eight tabs of somebody's own do not fit one line
+   on a laptop, and a strip that scrolled sideways would hide the tab
+   you were looking for behind the tab you are on. */
 .session-tabs {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.25rem;
   border-bottom: 1px solid var(--border);
 }
@@ -8818,6 +8825,72 @@ button.cal-day:hover {
      surface rather than a tab floating above a line. */
   position: relative;
   z-index: 1;
+}
+
+/* The tabs themselves are the tablist; the controls beside them are
+   not. Out of the layout entirely so the strip stays one flex row. */
+.session-tab-strip {
+  display: contents;
+}
+
+/* The one that makes a tab rather than opens one. Square, so it reads
+   as a control and not as an unnamed page. */
+.session-tab-add {
+  align-self: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  margin-bottom: -1px;
+  padding: 0;
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.session-tab-add:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  border-style: solid;
+}
+
+/* Pushed to the far end, away from the tabs themselves: they act on
+   the tab that is open, and sitting beside it would read as belonging
+   to whichever tab they happened to be next to. */
+.session-tab-actions {
+  display: flex;
+  gap: 0.6rem;
+  margin-left: auto;
+  padding-bottom: 0.3rem;
+}
+
+/* Naming a tab — the same row whether it is a new one or a rename. */
+.session-tab-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.session-tab-form .detail-input {
+  flex: 1 1 12rem;
+  max-width: 20rem;
+}
+
+.session-tab-secret {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.session-tab-confirm {
+  margin-top: 0.6rem;
 }
 
 .session-notes .nb-canvas {

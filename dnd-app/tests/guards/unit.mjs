@@ -9362,6 +9362,115 @@ export const unit = {
       );
     }
 
+    // ---- a session's tabs, away from the database ------------------
+    // Which tabs a person is offered, in what order, and what a tab key
+    // means. The order and the dmOnly flags are held by the integrity
+    // guard; what is here is the behaviour around the edges — a name
+    // that is only spaces, a tab deleted while you were on it, a page
+    // id that is really a box id.
+    {
+      const st = await import(
+        pathToFileURL(
+          join(compile("components/sessionTabs.ts"), "sessionTabs.js")
+        ).href
+      );
+
+      const tab = (id, over = {}) => ({
+        _id: id,
+        _creationTime: 1,
+        title: id,
+        dmOnly: false,
+        order: 1,
+        ...over,
+      });
+
+      check(
+        "a player is offered the player page and no DM tab",
+        (() => {
+          const keys = st.orderTabs(false, []).map((t) => t.key);
+          return keys.length === 1 && keys[0] === "player";
+        })()
+      );
+      check(
+        "a DM is offered all three, DM first",
+        JSON.stringify(st.orderTabs(true, []).map((t) => t.key)) ===
+          JSON.stringify(["dm", "prep", "player"])
+      );
+      check(
+        "a player's own tabs come after the page they share",
+        JSON.stringify(
+          st.orderTabs(false, [tab("b", { order: 2 }), tab("a", { order: 1 })])
+            .map((t) => t.key)
+        ) === JSON.stringify(["player", "a", "b"])
+      );
+      check(
+        "two tabs made at the same position fall back to which came first",
+        JSON.stringify(
+          st
+            .orderTabs(false, [
+              tab("late", { order: 1, _creationTime: 99 }),
+              tab("early", { order: 1, _creationTime: 2 }),
+            ])
+            .map((t) => t.key)
+        ) === JSON.stringify(["player", "early", "late"])
+      );
+      // orderTabs takes the caller's OWN rows; a hidden tab reaching it
+      // would mean the query already went wrong. It is not a filter and
+      // is not asked to be one — the DM-only BUILT-INS are what it
+      // drops.
+      check(
+        "the built-ins it drops are the DM's own",
+        st
+          .orderTabs(false, [])
+          .every((t) => t.dmOnly === false)
+      );
+
+      check(
+        "a tab name is one line, collapsed and trimmed",
+        st.tabTitle("  Loot   and   levels ") === "Loot and levels"
+      );
+      check(
+        "a name of nothing but spaces is no name",
+        !st.isValidTitle("   ") && !st.isValidTitle("") && !st.isValidTitle(null)
+      );
+      check(
+        "a pasted paragraph becomes a tab rather than an error",
+        st.tabTitle("x".repeat(200)).length === st.MAX_TAB_TITLE &&
+          st.isValidTitle("x".repeat(200))
+      );
+
+      const three = st.orderTabs(true, [tab("mine")]);
+      check(
+        "the tab you were on is the tab you stay on",
+        st.activeTabKey(three, "mine") === "mine"
+      );
+      check(
+        "a tab deleted under you falls back to the first, not to nothing",
+        st.activeTabKey(three, "gone") === "dm"
+      );
+      check(
+        "and with nothing to show, the player page is the answer",
+        st.activeTabKey([], "dm") === "player"
+      );
+
+      check(
+        "a page id round-trips to its tab",
+        st.pageTabKey(st.pageBoxId("prep")) === "prep" &&
+          st.pageTabKey(st.pageBoxId("k17ezhmgzwdzfb0pr0ctahsgrx8cqn8a")) ===
+            "k17ezhmgzwdzfb0pr0ctahsgrx8cqn8a"
+      );
+      check(
+        "a real box id is not a page",
+        st.pageTabKey("k17ezhmgzwdzfb0pr0ctahsgrx8cqn8a") === null
+      );
+      check(
+        "and neither is a prefix with no tab after it",
+        st.pageTabKey("page:") === null &&
+          st.pageTabKey(undefined) === null &&
+          st.pageTabKey(null) === null
+      );
+    }
+
     return problems;
   },
 };

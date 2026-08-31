@@ -9,7 +9,14 @@ import { BoxCanvas, BoxTools, NewBox } from "@/components/BoxCanvas";
 import { NoteLinkPicker } from "@/components/NoteLinkPicker";
 import { NoteMentions } from "@/components/NoteMentions";
 import { linkTargets } from "@/components/noteLinks";
-import { NoteSide, pageBoxId, pageSide } from "@/components/notePage";
+import {
+  DEFAULT_TAB,
+  MAX_TAB_TITLE,
+  TabKey,
+  activeTabKey,
+  pageBoxId,
+  pageTabKey,
+} from "@/components/sessionTabs";
 import { ColumnDef } from "@/components/npcColumns";
 import {
   Leveling,
@@ -34,23 +41,30 @@ import {
  * canvas the Notebook tool draws, because it IS that canvas: BoxCanvas
  * was lifted out of NotebookTool for exactly this.
  *
- * Two sides, and they are not the same kind of thing:
+ * The notes are on TABS, three of them built in and as many more as
+ * anybody makes:
  *
+ *   DM notes       what you knew and the table did not.
+ *   DM Prep        what you mean to run. Also the DM's, and separate
+ *                  because prep is written before the night and notes
+ *                  during it.
  *   Player notes   the shared account of the night, which any member
  *                  may write. The same rule the NPC record's player
  *                  notes run on.
- *   GM notes       what you knew and the table did not. The GM's alone,
- *                  and withheld by the SERVER — sessions.getNotes never
- *                  queries the GM side for a non-GM caller, so there is
- *                  no version of this screen, and no devtools tab, in
- *                  which a player has that text.
  *
- * They are TABS rather than two panes side by side. A GM reads one at
- * a time — you are either writing what happened or writing what you
- * are not telling them — and the split made both halves narrow to show
- * a second page that was usually not the one being looked at. It also
- * answers the question one shared toolbar could not: which page a new
- * box lands on is the page you are looking at.
+ * The GM-only ones are withheld by the SERVER — sessions.getNotes never
+ * queries them for a non-GM caller, not even for their titles, so there
+ * is no version of this screen, and no devtools tab, in which a player
+ * has that text. This component draws the tabs it was SENT; it has no
+ * list of its own to filter, which is why there is no `isDm &&` on the
+ * strip below.
+ *
+ * Tabs rather than panes side by side. A GM reads one at a time — you
+ * are either writing what happened or writing what you are not telling
+ * them — and the split made both halves narrow to show a second page
+ * that was usually not the one being looked at. It also answers the
+ * question one shared toolbar could not: which page a new box lands on
+ * is the page you are looking at.
  *
  * The format toolbar is mounted once, here, rather than inside each
  * canvas. notebookFormat holds one saver and one tracked selection for
@@ -138,14 +152,34 @@ export function SessionDetail({
   const deleteBox = useMutation(api.sessions.deleteBox);
   const setBody = useMutation(api.sessions.setBody);
   const generateUploadUrl = useMutation(api.sessions.generateUploadUrl);
+  const createTab = useMutation(api.sessions.createTab);
+  const renameTab = useMutation(api.sessions.renameTab);
+  const deleteTab = useMutation(api.sessions.deleteTab);
 
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  /* Which page is open. The GM's own first — it is the one they are
+  /* Which tab is open — as a WANT, not as an answer. What is actually
+     shown is settled against the tabs the server sent, so a tab deleted
+     out from under you falls back to the first rather than leaving the
+     canvas keyed to a page nobody can read.
+
+     The GM's own is the want to start with: it is the one they are
      writing during a session, and the player page is the one they read
-     back afterwards. A player never sees the tabs at all. */
-  const [tab, setTab] = useState<NoteSide>("dm");
+     back afterwards. A player is not sent it and lands on their own. */
+  const [tab, setTab] = useState<TabKey>(DEFAULT_TAB);
+
+  /* Making a tab, renaming one, and the confirm before deleting one.
+     Three narrow states rather than one mode enum: they are mutually
+     exclusive on screen but not in meaning, and a mode called "adding"
+     that also has to remember which tab is being renamed is a mode that
+     will one day be both. */
+  const [adding, setAdding] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newDmOnly, setNewDmOnly] = useState(false);
+  const [renaming, setRenaming] = useState<TabKey | null>(null);
+  const [renameText, setRenameText] = useState("");
+  const [confirmTab, setConfirmTab] = useState<TabKey | null>(null);
 
   const run = useCallback(async (fn: () => Promise<unknown>) => {
     try {
@@ -176,7 +210,7 @@ export function SessionDetail({
   useEffect(
     () =>
       registerScrapbookSaver((boxId, html) => {
-        const side = pageSide(boxId);
+        const side = pageTabKey(boxId);
         void run(() =>
           side
             ? setBody({ sessionId: session._id, side, html })
@@ -187,7 +221,7 @@ export function SessionDetail({
   );
 
   const uploadImage = async (
-    side: "player" | "dm",
+    side: TabKey,
     file: File
   ): Promise<string | null> => {
     try {
@@ -207,7 +241,7 @@ export function SessionDetail({
     }
   };
 
-  const canvasProps = (side: "player" | "dm") => ({
+  const canvasProps = (side: TabKey) => ({
     onAdd: (box: NewBox) =>
       void run(() =>
         addBox({
@@ -227,21 +261,20 @@ export function SessionDetail({
     onFollowLink: (href: string) => router.push(href),
   });
 
-  /* Whether there IS a GM page to show. Rendered only when the SERVER
-     sent one: a player's request never queries the GM side, so `dm`
-     comes back null rather than empty — and an empty page would say
-     "the GM has not written anything", which is a different claim from
-     "this is not yours to see". */
-  const hasDm = notes?.dm !== null && notes?.dm !== undefined;
-
   /**
    * Which page you are on — and so which page a new box lands on.
    *
    * The visible tab, which is the only answer that needs no explaining.
    * It was "whichever side you are" before, which meant a GM had no way
    * to put a picture on the player page at all.
+   *
+   * Settled against the tabs the SERVER sent, so the want above cannot
+   * outlive the tab it names. A player is sent no DM tab and cannot
+   * land on one by any state this component holds.
    */
-  const side: NoteSide = hasDm && tab === "dm" ? "dm" : "player";
+  const tabs = notes?.tabs ?? [];
+  const side: TabKey = activeTabKey(tabs, tab);
+  const current = tabs.find((t) => t.key === side) ?? null;
 
   const title = `Session ${session.number}`;
 
@@ -333,35 +366,175 @@ export function SessionDetail({
         </section>
 
         <section
-          className={`session-notes${side === "dm" ? " dm-notes" : ""}`}
+          /* The red edge follows the TAB's visibility, not its name:
+             DM Prep and a hidden tab somebody made are as much "not for
+             the table" as DM notes, and a page that looks identical to
+             the shared one is a page you will paste the wrong thing
+             into. */
+          className={`session-notes${current?.dmOnly ? " dm-notes" : ""}`}
         >
-          {/* The tabs ARE the heading — two names, one of them current
+          {/* The tabs ARE the heading — the names, one of them current
               — so there is no separate title above them repeating
-              whichever is open. A player gets the plain heading, since
-              a tab strip of one is a label wearing a border. */}
-          {hasDm ? (
-            <div className="session-tabs" role="tablist">
+              whichever is open.
+
+              Drawn from what the server sent and nothing else. A tab
+              this person may not see is not in the list, so there is no
+              `dmOnly &&` here to get wrong, and the DM tag on the ones
+              that are hidden is a reminder to the DM rather than a
+              gate. */}
+          {notes && tabs.length > 0 && (
+            <div className="session-tabs">
+              {/* The tablist holds tabs and nothing else — the add
+                  button and the rename/delete pair are not pages you
+                  can switch to. `display: contents` keeps it out of the
+                  layout, so the strip is still one flex row and the
+                  open tab still breaks the rule underneath it. */}
+              <div className="session-tab-strip" role="tablist">
+                {tabs.map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={t.key === side}
+                    className={`session-tab${t.key === side ? " on" : ""}`}
+                    onClick={() => {
+                      setTab(t.key);
+                      setRenaming(null);
+                      setConfirmTab(null);
+                    }}
+                  >
+                    {t.title}
+                    {t.dmOnly && <span className="dm-tag">DM</span>}
+                  </button>
+                ))}
+              </div>
+
+              {/* Where a new tab goes is where the last one is, which
+                  is the one place people already look for it. */}
               <button
                 type="button"
-                role="tab"
-                aria-selected={tab === "dm"}
-                className={`session-tab${tab === "dm" ? " on" : ""}`}
-                onClick={() => setTab("dm")}
+                className="session-tab-add"
+                title="Add a tab"
+                aria-label="Add a tab"
+                onClick={() => {
+                  setAdding(true);
+                  setNewTitle("");
+                  setNewDmOnly(false);
+                  setRenaming(null);
+                  setConfirmTab(null);
+                }}
               >
-                GM notes <span className="dm-tag">GM</span>
+                +
               </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tab === "player"}
-                className={`session-tab${tab === "player" ? " on" : ""}`}
-                onClick={() => setTab("player")}
-              >
-                Player notes
-              </button>
+
+              {/* Only for a tab that is somebody's to change: the
+                  built-ins are nobody's, and a tab a player made is
+                  theirs and the DM's. The server decides which, and
+                  sends the answer with the tab. */}
+              {current?.canManage && (
+                <span className="session-tab-actions">
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => {
+                      setRenaming(side);
+                      setRenameText(current.title);
+                      setAdding(false);
+                      setConfirmTab(null);
+                    }}
+                  >
+                    Rename
+                  </button>
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => {
+                      setConfirmTab(side);
+                      setAdding(false);
+                      setRenaming(null);
+                    }}
+                  >
+                    Delete tab
+                  </button>
+                </span>
+              )}
             </div>
-          ) : (
-            <h3 className="group-h">Player notes</h3>
+          )}
+
+          {adding && (
+            <TabNameForm
+              label="Name this tab"
+              value={newTitle}
+              onChange={setNewTitle}
+              secret={notes?.isDm ? newDmOnly : null}
+              onSecret={setNewDmOnly}
+              submitLabel="Add tab"
+              onCancel={() => setAdding(false)}
+              onSubmit={() =>
+                void run(async () => {
+                  const key = await createTab({
+                    sessionId: session._id,
+                    title: newTitle,
+                    dmOnly: newDmOnly,
+                  });
+                  setAdding(false);
+                  // Onto the tab you just made, because you made it to
+                  // write on it.
+                  setTab(key);
+                })
+              }
+            />
+          )}
+
+          {renaming !== null && (
+            <TabNameForm
+              label="Rename this tab"
+              value={renameText}
+              onChange={setRenameText}
+              secret={null}
+              submitLabel="Rename"
+              onCancel={() => setRenaming(null)}
+              onSubmit={() =>
+                void run(async () => {
+                  await renameTab({
+                    tabId: renaming as Id<"sessionTabs">,
+                    title: renameText,
+                  });
+                  setRenaming(null);
+                })
+              }
+            />
+          )}
+
+          {confirmTab !== null && (
+            <p className="record-confirm session-tab-confirm">
+              <span className="settings-note">
+                Delete “{current?.title}” and everything written on it?
+              </span>
+              <button
+                type="button"
+                className="npc-btn"
+                onClick={() => setConfirmTab(null)}
+              >
+                Keep
+              </button>
+              <button
+                type="button"
+                className="npc-btn danger"
+                onClick={() =>
+                  void run(async () => {
+                    await deleteTab({ tabId: confirmTab as Id<"sessionTabs"> });
+                    setConfirmTab(null);
+                    // Back to the first tab, which activeTabKey would do
+                    // anyway — said here too so the want does not sit
+                    // pointing at a tab that is gone.
+                    setTab(DEFAULT_TAB);
+                  })
+                }
+              >
+                Delete
+              </button>
+            </p>
           )}
 
           {/* Under the tabs rather than above them: it acts on the page
@@ -412,13 +585,12 @@ export function SessionDetail({
                gets saved over the right one. */
             <BoxCanvas
               key={side}
-              boxes={(side === "dm" ? notes.dm : notes.player) ?? []}
+              boxes={current?.boxes ?? []}
               canEdit
               tools="elsewhere"
               page={{
                 id: pageBoxId(side),
-                html:
-                  (side === "dm" ? notes.dmBody : notes.playerBody) ?? "",
+                html: current?.body ?? "",
                 onChange: (html) =>
                   void run(() =>
                     setBody({ sessionId: session._id, side, html })
@@ -430,6 +602,89 @@ export function SessionDetail({
         </section>
       </div>
     </section>
+  );
+}
+
+/**
+ * Naming a tab — the one form, used to add and to rename.
+ *
+ * Two call sites and one component, because they are the same three
+ * controls with different words on them, and the interesting behaviour
+ * is behaviour neither would get by being written out twice: Enter
+ * submits, Escape backs out, and the field takes focus so a click on
+ * "Add a tab" is followed by typing rather than by another click.
+ *
+ * `secret` is null where the choice does not exist — renaming never
+ * changes who can see a tab, and a player is not offered a hidden one
+ * at all (the server refuses it, and an option that is always refused
+ * is not an option).
+ */
+function TabNameForm({
+  label,
+  value,
+  onChange,
+  secret,
+  onSecret,
+  submitLabel,
+  onSubmit,
+  onCancel,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  secret: boolean | null;
+  onSecret?: (v: boolean) => void;
+  submitLabel: string;
+  onSubmit: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <form
+      className="session-tab-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (value.trim() === "") return;
+        onSubmit();
+      }}
+    >
+      <input
+        autoFocus
+        className="detail-input"
+        value={value}
+        placeholder={label}
+        aria-label={label}
+        maxLength={MAX_TAB_TITLE}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            onCancel();
+          }
+        }}
+      />
+
+      {secret !== null && (
+        <label className="session-tab-secret">
+          <input
+            type="checkbox"
+            checked={secret}
+            onChange={(e) => onSecret?.(e.target.checked)}
+          />
+          Only I can see this
+        </label>
+      )}
+
+      <button
+        type="submit"
+        className="npc-btn primary"
+        disabled={value.trim() === ""}
+      >
+        {submitLabel}
+      </button>
+      <button type="button" className="npc-btn" onClick={onCancel}>
+        Cancel
+      </button>
+    </form>
   );
 }
 

@@ -323,31 +323,58 @@ export const integrity = {
       }
 
       // Tabs, GM first — which is the way round it was asked for and is
-      // not otherwise recoverable: both tabs are the same markup with
-      // different props, so swapping them is a silent change that still
-      // renders perfectly. They replaced a side-by-side split.
+      // not otherwise recoverable: every tab is now the same markup
+      // over a different row, so a reordering is a silent change that
+      // still renders perfectly. They replaced a side-by-side split.
+      //
+      // The order lives in BUILTIN_TABS rather than in the markup, so
+      // that is where it is checked. The strip itself is a map over
+      // whatever the server sent, which is the property the next check
+      // holds: no tab may be filtered back in on the client.
+      const tabsSrc = read("components", "sessionTabs.ts");
+      const builtins = [
+        ...stripComments(tabsSrc).matchAll(/key: "(\w+)", title: "([^"]+)"/g),
+      ].map((m) => ({ key: m[1], title: m[2] }));
+      if (builtins.length === 0) {
+        throw new Error("read no built-in tabs out of sessionTabs.ts");
+      }
+      for (const [at, key, title] of [
+        [0, "dm", "GM notes"],
+        [1, "prep", "GM Prep"],
+        [2, "player", "Player notes"],
+      ]) {
+        if (builtins[at]?.key !== key || builtins[at]?.title !== title) {
+          problems.push(
+            `BUILTIN_TABS[${at}] is not the "${title}" tab — the GM's own ` +
+              "tabs come first, and Prep sits beside GM notes rather " +
+              "than after the page the players share"
+          );
+        }
+      }
+      // Every GM tab is marked as one. A built-in that lost its dmOnly
+      // would be sent to players by getNotes without another word.
+      const dmOnlyLine = /key: "(dm|prep)", title: "[^"]+", dmOnly: true/g;
+      if ([...stripComments(tabsSrc).matchAll(dmOnlyLine)].length !== 2) {
+        problems.push(
+          "GM notes and GM Prep are not both marked dmOnly — a built-in " +
+            "that is not marked is a tab getNotes hands to players"
+        );
+      }
+
       const tabs = detailSrc.indexOf('className="session-tabs"');
       if (tabs === -1) {
         problems.push(
-          "the session's two note pages are not tabs — a split showed a " +
+          "the session's note pages are not tabs — a split showed a " +
             "second page you were usually not looking at, and left no " +
             "answer to which page a new box went on"
         );
-      } else {
-        // Anchored on the handlers rather than the labels: the label
-        // text sits on its own line inside the button, so a search for
-        // ">GM notes" finds nothing and reports the tabs in the wrong
-        // order regardless of what order they are in.
-        const dmAt = detailSrc.indexOf('setTab("dm")', tabs);
-        const playerAt = detailSrc.indexOf('setTab("player")', tabs);
-        if (dmAt === -1 || playerAt === -1 || dmAt > playerAt) {
-          problems.push("the GM notes are not the first tab");
-        }
-        for (const label of ["GM notes", "Player notes"]) {
-          if (!detailSrc.slice(tabs).includes(label)) {
-            problems.push(`the session tabs have no "${label}" tab`);
-          }
-        }
+      } else if (!/tabs\.map\(\(t\) => \(/.test(detailSrc.slice(tabs))) {
+        problems.push(
+          "the session tab strip is not drawn from the tabs the server " +
+            "sent — a strip built from a list of its own would need a " +
+            "client-side filter to keep the GM's tabs off a player's " +
+            "screen, which is the filter this whole design removes"
+        );
       }
       if (/session-notes-split/.test(detailSrc)) {
         problems.push(
@@ -385,10 +412,10 @@ export const integrity = {
       // And the toolbar's saver has to know a page from a box, or a
       // format applied to the page is sent to updateBox with an id that
       // is not a document id.
-      if (!/pageSide\(/.test(detailSrc)) {
+      if (!/pageTabKey\(/.test(detailSrc)) {
         problems.push(
-          "the format saver does not route by pageSide — an edit to the " +
-            "page would be written as if it were a box"
+          "the format saver does not route by pageTabKey — an edit to " +
+            "the page would be written as if it were a box"
         );
       }
 

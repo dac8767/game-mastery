@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import {
   MutationCtx,
+  QueryCtx,
   internalMutation,
   mutation,
   query,
@@ -9,25 +10,48 @@ import { Doc, Id } from "./_generated/dataModel";
 import { requireDm, requireMember } from "./auth";
 import { getSettings } from "./settings";
 import { sanitizeBoxHtml } from "../components/boxHtml";
+import {
+  BUILTIN_TABS,
+  MAX_CUSTOM_TABS,
+  TabDef,
+  builtinTab,
+  isValidTitle,
+  orderTabs,
+  tabTitle,
+} from "../components/sessionTabs";
 
 /**
  * Sessions — one row per night at the table, and the notes from it.
  *
  * The row is what the list shows: number, date, who was there, XP, a
- * line about it. The NOTES are boxes, on two sides:
+ * line about it. The NOTES are boxes on TABS. Three tabs are built in:
  *
- *   player   the shared account of the night. Any member may write it —
- *            the same rule the NPC record's player notes run on, and the
- *            reason it is called the player side rather than the public
- *            one.
  *   dm       what the GM knew and the table did not. GM-only, and the
  *            interesting half of this file.
+ *   prep     what the DM means to run. DM-only as well, and separate
+ *            from the above because prep is written before the night
+ *            and notes during it.
+ *   player   the shared account of the night. Any member may write it —
+ *            the same rule the NPC record's player notes run on, and the
+ *            reason it is called the player tab rather than the public
+ *            one.
  *
- * The GM side is withheld the strongest way available here: a non-GM
- * request never QUERIES it. Fetching both sides and returning one would
- * mean the GM's notes had been read out of the database on a player's
- * behalf and were sitting in a variable one careless edit from the wire.
- * `by_session_side` exists so the query itself can be narrow.
+ * Past those, anybody may make more (sessionTabs). A member's tab is
+ * shared; only the GM may make one the players cannot see.
+ *
+ * A GM-only tab is withheld the strongest way available here: a non-GM
+ * request never QUERIES it — not its boxes, not its page, and not its
+ * TITLE, which is a secret of the same kind ("Who the traitor is" needs
+ * no boxes on it to give the game away). Fetching everything and
+ * returning some of it would mean the GM's notes had been read out of
+ * the database on a player's behalf and were sitting in a variable one
+ * careless edit from the wire. `by_session_side` and
+ * `by_session_dmOnly` exist so the queries themselves can be narrow.
+ *
+ * Which tab a write lands on is never taken on trust: every write goes
+ * through resolveTab, which finds the tab in THIS session and answers
+ * with its visibility. A key naming another session's tab, or nothing
+ * at all, is a "Not found" rather than a write.
  *
  * A GM previewing as a player is served as a player, exactly as the
  * roster is, so the preview genuinely shows what a player would see.
@@ -36,10 +60,17 @@ import { sanitizeBoxHtml } from "../components/boxHtml";
 /** Ceiling on one campaign's sessions in a single subscription. */
 const MAX_SESSIONS = 500;
 
-/** Same ceiling a notebook page uses. */
+/** Same ceiling a notebook page uses. Per TAB, not per session. */
 const MAX_BOXES = 300;
 
-type Side = "player" | "dm";
+/** Every tab a session can have: the built-ins plus its own. */
+const MAX_TABS = BUILTIN_TABS.length + MAX_CUSTOM_TABS;
+
+/**
+ * A tab key. "player", "dm", "prep", or a sessionTabs id as a string —
+ * open by design, and checked by resolveTab rather than by spelling.
+ */
+type Side = string;
 
 async function ownedSession(
   ctx: MutationCtx,
@@ -62,22 +93,80 @@ async function ownedBox(
 }
 
 /**
- * Who may write this side.
+ * What tab this key names, in THIS session.
  *
- * The GM side is the GM's. The player side is any member's, which is
- * the same rule playerNotes runs on: the shared account of the night is
- * written by the people who were there, not dictated to them.
+ * The one place a tab key is turned into a thing with a visibility, and
+ * every read and every write goes through it. A built-in is itself; a
+ * custom key has to be an id of a row belonging to this session, so a
+ * key copied out of another session's URL resolves to nothing rather
+ * than to that session's tab.
+ *
+ * normalizeId rather than a cast: `ctx.db.get` on a string that is not
+ * an id of that table throws, and a tab picker left open while the tab
+ * was deleted would surface as a crash instead of "Not found".
+ */
+async function resolveTab(
+  ctx: QueryCtx,
+  sessionId: Id<"sessions">,
+  key: Side
+): Promise<TabDef> {
+  const builtin = builtinTab(key);
+  if (builtin) return builtin;
+
+  const tabId = ctx.db.normalizeId("sessionTabs", key);
+  if (!tabId) throw new Error("No such tab");
+  const tab = await ctx.db.get(tabId);
+  if (!tab || tab.sessionId !== sessionId) throw new Error("No such tab");
+  return {
+    key: tab._id,
+    title: tab.title,
+    dmOnly: tab.dmOnly,
+    builtin: false,
+  };
+}
+
+/**
+ * Who may write on this tab.
+ *
+ * A GM-only tab is the GM's. A shared tab is any member's, which is the
+ * same rule playerNotes runs on: the shared account of the night is
+ * written by the people who were there, not dictated to them. A tab a
+ * player made is shared by construction — createTab refuses to make
+ * them a hidden one — so this is the whole of the rule.
  */
 async function requireWriter(
   ctx: MutationCtx,
-  campaignId: Id<"campaigns">,
+  session: Doc<"sessions">,
   side: Side
-) {
-  if (side === "dm") {
-    await requireDm(ctx, campaignId);
-    return;
+): Promise<TabDef> {
+  const tab = await resolveTab(ctx, session._id, side);
+  if (tab.dmOnly) await requireDm(ctx, session.campaignId);
+  else await requireMember(ctx, session.campaignId);
+  return tab;
+}
+
+/**
+ * Who may rename or delete a tab: the DM, or whoever made it.
+ *
+ * The DM owns the campaign, so the DM owns its tabs. A player who made
+ * a tab for the party's shopping list owns that one — being handed a
+ * "new tab" button and then not being allowed to put it right is worse
+ * than not having the button.
+ */
+async function requireTabOwner(
+  ctx: MutationCtx,
+  tabId: Id<"sessionTabs">
+): Promise<{ tab: Doc<"sessionTabs">; session: Doc<"sessions"> }> {
+  const tab = await ctx.db.get(tabId);
+  if (!tab) throw new Error("Not found");
+  const session = await ctx.db.get(tab.sessionId);
+  if (!session) throw new Error("Not found");
+
+  const { userId, isDm } = await requireMember(ctx, session.campaignId);
+  if (!isDm && tab.createdBy !== userId) {
+    throw new Error("That tab is not yours to change.");
   }
-  await requireMember(ctx, campaignId);
+  return { tab, session };
 }
 
 export const listForCampaign = query({
@@ -116,12 +205,20 @@ export const listForCampaign = query({
 });
 
 /**
- * One session's notes.
+ * One session's notes, tab by tab.
  *
- * `dm` comes back as null for a player — not as an empty array, which
- * would read as "the GM has not written anything" and is a different
- * claim from "this is not yours to see". The client shows no GM section
- * at all rather than an empty one.
+ * A player is sent the tabs they may see and is told nothing about the
+ * rest — not their contents, not their names, not that they exist. That
+ * is a stronger answer than the `dm: null` this used to send back, and
+ * a simpler one to keep true: absence IS the withholding, so there is
+ * no sentinel to forget to check.
+ *
+ * The order the queries run in is the whole guarantee. `visible` is
+ * settled first, from an index narrowed by dmOnly for a non-GM caller,
+ * and every content query below is keyed on a tab already in that list.
+ * Nothing else in this function reads sessionBoxes or sessionPages, so
+ * there is no path by which a hidden tab's rows are fetched and then
+ * dropped.
  */
 export const getNotes = query({
   args: { sessionId: v.id("sessions") },
@@ -135,6 +232,22 @@ export const getNotes = query({
     );
     const { viewAsPlayer } = await getSettings(ctx, userId);
     const isDm = isCampaignDm && !viewAsPlayer;
+
+    // The hidden rows are not read and then filtered — they are not
+    // asked for. A tab's title is a secret of the same kind its boxes
+    // are.
+    const custom = isDm
+      ? await ctx.db
+          .query("sessionTabs")
+          .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+          .take(MAX_CUSTOM_TABS)
+      : await ctx.db
+          .query("sessionTabs")
+          .withIndex("by_session_dmOnly", (q) =>
+            q.eq("sessionId", args.sessionId).eq("dmOnly", false)
+          )
+          .take(MAX_CUSTOM_TABS);
+    const visible = orderTabs(isDm, custom);
 
     const side = async (which: Side) => {
       const boxes = await ctx.db
@@ -183,14 +296,35 @@ export const getNotes = query({
 
     return {
       isDm,
-      player: await side("player"),
-      playerBody: await body("player"),
-      // Neither of these is queried at all for a player.
-      dm: isDm ? await side("dm") : null,
-      dmBody: isDm ? await body("dm") : null,
+      tabs: await Promise.all(
+        visible.map(async (tab) => ({
+          key: tab.key,
+          title: tab.title,
+          dmOnly: tab.dmOnly,
+          builtin: tab.builtin,
+          // Whether this person may put the tab RIGHT, which is not the
+          // same as whether they may write on it: a shared tab is
+          // everybody's to write and its maker's to rename. A DM
+          // previewing as a player is a player here too, or the preview
+          // would show controls the player does not have.
+          canManage: !tab.builtin && (isDm || ownTab(custom, tab, userId)),
+          boxes: await side(tab.key),
+          body: await body(tab.key),
+        }))
+      ),
     };
   },
 });
+
+/** Whether this custom tab is the caller's own. Built-ins are nobody's. */
+function ownTab(
+  custom: Doc<"sessionTabs">[],
+  tab: TabDef,
+  userId: Id<"users">
+): boolean {
+  if (tab.builtin) return false;
+  return custom.some((c) => c._id === tab.key && c.createdBy === userId);
+}
 
 export const createSession = mutation({
   args: { campaignId: v.id("campaigns") },
@@ -397,23 +531,134 @@ export const deleteSession = mutation({
     const session = await ownedSession(ctx, args.sessionId);
     await requireDm(ctx, session.campaignId);
 
+    // Every tab's worth, which is what MAX_TABS boxes means: addBox
+    // holds each tab to MAX_BOXES, so the session's true ceiling is
+    // that times the tabs it may have. It used to be `MAX_BOXES * 2`
+    // when there were two sides, and the arithmetic has to move with
+    // the number of tabs or a deleted session leaves boxes behind —
+    // rows keyed to a session that is gone, which nothing lists and
+    // nothing can reach.
     const boxes = await ctx.db
       .query("sessionBoxes")
       .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
-      .take(MAX_BOXES * 2);
+      .take(MAX_BOXES * MAX_TABS);
     for (const box of boxes) {
       if (box.storageId) await ctx.storage.delete(box.storageId);
       await ctx.db.delete(box._id);
     }
 
     // The pages too, or the notes outlive the night they belong to.
+    // One per tab, doubled for slack: setBody upserts on a `.first()`,
+    // so two saves racing on a tab with no page yet can leave two.
     const pages = await ctx.db
       .query("sessionPages")
       .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
-      .take(4);
+      .take(MAX_TABS * 2);
     for (const page of pages) await ctx.db.delete(page._id);
 
+    // And the tabs themselves, whose rows would otherwise be the only
+    // thing left of a session nobody can reach.
+    const tabs = await ctx.db
+      .query("sessionTabs")
+      .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+      .take(MAX_CUSTOM_TABS);
+    for (const tab of tabs) await ctx.db.delete(tab._id);
+
     await ctx.db.delete(args.sessionId);
+  },
+});
+
+/**
+ * A new tab on this session.
+ *
+ * Any member may make one, which is what was asked for — "players and
+ * dm can create new tabs if they want". Only the DM may make one the
+ * players cannot see: a hidden tab is a thing the DM keeps from the
+ * table, and a player hiding something from the DM is not a shape this
+ * app has. Asking for one is refused out loud rather than quietly
+ * downgraded to a shared tab, because a player who thought they had
+ * made a private tab and had not is worse off than one who was told no.
+ */
+export const createTab = mutation({
+  args: {
+    sessionId: v.id("sessions"),
+    title: v.string(),
+    dmOnly: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const session = await ownedSession(ctx, args.sessionId);
+    const { userId, isDm } = await requireMember(ctx, session.campaignId);
+
+    if (args.dmOnly && !isDm) {
+      throw new Error("Only the DM can make a tab the players cannot see.");
+    }
+    const title = tabTitle(args.title);
+    if (!isValidTitle(title)) throw new Error("Give the tab a name.");
+
+    const existing = await ctx.db
+      .query("sessionTabs")
+      .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+      .take(MAX_CUSTOM_TABS + 1);
+    if (existing.length >= MAX_CUSTOM_TABS) {
+      throw new Error(
+        `A session holds ${MAX_CUSTOM_TABS} tabs of its own — delete one first.`
+      );
+    }
+
+    return await ctx.db.insert("sessionTabs", {
+      sessionId: args.sessionId,
+      title,
+      dmOnly: args.dmOnly,
+      order: existing.reduce((max, t) => Math.max(max, t.order), 0) + 1,
+      createdBy: userId,
+    });
+  },
+});
+
+/** Rename a tab. The DM's, or your own — see requireTabOwner. */
+export const renameTab = mutation({
+  args: { tabId: v.id("sessionTabs"), title: v.string() },
+  handler: async (ctx, args) => {
+    const { tab } = await requireTabOwner(ctx, args.tabId);
+    const title = tabTitle(args.title);
+    if (!isValidTitle(title)) throw new Error("Give the tab a name.");
+    if (title === tab.title) return;
+    await ctx.db.patch(args.tabId, { title });
+  },
+});
+
+/**
+ * Delete a tab, and everything written on it.
+ *
+ * The boxes and the page go with it. Leaving them would leave rows
+ * keyed to a tab nothing can name — invisible, undeletable, and still
+ * counted against the box ceiling of a tab that no longer exists.
+ */
+export const deleteTab = mutation({
+  args: { tabId: v.id("sessionTabs") },
+  handler: async (ctx, args) => {
+    const { tab } = await requireTabOwner(ctx, args.tabId);
+
+    const boxes = await ctx.db
+      .query("sessionBoxes")
+      .withIndex("by_session_side", (q) =>
+        q.eq("sessionId", tab.sessionId).eq("side", tab._id)
+      )
+      .take(MAX_BOXES);
+    for (const box of boxes) {
+      if (box.storageId) await ctx.storage.delete(box.storageId);
+      await ctx.db.delete(box._id);
+    }
+
+    const pages = await ctx.db
+      .query("sessionPages")
+      .withIndex("by_session_side", (q) =>
+        q.eq("sessionId", tab.sessionId).eq("side", tab._id)
+      )
+      .take(2);
+    for (const page of pages) await ctx.db.delete(page._id);
+
+    await ctx.db.delete(args.tabId);
   },
 });
 
@@ -432,12 +677,12 @@ export const deleteSession = mutation({
 export const setBody = mutation({
   args: {
     sessionId: v.id("sessions"),
-    side: v.union(v.literal("player"), v.literal("dm")),
+    side: v.string(),
     html: v.string(),
   },
   handler: async (ctx, args) => {
     const session = await ownedSession(ctx, args.sessionId);
-    await requireWriter(ctx, session.campaignId, args.side);
+    await requireWriter(ctx, session, args.side);
 
     const html = sanitizeBoxHtml(args.html);
     const existing = await ctx.db
@@ -461,7 +706,7 @@ export const setBody = mutation({
 export const addBox = mutation({
   args: {
     sessionId: v.id("sessions"),
-    side: v.union(v.literal("player"), v.literal("dm")),
+    side: v.string(),
     type: v.union(v.literal("text"), v.literal("image"), v.literal("table")),
     x: v.number(),
     y: v.number(),
@@ -475,7 +720,7 @@ export const addBox = mutation({
   },
   handler: async (ctx, args) => {
     const session = await ownedSession(ctx, args.sessionId);
-    await requireWriter(ctx, session.campaignId, args.side);
+    await requireWriter(ctx, session, args.side);
 
     const existing = await ctx.db
       .query("sessionBoxes")
@@ -525,9 +770,9 @@ export const updateBox = mutation({
   },
   handler: async (ctx, args) => {
     const { box, session } = await ownedBox(ctx, args.boxId);
-    // The box says which side it is on, so a player cannot reach a GM
-    // box by knowing its id.
-    await requireWriter(ctx, session.campaignId, box.side);
+    // The box says which tab it is on, so a player cannot reach a box
+    // on a GM-only tab by knowing its id.
+    await requireWriter(ctx, session, box.side);
 
     const { boxId, ...rest } = args;
     const patch: Record<string, unknown> = {};
@@ -551,7 +796,7 @@ export const deleteBox = mutation({
   args: { boxId: v.id("sessionBoxes") },
   handler: async (ctx, args) => {
     const { box, session } = await ownedBox(ctx, args.boxId);
-    await requireWriter(ctx, session.campaignId, box.side);
+    await requireWriter(ctx, session, box.side);
 
     if (box.storageId) await ctx.storage.delete(box.storageId);
     await ctx.db.delete(args.boxId);
@@ -560,13 +805,10 @@ export const deleteBox = mutation({
 
 /** Short-lived URL the browser PUTs an image to. */
 export const generateUploadUrl = mutation({
-  args: {
-    sessionId: v.id("sessions"),
-    side: v.union(v.literal("player"), v.literal("dm")),
-  },
+  args: { sessionId: v.id("sessions"), side: v.string() },
   handler: async (ctx, args) => {
     const session = await ownedSession(ctx, args.sessionId);
-    await requireWriter(ctx, session.campaignId, args.side);
+    await requireWriter(ctx, session, args.side);
     return await ctx.storage.generateUploadUrl();
   },
 });

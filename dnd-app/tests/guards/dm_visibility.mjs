@@ -250,13 +250,18 @@ export const dmVisibility = {
     }
 
     // ---- convex/sessions.ts ----------------------------------------
-    // The GM notes on a session are a whole PAGE of things the table
+    // The GM's notes on a session are whole PAGES of things the table
     // does not know, and the withholding is stronger here than
     // anywhere else in the app on purpose: a non-GM request never
-    // queries that side at all. Fetching both and returning one would
-    // mean the GM's notes had been read out of the database on a
+    // queries them at all. Fetching everything and returning some of it
+    // would mean the GM's notes had been read out of the database on a
     // player's behalf and were sitting in a variable, one careless edit
     // from the wire.
+    //
+    // Since the notes became TABS there is a third secret beside the
+    // boxes and the page: a hidden tab's TITLE. "Who the traitor is"
+    // gives the game away with nothing written on it, so the tab rows
+    // are subject to the same rule and the checks below say so.
     const sessions = read("convex", "sessions.ts");
 
     /**
@@ -283,14 +288,48 @@ export const dmVisibility = {
       "sessions.getNotes must gate on requireMember(campaignId) — " +
         "requireUser alone would hand another campaign's notes to anyone"
     );
+    // The tab list is where withholding now happens, and it happens by
+    // NOT ASKING: a non-DM caller's query is narrowed on dmOnly by the
+    // index, so a hidden tab's title is never read. The old shape sent
+    // `dm: null` and had the client check it; absence is the stronger
+    // version of the same answer, because there is no sentinel to
+    // forget.
     requirePattern(
       problems,
       getNotes,
-      /dm: isDm \? await side\("dm"\) : null/,
-      "sessions.getNotes must not evaluate the dm side for a non-GM " +
-        "caller — and must send null rather than [], because an empty " +
-        "page says the GM wrote nothing, which is a different claim"
+      /withIndex\(\s*\n?\s*"by_session_dmOnly",[\s\S]{0,160}\.eq\("dmOnly", false\)/,
+      "sessions.getNotes must fetch a non-GM caller's tabs through " +
+        "by_session_dmOnly — reading every tab row and dropping the " +
+        "hidden ones would mean their titles were read out of the " +
+        "database on a player's behalf"
     );
+    // And the content queries must be keyed on that list rather than on
+    // anything the caller said. `visible` is the only thing between a
+    // tab row and a page of boxes.
+    requirePattern(
+      problems,
+      getNotes,
+      /const visible = orderTabs\(isDm, custom\)/,
+      "sessions.getNotes must settle the visible tabs before reading " +
+        "any of them — orderTabs(isDm, …) is what drops the DM-only " +
+        "built-ins for a player"
+    );
+    requirePattern(
+      problems,
+      getNotes,
+      /visible\.map\(async \(tab\) => \(\{/,
+      "sessions.getNotes must read its boxes and pages by mapping over " +
+        "the VISIBLE tabs — a query keyed on anything else could name a " +
+        "tab the caller may not see"
+    );
+    // A tab the caller may not see must not be reachable by asking for
+    // it either: nothing in getNotes may take a tab key as an argument.
+    if (/args:\s*\{[^}]*side/.test(getNotes)) {
+      problems.push(
+        "sessions.getNotes takes a side/tab argument — which tabs come " +
+          "back is the server's decision, not the caller's"
+      );
+    }
     requirePattern(
       problems,
       getNotes,
@@ -298,16 +337,25 @@ export const dmVisibility = {
       "sessions.getNotes must honour viewAsPlayer — otherwise the GM's " +
         "player preview shows the GM notes and reports nothing withheld"
     );
-    // The PAGE the boxes sit on is the same secret as the boxes, and it
-    // is newer — so it is the half likely to be forgotten. Same shape:
-    // never queried for a player, null rather than "".
-    requirePattern(
-      problems,
-      getNotes,
-      /dmBody: isDm \? await body\("dm"\) : null/,
-      "sessions.getNotes must not read the GM's page for a non-GM caller " +
-        "— the page carries the same secrets the boxes on it do"
-    );
+    // The PAGE the boxes sit on is the same secret as the boxes. It is
+    // read by the same per-tab helper, so what has to be true is that
+    // NOTHING in this query reads those two tables any other way — a
+    // by_session sweep would pull every tab's rows in one go and put
+    // the withholding back to a filter somebody has to remember.
+    for (const table of ["sessionBoxes", "sessionPages"]) {
+      const reads = getNotes.split(`.query("${table}")`).length - 1;
+      const narrow =
+        getNotes.split(
+          new RegExp(`\\.query\\("${table}"\\)\\s*\n?\s*\\.withIndex\\("by_session_side"`)
+        ).length - 1;
+      if (reads !== narrow) {
+        problems.push(
+          `sessions.getNotes reads ${table} without by_session_side — ` +
+            "every read here must name one tab, or a player's request " +
+            "pulls the GM's rows and drops them afterwards"
+        );
+      }
+    }
     requirePattern(
       problems,
       bodyOf("listForCampaign"),
@@ -326,17 +374,35 @@ export const dmVisibility = {
       );
     }
 
-    // Writing. The player side is any member's, the same rule
-    // playerNotes runs on; the GM side is the GM's. What must never
-    // happen is a box mutation that decides from an ARGUMENT which side
-    // it is touching — the box's own `side` is the only trustworthy
-    // answer, because an id is all a caller needs to name someone
-    // else's box.
+    // Writing. A shared tab is any member's, the same rule playerNotes
+    // runs on; a GM-only tab is the GM's. What must never happen is a
+    // box mutation that decides from an ARGUMENT which tab it is
+    // touching — the box's own `side` is the only trustworthy answer,
+    // because an id is all a caller needs to name someone else's box.
     requirePattern(
       problems,
       sessions,
-      /if \(side === "dm"\) \{\s*\n\s*await requireDm\(ctx, campaignId\);/,
-      "sessions.requireWriter must gate the dm side on requireDm"
+      /if \(tab\.dmOnly\) await requireDm\(ctx, session\.campaignId\);/,
+      "sessions.requireWriter must gate a DM-only tab on requireDm"
+    );
+    // And the tab it gates on has to be THIS session's. A key naming
+    // another session's tab would otherwise carry that tab's visibility
+    // into this session's write.
+    requirePattern(
+      problems,
+      sessions,
+      /if \(!tab \|\| tab\.sessionId !== sessionId\) throw new Error/,
+      "sessions.resolveTab must refuse a tab belonging to another " +
+        "session — its dmOnly would be answering about the wrong night"
+    );
+    // createTab is the other end of the same rule: a player asking for
+    // a hidden tab is refused rather than quietly given a shared one,
+    // which would leave them writing secrets onto the shared page.
+    requirePattern(
+      problems,
+      bodyOf("createTab"),
+      /if \(args\.dmOnly && !isDm\) \{\s*\n\s*throw new Error/,
+      "sessions.createTab must refuse a non-DM a DM-only tab"
     );
     for (const fn of ["updateBox", "deleteBox"]) {
       const at = sessions.indexOf(`export const ${fn} = mutation`);
@@ -346,10 +412,11 @@ export const dmVisibility = {
       }
       const next = sessions.indexOf("export const ", at + 10);
       const body = sessions.slice(at, next === -1 ? undefined : next);
-      if (!/requireWriter\(ctx, session\.campaignId, box\.side\)/.test(body)) {
+      if (!/requireWriter\(ctx, session, box\.side\)/.test(body)) {
         problems.push(
-          `sessions.${fn} does not check the side the BOX is on — a ` +
-            "player who knows a GM box's id could reach it"
+          `sessions.${fn} does not check the tab the BOX is on — a ` +
+            "player who knows the id of a box on a GM-only tab could " +
+            "reach it"
         );
       }
     }
@@ -360,9 +427,9 @@ export const dmVisibility = {
     // reading the side off the document instead.
     {
       const body = bodyOf("setBody");
-      if (!/requireWriter\(ctx, session\.campaignId, args\.side\)/.test(body)) {
+      if (!/requireWriter\(ctx, session, args\.side\)/.test(body)) {
         problems.push(
-          "sessions.setBody does not pass the side to requireWriter — any " +
+          "sessions.setBody does not pass the tab to requireWriter — any " +
             "member could write the GM's page by asking for it"
         );
       }

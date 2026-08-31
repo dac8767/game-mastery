@@ -376,15 +376,22 @@ Note    No backend of its own yet. If it grows one, it becomes
 ### sessions — Sessions
 ```
 Owns    components/SessionTable.tsx, components/SessionDetail.tsx,
-        components/sessionColumns.ts
+        components/sessionColumns.ts, components/sessionTabs.ts
         convex/sessions.ts
         app/campaign/[campaignId]/sessions/
         scripts/import-moonbrook-sessions.mjs
-Tables  sessions, sessionBoxes, sessionPages
+Tables  sessions, sessionBoxes, sessionPages, sessionTabs
 Branch  claude/tool-sessions
 Note    Session NUMBERS are the GM's to change; the importer matches on
-        date for exactly that reason. GM-side pages never leave the
-        server for a player — see sessions.getNotes.
+        date for exactly that reason. A session's notes are TABS — three
+        built in (GM notes, GM Prep, Player notes) and up to eight
+        anybody makes. A GM-only tab never leaves the server for a
+        player, and neither does its TITLE: getNotes narrows on
+        by_session_dmOnly rather than reading the rows and dropping
+        them. See sessions.getNotes and sessions.resolveTab.
+        components/notePage.ts (notebook's) was this tool's page-id
+        helper and no longer has a caller — sessionTabs.ts replaced it,
+        because a tab key is wider than a side.
 ```
 
 ### todo — To-Do
