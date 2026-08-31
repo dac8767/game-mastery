@@ -3257,6 +3257,97 @@ export const unit = {
     check("clampPin: above one", loc.clampPin(1.5) === 1);
     check("clampPin: NaN", loc.clampPin(Number.NaN) === 0);
 
+    // ---- pinned vs unpinned children -------------------------------
+    // The partition the screen draws with. A child with no coordinates
+    // used to render nowhere: the map skipped it and the list was only
+    // the no-map fallback, so a district promoted out of a deleted city
+    // — which clears its pin, because the coordinate named the city's
+    // map — became unreachable. The delete rule exists to avoid a
+    // cascade, and the screen was quietly performing one.
+    const pinAtlas = [
+      place("region", null, 0),
+      place("town", "region", 0, { x: 0.3, y: 0.4 }),
+      place("city", "region", 1, { x: 0.6, y: 0.2 }),
+      place("promoted", "region", 2),
+    ];
+
+    check(
+      "pinnedOf returns only the children with coordinates, in order",
+      loc.pinnedOf(pinAtlas, "region").map((r) => r._id).join() === "town,city"
+    );
+    check(
+      "unpinnedOf returns the children with none",
+      loc.unpinnedOf(pinAtlas, "region").map((r) => r._id).join() === "promoted"
+    );
+    // The one that matters: the two halves are the whole. Anything the
+    // partition drops is a place the screen cannot show at all.
+    check(
+      "every child is in exactly one half",
+      loc.pinnedOf(pinAtlas, "region").length +
+        loc.unpinnedOf(pinAtlas, "region").length ===
+        loc.childrenOf(pinAtlas, "region").length
+    );
+    check(
+      "half a pin is not a pin",
+      loc
+        .unpinnedOf([place("half", null, 0, { x: 0.5 })], null)
+        .map((r) => r._id)
+        .join() === "half"
+    );
+    // The falsy-zero trap. The top-left corner is a real placement, and
+    // an `if (row.x)` test reads it as an absent one — the same bug
+    // shape as colorOf's "toString".
+    check(
+      "a pin at the origin is a pin",
+      loc
+        .pinnedOf([place("corner", null, 0, { x: 0, y: 0 })], null)
+        .map((r) => r._id)
+        .join() === "corner"
+    );
+    // The predicate itself is exported because the screen asks the same
+    // question a third time, for the "Place on map" / "Move pin" label.
+    // Three spellings of "is this placed" is how the label ends up
+    // disagreeing with the layer that drew it.
+    check("isPinned: both coordinates", loc.isPinned({ x: 0.2, y: 0.8 }));
+    check("isPinned: the origin counts", loc.isPinned({ x: 0, y: 0 }));
+    check("isPinned: only an x does not", !loc.isPinned({ x: 0.2 }));
+    check("isPinned: only a y does not", !loc.isPinned({ y: 0.8 }));
+    check("isPinned: nulls are not a position", !loc.isPinned({ x: null, y: null }));
+    check("isPinned: neither", !loc.isPinned({}));
+
+    // ---- moveTargets ------------------------------------------------
+    // What the "Inside" picker may offer. updateLocation refuses a move
+    // under your own descendant, so anything this returns that the
+    // server would reject is an error the GM cannot see coming — a flat
+    // list does not show that a name three rows down sits inside the
+    // place being moved.
+    check(
+      "moveTargets never offers the location itself",
+      loc.moveTargets(atlas, "city").every((n) => n.row._id !== "city")
+    );
+    check(
+      "moveTargets never offers your own descendant",
+      loc
+        .moveTargets(atlas, "region")
+        .every((n) => !["city", "town", "district"].includes(n.row._id))
+    );
+    check(
+      "moveTargets offers a legitimate new parent",
+      loc.moveTargets(atlas, "town").map((n) => n.row._id).join() ===
+        "region,city,district"
+    );
+    check(
+      "moveTargets keeps the depth, so the picker still reads as a tree",
+      eq(
+        loc.moveTargets(atlas, "town").map((n) => n.depth),
+        [0, 1, 2]
+      )
+    );
+    check(
+      "moveTargets on a cycle terminates",
+      loc.moveTargets([place("a", "b"), place("b", "a")], "a").length <= 2
+    );
+
     // ---- Lookup formatting -----------------------------------------
     // Challenge rating and spell level are both small integers that
     // mean something other than themselves, and either read wrong is

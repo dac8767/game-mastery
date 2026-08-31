@@ -4864,6 +4864,101 @@ button.cal-day:hover {
   color: var(--bloodied);
 }
 
+/* The places that belong to this map but are not drawn on it. Under
+   the map rather than beside it: it is a footnote to the map, and a
+   second column would read as a second map. */
+.loc-unpinned {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.loc-unpinned-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.loc-unpinned-head .muted {
+  font-size: 0.75rem;
+}
+
+.loc-unpinned ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+/* A chip, not a row: these wrap along one line under the map, so a
+   place that was promoted out of a deleted city is visibly a loose end
+   rather than a second list competing with the pins. */
+.loc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  background: var(--bg-inset);
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.loc-chip:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.loc-chip.selected {
+  color: var(--text);
+  border-style: solid;
+  border-color: var(--accent);
+}
+
+/* The remove control sits ON the picture for the same reason the NPC
+   portrait's does: a row of buttons under the grid would not say which
+   picture it removes. */
+.loc-picture {
+  position: relative;
+  line-height: 0;
+}
+
+.loc-picture-remove {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.2rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-raised);
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.loc-picture-remove:hover {
+  color: var(--bloodied);
+  border-color: var(--bloodied);
+}
+
+.loc-picture-remove:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 @media (max-width: 900px) {
   .loc-body {
     grid-template-columns: 1fr;

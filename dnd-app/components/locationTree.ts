@@ -172,3 +172,63 @@ export function flatten(
   }
   return out;
 }
+
+/**
+ * Split a parent's children into the ones drawn ON its map and the
+ * ones that merely belong to it.
+ *
+ * The distinction is the whole reason these exist. A pin needs an (x,
+ * y); a child without one has nowhere to be drawn, and the screen used
+ * to render it nowhere at all — which made it unreachable rather than
+ * unplaced. That state is not exotic, it is what the app's own rules
+ * produce: `deleteLocation` promotes children and clears their pins
+ * because the coordinate named a spot on a map that is going away, and
+ * reparenting clears them for the same reason. Deleting a city on a
+ * region map therefore hands its districts to the region WITHOUT pins,
+ * and a cascade the code went out of its way to avoid became a silent
+ * loss one level up.
+ *
+ * So the unpinned ones are a list the screen has to show, not a case
+ * to skip.
+ */
+export function pinnedOf(rows: LocRow[], parentId: string | null): LocRow[] {
+  return childrenOf(rows, parentId).filter(isPinned);
+}
+
+export function unpinnedOf(rows: LocRow[], parentId: string | null): LocRow[] {
+  return childrenOf(rows, parentId).filter((r) => !isPinned(r));
+}
+
+/**
+ * A pin is a PAIR. Half of one cannot be drawn, so a row carrying only
+ * an x counts as unplaced rather than as a pin at y=0 — that would put
+ * it silently against the top edge, which is a real coordinate and
+ * reads as a deliberate placement.
+ */
+export function isPinned(row: LocRow): boolean {
+  return (
+    row.x !== null &&
+    row.x !== undefined &&
+    row.y !== null &&
+    row.y !== undefined
+  );
+}
+
+/**
+ * Where `id` may be moved to: the whole atlas as a flat depth-first
+ * list, minus itself and everything beneath it.
+ *
+ * The exclusion is the point. `updateLocation` rejects a move under
+ * your own descendant, so offering one means offering an error — and
+ * the GM has no way to tell, from a flat list, that "Riverside" three
+ * rows down is inside the very city they are moving. Filtering with
+ * `wouldCycle` asks the same question the server will.
+ */
+export function moveTargets(
+  rows: LocRow[],
+  id: string
+): { row: LocRow; depth: number }[] {
+  return flatten(rows).filter(
+    (n) => n.row._id !== id && !wouldCycle(rows, id, n.row._id)
+  );
+}
