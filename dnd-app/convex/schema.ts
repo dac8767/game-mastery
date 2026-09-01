@@ -438,7 +438,7 @@ export default defineSchema({
   /**
    * The tabs a session's notes are kept on, past the three built in.
    *
-   * Asked for as one sentence: a DM Prep tab only the DM can see, and
+   * Asked for as one sentence: a GM Prep tab only the GM can see, and
    * new tabs anybody can make. The first is a built-in — it is on every
    * session whether or not anyone has written on it, so it needs no row
    * — and the rest are these.
@@ -451,9 +451,9 @@ export default defineSchema({
    * hidden titles are never fetched. Same rule the boxes have always
    * run on, one level up.
    *
-   * `createdBy` is who may rename and delete it, alongside the DM. A
+   * `createdBy` is who may rename and delete it, alongside the GM. A
    * player who makes a tab for the party's shopping list owns that tab;
-   * they do not own the DM's.
+   * they do not own the GM's.
    *
    * A tab is not a document with a body. Its boxes and its page live in
    * sessionBoxes and sessionPages keyed by `side`, exactly as the
@@ -469,7 +469,7 @@ export default defineSchema({
     createdBy: v.id("users"),
   })
     .index("by_session", ["sessionId"])
-    // The narrow one: a non-DM request never asks for the hidden rows,
+    // The narrow one: a non-GM request never asks for the hidden rows,
     // so it never holds a hidden tab's title.
     .index("by_session_dmOnly", ["sessionId", "dmOnly"]),
 

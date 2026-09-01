@@ -289,7 +289,7 @@ export const dmVisibility = {
         "requireUser alone would hand another campaign's notes to anyone"
     );
     // The tab list is where withholding now happens, and it happens by
-    // NOT ASKING: a non-DM caller's query is narrowed on dmOnly by the
+    // NOT ASKING: a non-GM caller's query is narrowed on dmOnly by the
     // index, so a hidden tab's title is never read. The old shape sent
     // `dm: null` and had the client check it; absence is the stronger
     // version of the same answer, because there is no sentinel to
@@ -311,7 +311,7 @@ export const dmVisibility = {
       getNotes,
       /const visible = orderTabs\(isDm, custom\)/,
       "sessions.getNotes must settle the visible tabs before reading " +
-        "any of them — orderTabs(isDm, …) is what drops the DM-only " +
+        "any of them — orderTabs(isDm, …) is what drops the GM-only " +
         "built-ins for a player"
     );
     requirePattern(
@@ -383,7 +383,7 @@ export const dmVisibility = {
       problems,
       sessions,
       /if \(tab\.dmOnly\) await requireDm\(ctx, session\.campaignId\);/,
-      "sessions.requireWriter must gate a DM-only tab on requireDm"
+      "sessions.requireWriter must gate a GM-only tab on requireDm"
     );
     // And the tab it gates on has to be THIS session's. A key naming
     // another session's tab would otherwise carry that tab's visibility
@@ -402,7 +402,7 @@ export const dmVisibility = {
       problems,
       bodyOf("createTab"),
       /if \(args\.dmOnly && !isDm\) \{\s*\n\s*throw new Error/,
-      "sessions.createTab must refuse a non-DM a DM-only tab"
+      "sessions.createTab must refuse a non-GM a GM-only tab"
     );
     for (const fn of ["updateBox", "deleteBox"]) {
       const at = sessions.indexOf(`export const ${fn} = mutation`);
@@ -500,7 +500,7 @@ export const dmVisibility = {
     }
 
     // And the tools that ADD to a page wait for the same answer. Which
-    // side a new box lands on is read from the open tab, and the DM tab
+    // side a new box lands on is read from the open tab, and the GM tab
     // does not exist until `notes.dm` arrives — so a toolbar rendered
     // during the load points at the player page, and a box added in
     // that second carries whatever gets typed into it onto the page the
@@ -513,7 +513,7 @@ export const dmVisibility = {
       problems.push(
         "SessionDetail no longer gates its notes toolbar on `notes` " +
           "having arrived — until getNotes answers, the open side reads " +
-          "as the player page for a DM too"
+          "as the player page for a GM too"
       );
     } else if (boxTools < notesGate || formatBar < notesGate) {
       problems.push(

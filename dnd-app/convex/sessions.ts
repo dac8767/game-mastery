@@ -28,7 +28,7 @@ import {
  *
  *   dm       what the GM knew and the table did not. GM-only, and the
  *            interesting half of this file.
- *   prep     what the DM means to run. DM-only as well, and separate
+ *   prep     what the GM means to run. GM-only as well, and separate
  *            from the above because prep is written before the night
  *            and notes during it.
  *   player   the shared account of the night. Any member may write it —
@@ -146,9 +146,9 @@ async function requireWriter(
 }
 
 /**
- * Who may rename or delete a tab: the DM, or whoever made it.
+ * Who may rename or delete a tab: the GM, or whoever made it.
  *
- * The DM owns the campaign, so the DM owns its tabs. A player who made
+ * The GM owns the campaign, so the GM owns its tabs. A player who made
  * a tab for the party's shopping list owns that one — being handed a
  * "new tab" button and then not being allowed to put it right is worse
  * than not having the button.
@@ -304,7 +304,7 @@ export const getNotes = query({
           builtin: tab.builtin,
           // Whether this person may put the tab RIGHT, which is not the
           // same as whether they may write on it: a shared tab is
-          // everybody's to write and its maker's to rename. A DM
+          // everybody's to write and its maker's to rename. A GM
           // previewing as a player is a player here too, or the preview
           // would show controls the player does not have.
           canManage: !tab.builtin && (isDm || ownTab(custom, tab, userId)),
@@ -572,9 +572,9 @@ export const deleteSession = mutation({
  * A new tab on this session.
  *
  * Any member may make one, which is what was asked for — "players and
- * dm can create new tabs if they want". Only the DM may make one the
- * players cannot see: a hidden tab is a thing the DM keeps from the
- * table, and a player hiding something from the DM is not a shape this
+ * dm can create new tabs if they want". Only the GM may make one the
+ * players cannot see: a hidden tab is a thing the GM keeps from the
+ * table, and a player hiding something from the GM is not a shape this
  * app has. Asking for one is refused out loud rather than quietly
  * downgraded to a shared tab, because a player who thought they had
  * made a private tab and had not is worse off than one who was told no.
@@ -590,7 +590,7 @@ export const createTab = mutation({
     const { userId, isDm } = await requireMember(ctx, session.campaignId);
 
     if (args.dmOnly && !isDm) {
-      throw new Error("Only the DM can make a tab the players cannot see.");
+      throw new Error("Only the GM can make a tab the players cannot see.");
     }
     const title = tabTitle(args.title);
     if (!isValidTitle(title)) throw new Error("Give the tab a name.");
@@ -615,7 +615,7 @@ export const createTab = mutation({
   },
 });
 
-/** Rename a tab. The DM's, or your own — see requireTabOwner. */
+/** Rename a tab. The GM's, or your own — see requireTabOwner. */
 export const renameTab = mutation({
   args: { tabId: v.id("sessionTabs"), title: v.string() },
   handler: async (ctx, args) => {

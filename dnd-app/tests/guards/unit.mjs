@@ -9385,14 +9385,14 @@ export const unit = {
       });
 
       check(
-        "a player is offered the player page and no DM tab",
+        "a player is offered the player page and no GM tab",
         (() => {
           const keys = st.orderTabs(false, []).map((t) => t.key);
           return keys.length === 1 && keys[0] === "player";
         })()
       );
       check(
-        "a DM is offered all three, DM first",
+        "a GM is offered all three, GM first",
         JSON.stringify(st.orderTabs(true, []).map((t) => t.key)) ===
           JSON.stringify(["dm", "prep", "player"])
       );
@@ -9416,10 +9416,10 @@ export const unit = {
       );
       // orderTabs takes the caller's OWN rows; a hidden tab reaching it
       // would mean the query already went wrong. It is not a filter and
-      // is not asked to be one — the DM-only BUILT-INS are what it
+      // is not asked to be one — the GM-only BUILT-INS are what it
       // drops.
       check(
-        "the built-ins it drops are the DM's own",
+        "the built-ins it drops are the GM's own",
         st
           .orderTabs(false, [])
           .every((t) => t.dmOnly === false)

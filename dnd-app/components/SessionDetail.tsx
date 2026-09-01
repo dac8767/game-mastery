@@ -44,8 +44,8 @@ import {
  * The notes are on TABS, three of them built in and as many more as
  * anybody makes:
  *
- *   DM notes       what you knew and the table did not.
- *   DM Prep        what you mean to run. Also the DM's, and separate
+ *   GM notes       what you knew and the table did not.
+ *   GM Prep        what you mean to run. Also the GM's, and separate
  *                  because prep is written before the night and notes
  *                  during it.
  *   Player notes   the shared account of the night, which any member
@@ -269,7 +269,7 @@ export function SessionDetail({
    * to put a picture on the player page at all.
    *
    * Settled against the tabs the SERVER sent, so the want above cannot
-   * outlive the tab it names. A player is sent no DM tab and cannot
+   * outlive the tab it names. A player is sent no GM tab and cannot
    * land on one by any state this component holds.
    */
   const tabs = notes?.tabs ?? [];
@@ -367,8 +367,8 @@ export function SessionDetail({
 
         <section
           /* The red edge follows the TAB's visibility, not its name:
-             DM Prep and a hidden tab somebody made are as much "not for
-             the table" as DM notes, and a page that looks identical to
+             GM Prep and a hidden tab somebody made are as much "not for
+             the table" as GM notes, and a page that looks identical to
              the shared one is a page you will paste the wrong thing
              into. */
           className={`session-notes${current?.dmOnly ? " dm-notes" : ""}`}
@@ -379,8 +379,8 @@ export function SessionDetail({
 
               Drawn from what the server sent and nothing else. A tab
               this person may not see is not in the list, so there is no
-              `dmOnly &&` here to get wrong, and the DM tag on the ones
-              that are hidden is a reminder to the DM rather than a
+              `dmOnly &&` here to get wrong, and the GM tag on the ones
+              that are hidden is a reminder to the GM rather than a
               gate. */}
           {notes && tabs.length > 0 && (
             <div className="session-tabs">
@@ -404,7 +404,7 @@ export function SessionDetail({
                     }}
                   >
                     {t.title}
-                    {t.dmOnly && <span className="dm-tag">DM</span>}
+                    {t.dmOnly && <span className="dm-tag">GM</span>}
                   </button>
                 ))}
               </div>
@@ -429,7 +429,7 @@ export function SessionDetail({
 
               {/* Only for a tab that is somebody's to change: the
                   built-ins are nobody's, and a tab a player made is
-                  theirs and the DM's. The server decides which, and
+                  theirs and the GM's. The server decides which, and
                   sends the answer with the tab. */}
               {current?.canManage && (
                 <span className="session-tab-actions">
@@ -542,9 +542,9 @@ export function SessionDetail({
               names the page reads as belonging to the record.
 
               And not before the notes have ARRIVED. `side` is read from
-              the open tab, and the DM tab does not exist until the
-              server has said there is a DM side — so in the window
-              between opening a session and getNotes answering, a DM's
+              the open tab, and the GM tab does not exist until the
+              server has said there is a GM side — so in the window
+              between opening a session and getNotes answering, a GM's
               toolbar points at the PLAYER page. It rendered there, so
               "add a text box" in that second put the box, and then
               whatever was typed into it, on the page the table can

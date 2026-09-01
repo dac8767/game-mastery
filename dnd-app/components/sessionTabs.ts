@@ -43,10 +43,10 @@ export type TabDef = {
 /**
  * The three every session has, in the order they are shown.
  *
- * DM first, which is the way round it was asked for: the DM is writing
+ * GM first, which is the way round it was asked for: the GM is writing
  * during the session and reading the player page back afterwards. Prep
- * sits beside DM notes rather than after Player notes because the two
- * DM-only tabs are the same kind of thing — what the table does not
+ * sits beside GM notes rather than after Player notes because the two
+ * GM-only tabs are the same kind of thing — what the table does not
  * know — and a player sees neither, so for them the strip is unchanged.
  *
  * "prep" is a built-in rather than a tab somebody has to make: it was
@@ -55,12 +55,12 @@ export type TabDef = {
  * Moonbrook alone.
  */
 export const BUILTIN_TABS: TabDef[] = [
-  { key: "dm", title: "DM notes", dmOnly: true, builtin: true },
-  { key: "prep", title: "DM Prep", dmOnly: true, builtin: true },
+  { key: "dm", title: "GM notes", dmOnly: true, builtin: true },
+  { key: "prep", title: "GM Prep", dmOnly: true, builtin: true },
   { key: "player", title: "Player notes", dmOnly: false, builtin: true },
 ];
 
-/** The tab a session opens on for somebody who can see the DM's. */
+/** The tab a session opens on for somebody who can see the GM's. */
 export const DEFAULT_TAB: TabKey = "dm";
 
 /** And for somebody who cannot — the only one they have. */
@@ -140,10 +140,10 @@ export function orderTabs(
  * The tab to show, given the one that was open.
  *
  * A tab deleted out from under you — by you in another window, or by
- * the DM — leaves the strip pointing at nothing, and a canvas keyed to
+ * the GM — leaves the strip pointing at nothing, and a canvas keyed to
  * a tab that is gone writes into a page nobody can read. So the choice
  * falls back rather than being held: the first tab on offer, which is
- * the DM's own for a DM and the player page for everybody else.
+ * the GM's own for a GM and the player page for everybody else.
  */
 export function activeTabKey(tabs: TabDef[], wanted: TabKey | null): TabKey {
   if (tabs.length === 0) return PLAYER_TAB;
