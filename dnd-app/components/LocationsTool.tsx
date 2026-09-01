@@ -12,7 +12,11 @@ import {
   childrenOf,
   clampPin,
   hasMap,
+  isPinned,
   mapSrc,
+  moveTargets,
+  pinnedOf,
+  unpinnedOf,
 } from "@/components/locationTree";
 
 /**
@@ -28,6 +32,14 @@ import {
  * and coming back up is navigation within one screen, and pushing a
  * history entry per pin would make the back button mean something
  * different every level.
+ *
+ * A pin is not the same thing as a child, and the difference is the
+ * subtlety in this screen. Every pin is a child, but a child with no
+ * (x, y) is a place that belongs here and has not been drawn — which
+ * the app's own rules produce routinely, since deleting a location
+ * promotes its children with their pins cleared. Those go in the strip
+ * under the map. Rendering only the pins is what made a promoted
+ * district unreachable.
  */
 
 type Result = FunctionReturnType<typeof api.locations.listForCampaign>;
@@ -35,6 +47,24 @@ type Loc = Result["locations"][number];
 
 /** Uploaded maps and pictures are capped so one scan can't dominate. */
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
+
+/**
+ * Mirrors MAX_PICTURES in convex/locations.ts, which is the one that
+ * actually enforces it. Held here so the button can go quiet at the
+ * limit instead of offering an upload the server will refuse after the
+ * GM has waited for it. The integrity guard pins the two together.
+ */
+const MAX_PICTURES = 12;
+
+/**
+ * What a click on the map means right now.
+ *
+ * A boolean covered only "the next click makes a new location", which
+ * left the GM no way to give an existing one a position — the arrow
+ * nudges move a pin that is already somewhere, and a place with no pin
+ * has nowhere to be nudged from.
+ */
+type Placing = { kind: "new" } | { kind: "move"; id: string } | null;
 
 export function LocationsTool({
   campaignId,
@@ -49,7 +79,7 @@ export function LocationsTool({
 
   const [openId, setOpenId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [placing, setPlacing] = useState(false);
+  const [placing, setPlacing] = useState<Placing>(null);
   const [error, setError] = useState<string | null>(null);
 
   const mapServer = process.env.NEXT_PUBLIC_MAP_SERVER ?? "";
@@ -81,6 +111,21 @@ export function LocationsTool({
     setOpenId((cur) => cur ?? (found.parentId ? String(found.parentId) : null));
   }, [openName, locations]);
 
+  /**
+   * Selecting anything disarms a pending placement.
+   *
+   * A move is armed against ONE location and shows as "Click the map…"
+   * on that location's own panel. Selecting a different place leaves
+   * the indicator off screen while the next map click still moves the
+   * place the GM has stopped looking at — so the selection change
+   * cancels it, rather than leaving an armed action with nothing on
+   * screen that says so.
+   */
+  const select = (id: string | null) => {
+    setSelectedId(id);
+    setPlacing(null);
+  };
+
   const run = async (fn: () => Promise<unknown>) => {
     try {
       setError(null);
@@ -97,7 +142,9 @@ export function LocationsTool({
   const rows = locations as unknown as LocRow[];
   const open = openId ? (locations.find((l) => l._id === openId) ?? null) : null;
   const trail = openId ? ancestorsOf(rows, openId) : [];
-  const pins = childrenOf(rows, openId);
+  const children = childrenOf(rows, openId);
+  const pins = pinnedOf(rows, openId);
+  const unplaced = unpinnedOf(rows, openId);
   const selected = selectedId
     ? (locations.find((l) => l._id === selectedId) ?? null)
     : null;
@@ -105,6 +152,14 @@ export function LocationsTool({
   const src = open
     ? mapSrc(open.mapUrl, open.mapPath, mapServer)
     : null;
+
+  /* A place can only be pinned onto the map it actually belongs to, so
+     this asks for the literal parent rather than using childrenOf —
+     which promotes an orphan to the root on purpose and would offer to
+     pin a district onto a region it does not sit in. */
+  const canPlaceSelected = Boolean(
+    isDm && open && src && selected && selected.parentId === open._id
+  );
 
   /** A click on the map, as a normalized position on the image. */
   const posFromEvent = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -124,7 +179,7 @@ export function LocationsTool({
           onClick={() => {
             setOpenId(null);
             setSelectedId(null);
-            setPlacing(false);
+            setPlacing(null);
           }}
         >
           Atlas
@@ -138,7 +193,7 @@ export function LocationsTool({
               onClick={() => {
                 setOpenId(t._id);
                 setSelectedId(null);
-                setPlacing(false);
+                setPlacing(null);
               }}
             >
               {t.name}
@@ -152,7 +207,9 @@ export function LocationsTool({
               <button
                 type="button"
                 className={`npc-btn${placing ? " primary" : ""}`}
-                onClick={() => setPlacing((p) => !p)}
+                onClick={() =>
+                  setPlacing((p) => (p ? null : { kind: "new" }))
+                }
               >
                 {placing ? "Click the map…" : "Add a pin"}
               </button>
@@ -183,33 +240,39 @@ export function LocationsTool({
       <div className="loc-body">
         <div className="loc-stage">
           {open && src ? (
-            <div
-              className={`loc-map${placing ? " placing" : ""}`}
-              onClick={(e) => {
-                if (!placing || !isDm) return;
-                const { x, y } = posFromEvent(e);
-                setPlacing(false);
-                void run(async () => {
-                  const id = await createLocation({
-                    campaignId,
-                    name: "New location",
-                    parentId: open._id,
-                    x,
-                    y,
+            <>
+              <div
+                className={`loc-map${placing ? " placing" : ""}`}
+                onClick={(e) => {
+                  if (!placing || !isDm) return;
+                  const { x, y } = posFromEvent(e);
+                  const mode = placing;
+                  setPlacing(null);
+                  void run(async () => {
+                    if (mode.kind === "move") {
+                      await setPin({
+                        locationId: mode.id as Id<"locations">,
+                        x,
+                        y,
+                      });
+                      setSelectedId(mode.id);
+                      return;
+                    }
+                    const id = await createLocation({
+                      campaignId,
+                      name: "New location",
+                      parentId: open._id,
+                      x,
+                      y,
+                    });
+                    setSelectedId(id);
                   });
-                  setSelectedId(id);
-                });
-              }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={src} alt={open.name} />
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={src} alt={open.name} />
 
-              {pins.map((pin) => {
-                // A child with no pin belongs to this place but was never
-                // placed on the map — it shows in the panel's list, not
-                // at coordinates it doesn't have.
-                if (pin.x === null || pin.x === undefined) return null;
-                return (
+                {pins.map((pin) => (
                   <button
                     key={pin._id}
                     type="button"
@@ -226,10 +289,16 @@ export function LocationsTool({
                         : pin.name
                     }
                     onClick={(e) => {
+                      // While placing, a pin is part of the map rather
+                      // than a target: swallowing the click here would
+                      // make the busiest part of the image the one
+                      // place a pin cannot go.
+                      if (placing) return;
                       e.stopPropagation();
                       setSelectedId(pin._id);
                     }}
                     onDoubleClick={(e) => {
+                      if (placing) return;
                       e.stopPropagation();
                       // Only descend where there is something to descend
                       // into; a pin with no map of its own just opens.
@@ -241,18 +310,31 @@ export function LocationsTool({
                     <span className="loc-pin-dot" />
                     <span className="loc-pin-label">{pin.name}</span>
                   </button>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+
+              <UnpinnedStrip
+                rows={unplaced}
+                locations={locations}
+                isDm={isDm}
+                selectedId={selectedId}
+                onSelect={select}
+                onOpen={(id) => {
+                  setOpenId(id);
+                  setSelectedId(null);
+                  setPlacing(null);
+                }}
+              />
+            </>
           ) : (
             <LocationList
-              rows={pins}
+              rows={children}
               locations={locations}
               onOpen={(id) => {
                 setOpenId(id);
                 setSelectedId(null);
               }}
-              onSelect={setSelectedId}
+              onSelect={select}
               selectedId={selectedId}
               emptyNote={
                 open
@@ -272,13 +354,26 @@ export function LocationsTool({
             <LocationDetail
               key={selected._id}
               loc={selected}
+              rows={rows}
               isDm={isDm}
               mapServer={mapServer}
               canEnter={hasMap(selected)}
               onEnter={() => {
                 setOpenId(selected._id);
                 setSelectedId(null);
+                setPlacing(null);
               }}
+              canPlace={canPlaceSelected}
+              placingThis={
+                placing?.kind === "move" && placing.id === selected._id
+              }
+              onPlace={() =>
+                setPlacing((p) =>
+                  p?.kind === "move" && p.id === selected._id
+                    ? null
+                    : { kind: "move", id: selected._id }
+                )
+              }
               onChange={(patch) =>
                 void run(() =>
                   updateLocation({
@@ -291,6 +386,7 @@ export function LocationsTool({
                 void run(async () => {
                   await deleteLocation({ locationId: selected._id });
                   setSelectedId(null);
+                  setPlacing(null);
                 })
               }
               onMove={(x, y) =>
@@ -306,6 +402,71 @@ export function LocationsTool({
           )}
         </aside>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The places that belong to this map but are not drawn on it.
+ *
+ * Without this they were rendered nowhere at all — the map branch skips
+ * a child with no coordinates, and the list is only the fallback for a
+ * place that has no map. So promoting a city's districts (which clears
+ * their pins, because the coordinates named the city's map) hid them,
+ * and the cascade the delete rule avoids happened anyway, one level up
+ * and silently.
+ */
+function UnpinnedStrip({
+  rows,
+  locations,
+  isDm,
+  selectedId,
+  onSelect,
+  onOpen,
+}: {
+  rows: LocRow[];
+  locations: Loc[];
+  isDm: boolean;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  onOpen: (id: string) => void;
+}) {
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="loc-unpinned">
+      <div className="loc-unpinned-head">
+        <span className="detail-label">Not on the map</span>
+        <span className="muted">
+          {isDm
+            ? "Pick one, then “Place on map” in the panel."
+            : "These places are here, but the map does not mark them."}
+        </span>
+      </div>
+      <ul>
+        {rows.map((r) => {
+          const full = locations.find((l) => l._id === r._id);
+          return (
+            <li key={r._id}>
+              <button
+                type="button"
+                className={`loc-chip${selectedId === r._id ? " selected" : ""}`}
+                onClick={() => onSelect(r._id)}
+                onDoubleClick={() => hasMap(r) && onOpen(r._id)}
+                title={
+                  hasMap(r) ? `${r.name} — double-click to enter` : r.name
+                }
+              >
+                <span className="loc-list-name">{r.name}</span>
+                {hasMap(r) && <span className="loc-tag">map</span>}
+                {full?.hidden && (
+                  <span className="loc-tag hidden-tag">hidden</span>
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
@@ -356,24 +517,33 @@ function LocationList({
 
 function LocationDetail({
   loc,
+  rows,
   isDm,
   mapServer,
   canEnter,
   onEnter,
+  canPlace,
+  placingThis,
+  onPlace,
   onChange,
   onDelete,
   onMove,
 }: {
   loc: Loc;
+  rows: LocRow[];
   isDm: boolean;
   mapServer: string;
   canEnter: boolean;
   onEnter: () => void;
+  canPlace: boolean;
+  placingThis: boolean;
+  onPlace: () => void;
   onChange: (patch: {
     name?: string;
     description?: string | null;
     dmNotes?: string | null;
     hidden?: boolean;
+    parentId?: Id<"locations"> | null;
   }) => void;
   onDelete: () => void;
   onMove: (x: number, y: number) => void;
@@ -381,6 +551,13 @@ function LocationDetail({
   const [name, setName] = useState(loc.name);
   const [description, setDescription] = useState(loc.description ?? "");
   const [dmNotes, setDmNotes] = useState(loc.dmNotes ?? "");
+
+  // isPinned rather than a fourth spelling of the same test: the map
+  // layer, the strip and this button have to agree on what "placed"
+  // means, and a local `loc.x !== null` drifts the moment the rule
+  // changes — the origin and the half-written pin are exactly where
+  // it would drift.
+  const pinned = isPinned(loc);
 
   return (
     <div className="loc-detail">
@@ -402,14 +579,7 @@ function LocationDetail({
         )}
       </header>
 
-      {loc.pictureUrls.length > 0 && (
-        <div className="loc-pictures">
-          {loc.pictureUrls.map((u) => (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img key={u} src={u} alt={loc.name} />
-          ))}
-        </div>
-      )}
+      <PictureField loc={loc} isDm={isDm} />
 
       <div className="detail-field">
         <div className="detail-label">Description</div>
@@ -447,6 +617,40 @@ function LocationDetail({
             />
           </div>
 
+          {/* Where it sits in the tree. Offered as a picker rather than
+              left to delete-and-recreate: a place carries its
+              description, its GM notes, its pictures and its own map,
+              and rebuilding one to correct its parent throws all of
+              that away. moveTargets asks the same question the server
+              asks, so a move that would be refused is never offered. */}
+          <div className="detail-field">
+            <div className="detail-label">Inside</div>
+            <select
+              className="detail-input"
+              value={loc.parentId ? String(loc.parentId) : ""}
+              onChange={(e) =>
+                onChange({
+                  parentId: e.target.value
+                    ? (e.target.value as Id<"locations">)
+                    : null,
+                })
+              }
+            >
+              {/* The top level is a real answer, not a missing one. */}
+              <option value="">The atlas</option>
+              {moveTargets(rows, loc._id).map(({ row, depth }) => (
+                <option key={row._id} value={row._id}>
+                  {"\u00A0\u00A0".repeat(depth)}
+                  {row.name}
+                </option>
+              ))}
+            </select>
+            <p className="settings-note">
+              Moving it clears its pin — the coordinates named a spot on
+              the map it is leaving. It arrives under “Not on the map”.
+            </p>
+          </div>
+
           <label className="detail-check">
             <input
               type="checkbox"
@@ -461,15 +665,29 @@ function LocationDetail({
           </p>
 
           <MapField loc={loc} mapServer={mapServer} />
-          <PictureField loc={loc} />
 
-          {loc.x !== null && (
-            <div className="loc-nudge">
-              <span className="detail-label">Pin</span>
-              <button type="button" onClick={() => onMove((loc.x ?? 0) - 0.01, loc.y ?? 0)}>←</button>
-              <button type="button" onClick={() => onMove((loc.x ?? 0) + 0.01, loc.y ?? 0)}>→</button>
-              <button type="button" onClick={() => onMove(loc.x ?? 0, (loc.y ?? 0) - 0.01)}>↑</button>
-              <button type="button" onClick={() => onMove(loc.x ?? 0, (loc.y ?? 0) + 0.01)}>↓</button>
+          {canPlace && (
+            <div className="detail-field">
+              <div className="detail-label">Pin</div>
+              <button
+                type="button"
+                className={`npc-btn${placingThis ? " primary" : ""}`}
+                onClick={onPlace}
+              >
+                {placingThis
+                  ? "Click the map…"
+                  : pinned
+                    ? "Move pin on map"
+                    : "Place on map"}
+              </button>
+              {pinned && (
+                <div className="loc-nudge">
+                  <button type="button" onClick={() => onMove((loc.x ?? 0) - 0.01, loc.y ?? 0)}>←</button>
+                  <button type="button" onClick={() => onMove((loc.x ?? 0) + 0.01, loc.y ?? 0)}>→</button>
+                  <button type="button" onClick={() => onMove(loc.x ?? 0, (loc.y ?? 0) - 0.01)}>↑</button>
+                  <button type="button" onClick={() => onMove(loc.x ?? 0, (loc.y ?? 0) + 0.01)}>↓</button>
+                </div>
+              )}
             </div>
           )}
 
@@ -478,7 +696,7 @@ function LocationDetail({
           </button>
           <p className="settings-note">
             Anything inside it moves up a level rather than being deleted
-            with it.
+            with it, and arrives under “Not on the map”.
           </p>
         </>
       )}
@@ -570,13 +788,29 @@ function MapField({ loc, mapServer }: { loc: Loc; mapServer: string }) {
   );
 }
 
-/** Pictures of the place itself, as distinct from its map. */
-function PictureField({ loc }: { loc: Loc }) {
+/**
+ * Pictures of the place itself, as distinct from its map.
+ *
+ * The gallery and its controls are one component because they are one
+ * thing: a picture the GM can see but not remove is what this was
+ * before, and the reason was upstream — the query handed back urls
+ * only, and removePicture names a picture by storage id. Nothing in
+ * the UI could ask for a removal it had no id for.
+ */
+function PictureField({ loc, isDm }: { loc: Loc; isDm: boolean }) {
   const generateUrl = useMutation(api.locations.generateUploadUrl);
   const addPicture = useMutation(api.locations.addPicture);
+  const removePicture = useMutation(api.locations.removePicture);
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const pictures = loc.pictures;
+  const full = pictures.length >= MAX_PICTURES;
+
+  // A player with no pictures gets no empty frame — there is nothing
+  // to show and nothing they could do about it.
+  if (!isDm && pictures.length === 0) return null;
 
   async function upload(file: File) {
     if (file.size > MAX_IMAGE_BYTES) {
@@ -605,30 +839,78 @@ function PictureField({ loc }: { loc: Loc }) {
     }
   }
 
+  async function remove(storageId: (typeof pictures)[number]["id"]) {
+    setBusy(true);
+    setError(null);
+    try {
+      await removePicture({ locationId: loc._id, storageId });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "That didn't work.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="detail-field">
       <div className="detail-label">Pictures</div>
-      <div className="portrait-actions">
-        <button
-          type="button"
-          className="npc-btn"
-          disabled={busy}
-          onClick={() => input.current?.click()}
-        >
-          {busy ? "Uploading…" : "Add a picture"}
-        </button>
-      </div>
-      <input
-        ref={input}
-        type="file"
-        accept="image/*"
-        hidden
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = "";
-          if (file) void upload(file);
-        }}
-      />
+
+      {pictures.length > 0 && (
+        <div className="loc-pictures">
+          {pictures.map((p) => (
+            <div key={p.id} className="loc-picture">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p.url} alt={loc.name} />
+              {isDm && (
+                <button
+                  type="button"
+                  className="loc-picture-remove"
+                  title="Remove this picture"
+                  disabled={busy}
+                  onClick={() => void remove(p.id)}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {isDm && (
+        <>
+          <div className="portrait-actions">
+            <button
+              type="button"
+              className="npc-btn"
+              disabled={busy || full}
+              title={
+                full
+                  ? `A location holds at most ${MAX_PICTURES} pictures.`
+                  : undefined
+              }
+              onClick={() => input.current?.click()}
+            >
+              {busy ? "Uploading…" : "Add a picture"}
+            </button>
+            <span className="muted">
+              {pictures.length} of {MAX_PICTURES}
+            </span>
+          </div>
+          <input
+            ref={input}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) void upload(file);
+            }}
+          />
+        </>
+      )}
+
       {error && <p className="form-error">{error}</p>}
     </div>
   );

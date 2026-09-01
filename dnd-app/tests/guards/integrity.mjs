@@ -6929,6 +6929,124 @@ export const integrity = {
       }
     }
 
+    // ---- a place on the map, and a place that is only in it ---------
+    //
+    // The Locations screen draws children two ways, and the failure it
+    // guards against is the one that leaves no trace: a child with no
+    // (x, y) has nowhere to be drawn, so the map layer skips it, and
+    // the flat list is only the fallback for a place that HAS no map.
+    // Rendered by neither, it is not merely unplaced — it is
+    // unreachable, with no route to it from anywhere on the screen.
+    //
+    // That state is not exotic. deleteLocation promotes a location's
+    // children rather than cascading, and clears their pins because the
+    // coordinates named a map that is going away; reparenting clears
+    // them for the same reason. So deleting one city is enough. The
+    // cascade the backend went out of its way to avoid then happened in
+    // the UI instead, silently, one level up.
+    //
+    // TypeScript sees none of this: every branch type-checks, and the
+    // screen looks right until the atlas has a promoted child in it.
+    {
+      const tool = stripComments(read("components", "LocationsTool.tsx"));
+      const locSrc = stripComments(read("convex", "locations.ts"));
+
+      const WHY = {
+        pinnedOf:
+          "the pin layer would decide for itself which children have a " +
+          "position, which is where the origin and the half-written pin " +
+          "go wrong",
+        unpinnedOf:
+          "the two halves of a parent's children would no longer come " +
+          "from one split, and a child that falls between them is " +
+          "rendered nowhere at all",
+        isPinned:
+          "the \"Place on map\" button would answer \"is this placed\" its " +
+          "own way, and disagree with the layer that drew it",
+      };
+      for (const [fn, why] of Object.entries(WHY)) {
+        if (!new RegExp(`\\b${fn}\\(`).test(tool)) {
+          problems.push(`LocationsTool no longer calls ${fn} — ${why}`);
+        }
+      }
+      if (!/<UnpinnedStrip\b/.test(tool)) {
+        problems.push(
+          "LocationsTool computes the unpinned children but renders no " +
+            "strip for them — a location promoted out of a deleted parent " +
+            "has no route to it from the screen at all"
+        );
+      }
+
+      // The picker offers a new parent. flatten() alone offers every
+      // location including the ones INSIDE this one, and updateLocation
+      // refuses exactly those — so the difference between the two is a
+      // list of moves that look available and throw when taken.
+      if (!/\bmoveTargets\(/.test(tool)) {
+        problems.push(
+          "the Inside picker does not use moveTargets — a flat list of " +
+            "every location offers moves under your own descendant, which " +
+            "the server rejects and the GM cannot see coming"
+        );
+      }
+
+      // removePicture was stranded for exactly this reason: the query
+      // handed back resolved urls and nothing else, and the mutation
+      // names a picture by storage id. Both halves have to hold, and
+      // neither is visible to the compiler from the other side.
+      if (!/pictures:[\s\S]{0,400}?\{\s*id,/.test(locSrc)) {
+        problems.push(
+          "locations.listForCampaign no longer returns each picture's " +
+            "storage id — removePicture names one by id, so the GM would " +
+            "be able to add a picture and never remove it"
+        );
+      }
+      if (!/removePicture\(\{[^}]*storageId/.test(tool)) {
+        problems.push(
+          "LocationsTool never calls removePicture — an uploaded picture " +
+            "would be permanent"
+        );
+      }
+
+      // Two constants, one rule. The client's copy exists to grey the
+      // button out at the limit; if it drifts above the server's, the
+      // GM waits for an upload that is then refused, and the file is
+      // deleted server-side after they have already spent the time.
+      const cap = (src, where) => {
+        const m = /const MAX_PICTURES = (\d+);/.exec(src);
+        if (!m) {
+          problems.push(`${where} no longer defines MAX_PICTURES`);
+          return null;
+        }
+        return Number(m[1]);
+      };
+      const serverCap = cap(locSrc, "convex/locations.ts");
+      const clientCap = cap(tool, "LocationsTool.tsx");
+      if (serverCap !== null && clientCap !== null && serverCap !== clientCap) {
+        problems.push(
+          `LocationsTool caps pictures at ${clientCap} but ` +
+            `convex/locations.ts enforces ${serverCap} — the disagreement ` +
+            "shows up as an upload that is accepted and then refused"
+        );
+      }
+
+      // Anchored, because ".loc" is a prefix of every class in this
+      // section and an unanchored search finds a rule for one of them
+      // while reporting the missing one as present.
+      const locCss = read("app", "globals.css");
+      for (const cls of [
+        "loc-unpinned",
+        "loc-chip",
+        "loc-picture",
+        "loc-picture-remove",
+      ]) {
+        if (!new RegExp(`^\\.${cls}\\s*[,{:]`, "m").test(locCss)) {
+          problems.push(
+            `globals.css has no .${cls} rule, which LocationsTool renders`
+          );
+        }
+      }
+    }
+
     return problems;
   },
 };

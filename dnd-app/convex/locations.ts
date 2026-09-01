@@ -57,11 +57,24 @@ export const listForCampaign = query({
           y: l.y ?? null,
           mapPath: l.mapPath ?? null,
           mapUrl: l.mapId ? await ctx.storage.getUrl(l.mapId) : null,
-          pictureUrls: (
+          // Each picture arrives as its id AND its url, because
+          // removePicture names one by id and a client holding only
+          // urls cannot ask for anything. The alternative — removing
+          // by position in this array — is the one shape to avoid: a
+          // list that shifted between render and click deletes the
+          // wrong file, permanently, whereas a stale id deletes
+          // nothing. The id is no more of a secret than the url, which
+          // already contains it.
+          pictures: (
             await Promise.all(
-              (l.pictureIds ?? []).map((id) => ctx.storage.getUrl(id))
+              (l.pictureIds ?? []).map(async (id) => ({
+                id,
+                url: await ctx.storage.getUrl(id),
+              }))
             )
-          ).filter((u): u is string => Boolean(u)),
+          ).filter((p): p is { id: Id<"_storage">; url: string } =>
+            Boolean(p.url)
+          ),
           hidden: isDm ? l.hidden : false,
           dmNotes: isDm ? (l.dmNotes ?? null) : null,
         }))
