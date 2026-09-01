@@ -8144,6 +8144,157 @@ button.cal-day:hover {
   color: var(--text-dim);
 }
 
+/* The head is a row of three controls now — the title opens the
+   section, the pin holds it. It used to be one <button>, which is why
+   the opener carries the reset the wrapper used to. */
+.rules-hit-head {
+  cursor: default;
+}
+
+.rules-hit-open {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.rules-hit-open:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.rules-pin {
+  flex: none;
+  padding: 0 0.2rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--text-dim);
+  opacity: 0.45;
+}
+
+.rules-pin:hover,
+.rules-pin.on {
+  opacity: 1;
+  color: var(--accent);
+}
+
+/* The keyboard cursor. An outline rather than a background so it reads
+   as a cursor and not as a second kind of "open". */
+.rules-hit.selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* A pin whose section no longer resolves after a re-import. */
+.rules-missing {
+  margin: 0.4rem 0 0;
+}
+
+/* ---------- Rules Lawyer: the AI answer ----------
+   Sits ABOVE the hit list and never replaces it. The border is what
+   says "this one is written, the sections below are quoted". */
+.rules-answer {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 0.55rem 0.8rem 0.7rem;
+  background: var(--bg-raised);
+}
+
+.rules-answer-bar {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.rules-ask {
+  font-weight: 600;
+}
+
+.rules-answer-note {
+  margin-left: auto;
+}
+
+.rules-answer-error {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: var(--danger, #c2410c);
+}
+
+.rules-answer-text {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A citation is a control, so it looks like one — but inline, at the
+   size of the prose it sits in. */
+.rules-cite {
+  padding: 0 0.15rem;
+  background: none;
+  border: none;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  vertical-align: baseline;
+}
+
+.rules-cite:hover {
+  text-decoration: underline;
+}
+
+.rules-cites {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.15rem;
+  font-size: 0.8rem;
+}
+
+.rules-cites li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+/* ---------- Rules Lawyer: the start screen ---------- */
+.rules-start {
+  display: grid;
+  gap: 1rem;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+}
+
+.rules-start-head {
+  margin: 0 0 0.4rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.rules-recents {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.9rem;
+  font-size: 0.85rem;
+}
+
 /* ---------- edit mode ----------
    Everything here only ever renders while edit mode is on. With it off
    the labels are bare text and the handles render nothing at all, so

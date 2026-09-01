@@ -1407,6 +1407,87 @@ export const unit = {
       rs.trailOf("", "Combat") === "Combat"
     );
 
+    // ---- the AI layer's half ----------------------------------------
+    // An answer is model output, and the citation markers inside it are
+    // model output. Same treatment as document text: spans out, markup
+    // never, and the caller renders.
+    const ruling =
+      "You cannot [1] take a reaction while incapacitated [2]. See [9].";
+    const ruleSpans = rs.answerSpans(ruling, [1, 2]);
+    check(
+      "answerSpans rejoins to exactly the original answer",
+      ruleSpans.map((s) => s.text).join("") === ruling
+    );
+    check(
+      "a citation the answer carries becomes a span of its own",
+      ruleSpans.filter((s) => s.cite === 1).map((s) => s.text).join("") === "[1]"
+    );
+    check(
+      "every marked span reports the number it cites",
+      ruleSpans.filter((s) => s.cite !== null).every((s) => s.text === `[${s.cite}]`)
+    );
+    // A marker with no citation behind it opens nothing, so it stays
+    // prose. A control that does nothing is worse than the bracket.
+    check(
+      "a marker with no citation behind it stays prose",
+      ruleSpans.every((s) => s.cite !== 9) && ruling.includes("[9]")
+    );
+    check(
+      "answerSpans never emits markup of its own",
+      !JSON.stringify(rs.answerSpans("<b>x</b> [1]", [1])).includes("<mark")
+    );
+    check("an empty answer has no spans", rs.answerSpans("", [1]).length === 0);
+
+    // Pins, citations and hits find each other by NAME, because the
+    // rules table is replaced wholesale and every id changes with it.
+    check(
+      "sectionKeyOf agrees for the same section named twice",
+      rs.sectionKeyOf({
+        source: "SRD 5.2",
+        breadcrumb: "Rules Glossary > Conditions",
+        title: "Grappled",
+      }) ===
+        rs.sectionKeyOf({
+          source: "SRD 5.2",
+          breadcrumb: "Rules Glossary > Conditions",
+          title: " Grappled ",
+        })
+    );
+    check(
+      "sectionKeyOf separates two sections sharing a title",
+      rs.sectionKeyOf({ source: "SRD 5.2", breadcrumb: "Combat", title: "Actions" }) !==
+        rs.sectionKeyOf({
+          source: "SRD 5.2",
+          breadcrumb: "Spellcasting",
+          title: "Actions",
+        })
+    );
+    check(
+      "sectionKeyOf separates the same section in two documents",
+      rs.sectionKeyOf({ source: "SRD 5.1", breadcrumb: "C", title: "Grappled" }) !==
+        rs.sectionKeyOf({ source: "SRD 5.2", breadcrumb: "C", title: "Grappled" })
+    );
+
+    // Asking the same thing twice moves it up the list rather than
+    // leaving a second copy of it further down.
+    check(
+      "a repeated question moves to the front, once",
+      rs.pushRecent(["b", "a"], "a").join() === "a,b"
+    );
+    check(
+      "a repeat is matched regardless of case",
+      rs.pushRecent(["Grappled"], "grappled").length === 1
+    );
+    check("an empty question is not remembered", rs.pushRecent(["a"], "  ").join() === "a");
+    check(
+      "the recent list is capped",
+      rs.pushRecent(["1", "2", "3"], "4", 3).length === 3
+    );
+    check(
+      "the cap drops the oldest, not the newest",
+      rs.pushRecent(["1", "2", "3"], "4", 3).join() === "4,1,2"
+    );
+
     // ---- edit mode: the registry, merged and exported --------------
     const uiOut = compile("components/uiRegistry.ts");
     const ui = await import(pathToFileURL(join(uiOut, "uiRegistry.js")).href);

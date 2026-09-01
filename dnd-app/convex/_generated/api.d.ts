@@ -23,6 +23,8 @@ import type * as maps from "../maps.js";
 import type * as notebook from "../notebook.js";
 import type * as npcs from "../npcs.js";
 import type * as recorder from "../recorder.js";
+import type * as rules from "../rules.js";
+import type * as rulesAsk from "../rulesAsk.js";
 import type * as sessions from "../sessions.js";
 import type * as settings from "../settings.js";
 import type * as todo from "../todo.js";
@@ -50,6 +52,8 @@ declare const fullApi: ApiFromModules<{
   notebook: typeof notebook;
   npcs: typeof npcs;
   recorder: typeof recorder;
+  rules: typeof rules;
+  rulesAsk: typeof rulesAsk;
   sessions: typeof sessions;
   settings: typeof settings;
   todo: typeof todo;

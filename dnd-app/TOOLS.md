@@ -17,21 +17,27 @@ boundaries were there; this file writes them down.
 
 ## How to start a chat
 
-**0. `git checkout claude/game-mastery-db-setup-jaeuln` — first, before
-anything else.**
+**0. Cut your branch from `origin/main`, by name, and look at what you
+cut from.**
 
-This is the trunk. Every branch below is cut from it, and it is where
-the app actually lives.
+```bash
+git fetch origin main
+git log --oneline -1 origin/main        # read this line
+git checkout -b claude/tool-<id> origin/main
+```
 
-`main` is NOT the app. It is the initial import from 17 July 2026 and
-is over 150 commits behind — no GM Screen, no Lookup, no pagination,
-and no copy of this file. A fresh session clones the default branch, so
-a chat that skips this step is reading a six-week-old skeleton and will
-correctly report that the thing it was asked to work on does not exist.
-That has already happened once.
+`main` IS the app. It was not always — until 1 September 2026 the trunk
+was a long-named branch and `main` was a six-week-old skeleton, which
+cost one session an afternoon of work against a screen that did not
+exist. The tool branches were consolidated into `main` that day and it
+is now the only trunk. If you find a `claude/game-mastery-db-setup-*`
+branch, it is a leftover.
 
-If this file is missing, you are on the wrong branch. That is the
-symptom, and step 0 is the fix.
+**Name `origin/main` explicitly.** `git checkout -b <name>` on its own
+branches from your local HEAD, which in a fresh or shallow clone can be
+far behind — that has produced a whole branch built against a filename
+that no longer existed, in the sibling repo, on the same day. Printing
+the commit you are building on is how you notice before you start.
 
 ```bash
 cd dnd-app
@@ -356,11 +362,29 @@ Note    Adding a builtin marked `permanent` is how new controls reach
 ### rules — Rules Lawyer
 ```
 Owns    components/RulesLawyerTool.tsx, components/rulesSnippet.ts
+        convex/rules.ts, convex/rulesAsk.ts
         app/campaign/[campaignId]/rules/
-Reads   convex/lookup.ts (api.lookup)
+Tables  rulePins, ruleAnswers
+Reads   convex/lookup.ts (api.lookup) — the `rules` table, its two
+        search indexes, and ruleContext all live there and stay there
 Branch  claude/tool-rules
-Status  Thin — a stub with a route and a GM Screen panel. Building it
-        out is a tool-shaped job that conflicts with nothing.
+Note    Two halves, and the order matters. The search half quotes the
+        rules verbatim and is the reason anything here can be trusted;
+        the AI half reads those passages back with inline citations and
+        sits ABOVE them, never instead of them. The integrity guard
+        enforces exactly that — prose is allowed only where the quoted
+        sections and its citations are on screen with it.
+
+        rulesAsk.ts is the only `"use node"` file in the app and the
+        only thing in Game Mastery that costs money per use. It needs
+        ANTHROPIC_API_KEY set on the deployment (`npx convex env set`),
+        refuses to answer with no passages to cite, and caches every
+        answer in ruleAnswers so the same question is paid for once.
+
+        Nothing outside the `rules` table stores a rule's `_id`. The
+        importer replaces that table wholesale, so pins, cached
+        citations and the `?open=` in a shared link are all keyed on
+        source + breadcrumb + title instead.
 ```
 
 ### scheduler — Scheduler
