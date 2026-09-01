@@ -75,7 +75,9 @@ only where the change requires it:
 ```bash
 cd "$(find ~ -maxdepth 4 -type d -name dnd-app -path '*game-mastery*' 2>/dev/null | head -1)" && pwd
 git pull origin claude/game-mastery-db-setup-jaeuln
+pkill -f "convex dev"
 pkill -f "next dev"
+lsof -ti tcp:3000 | xargs -I{} kill -9 {}
 npx convex dev --once
 node scripts/import-foundry.mjs ~/Downloads/foundry-everything.json k17ezhmgzwdzfb0pr0ctahsgrx8cqn8a -o foundry-import
 npx convex import --table spells foundry-import/spells.jsonl --replace --yes
@@ -96,9 +98,19 @@ Why each line is there:
   and `npx convex` offers to install Convex into the home directory.
   The `&& pwd` prints where it landed, so a wrong answer is visible
   immediately instead of three errors later.
-- `pkill -f "next dev"` — a stale dev server holds port 3000 and keeps
+- The three kill lines — a stale dev server holds port 3000 and keeps
   serving an older build with older `NEXT_PUBLIC_` values baked in. The
   new one quietly moves to 3001 and you carry on looking at the old one.
+
+  It takes three lines because `pkill -f "next dev"` does not do it.
+  `npm run dev` is `convex dev --start 'next dev'`, so the tree is
+  convex → next dev → the server that actually listens — and Next
+  renames that last one to `next-server (v16.3.1)`. The pattern matches
+  the two wrappers and misses the only process holding the port. Killing
+  by PORT is the line that cannot go stale: it names the symptom rather
+  than a process title that changes with the next Next release. This has
+  now cost a round trip in exactly the way the line was written to
+  prevent.
 - `npx convex dev --once` pushes the schema and RETURNS. `npm run dev`
   also pushes it but then stays running, so nothing after it would ever
   execute. A schema change has to land before the import, or the import
