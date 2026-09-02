@@ -73,8 +73,8 @@ converter re-run and the tables replaced. Give this whole block, adjusted
 only where the change requires it:
 
 ```bash
-cd "$(find ~ -maxdepth 4 -type d -name dnd-app -path '*game-mastery*' 2>/dev/null | head -1)" && pwd
-git pull origin claude/game-mastery-db-setup-jaeuln
+cd ~/Developer/game-mastery/dnd-app && pwd
+git pull origin main
 pkill -f "convex dev"
 pkill -f "next dev"
 lsof -ti tcp:3000 | xargs -I{} kill -9 {}
@@ -92,12 +92,15 @@ npm run dev
 
 Why each line is there:
 
-- The `cd` locates the repo rather than assuming the shell is in it. A
-  new terminal opens in `~`, and every line after it then fails in a
-  different confusing way — `git pull` claims there is no repository,
-  and `npx convex` offers to install Convex into the home directory.
-  The `&& pwd` prints where it landed, so a wrong answer is visible
-  immediately instead of three errors later.
+- The `cd` names the repo by its full path rather than assuming the
+  shell is in it. A new terminal opens in `~`, and every line after it
+  then fails in a different confusing way — `git pull` claims there is
+  no repository, and `npx convex` offers to install Convex into the
+  home directory. It is an explicit path, not a `find`: a `find` for
+  `*game-mastery*/dnd-app` once landed in `~/ClipStack`, a checkout of
+  a different repo with the same folder shape, and pushed at the wrong
+  remote. The `&& pwd` prints where it landed, so a wrong answer is
+  visible immediately instead of three errors later.
 - The three kill lines — a stale dev server holds port 3000 and keeps
   serving an older build with older `NEXT_PUBLIC_` values baked in. The
   new one quietly moves to 3001 and you carry on looking at the old one.

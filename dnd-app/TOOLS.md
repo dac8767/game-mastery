@@ -1,8 +1,9 @@
 # Tools — who owns what
 
-**Read this before starting work in a fresh chat.** It says which files
-belong to which tool, so two chats working at the same time do not
-write to the same file.
+**Read only your tool's section, not the whole file.** This file says
+which files belong to which tool, so two chats working at the same time
+do not write to the same file. Find your tool below, read its block,
+and start.
 
 The rule is one chat per tool. If your task is inside one tool, you can
 work in parallel with any other tool's chat. If your task crosses tools
@@ -17,38 +18,47 @@ boundaries were there; this file writes them down.
 
 ## How to start a chat
 
-**0. Cut your branch from `origin/main`, by name, and look at what you
-cut from.**
+Each chat runs in its own git worktree. Derek opens one with
+`claude --worktree <name>` from the repo root, which makes
+`.claude/worktrees/<name>` on a branch called `worktree-<name>`, cut
+from the local `main`. If you are reading this, you are already in one:
+the branch exists, the checkout is yours, and nothing you do here
+touches another chat's files on disk.
+
+**0. Look at what you were cut from.**
 
 ```bash
 git fetch origin main
-git log --oneline -1 origin/main        # read this line
-git checkout -b claude/tool-<id> origin/main
+git log --oneline -1 main
+git log --oneline -1 origin/main
 ```
 
-`main` IS the app. It was not always — until 1 September 2026 the trunk
+The two lines should name the same commit. If `origin/main` is ahead,
+`main` was not pulled before the worktree was made, and you are about
+to build on a stale tree — rebase onto `origin/main` before starting.
+This is the lesson from a branch in the sibling repo that was built
+against a filename that had ceased to exist, because nobody read what
+`git fetch` returned.
+
+`main` IS the app and the only trunk. Until 1 September 2026 the trunk
 was a long-named branch and `main` was a six-week-old skeleton, which
 cost one session an afternoon of work against a screen that did not
-exist. The tool branches were consolidated into `main` that day and it
-is now the only trunk. If you find a `claude/game-mastery-db-setup-*`
-branch, it is a leftover.
+exist. If you find a `claude/game-mastery-db-setup-*` or
+`claude/tool-*` branch, it is a leftover from before the worktree flow.
 
-**Name `origin/main` explicitly.** `git checkout -b <name>` on its own
-branches from your local HEAD, which in a fresh or shallow clone can be
-far behind — that has produced a whole branch built against a filename
-that no longer existed, in the sibling repo, on the same day. Printing
-the commit you are building on is how you notice before you start.
+**1. Install.** A fresh worktree has no `node_modules`.
 
 ```bash
 cd dnd-app
-git fetch origin claude/game-mastery-db-setup-jaeuln
-git checkout claude/game-mastery-db-setup-jaeuln
+npm install
 ```
 
-1. Read `CLAUDE.md` (standing preferences, guard rules).
-2. Read this file. Find your tool. **Those files are yours.**
-3. Work on `claude/tool-<id>`, cut from the trunk named in step 0.
-4. Run `npm run guards` before pushing. Rebase, don't merge.
+2. Read `CLAUDE.md` (standing preferences, guard rules).
+3. Find your tool in this file. **Those files are yours.** Skip the
+   rest of the file.
+4. Run `npm run guards` before saying the work is done. Rebase onto
+   `origin/main` rather than merging it in; Derek merges the worktree
+   branch into `main`.
 5. Say in your final message whether you changed `convex/schema.ts`, so
    the paste blocks get run in the right order.
 
@@ -598,8 +608,9 @@ mounting tool's screen, and the guard suite is what catches it.
 ## Still shared, unavoidably
 
 `convex/schema.ts` and `app/globals.css` are one file each today, and
-every tool writes to them. Until the split described in
-`PARALLEL-WORK.md` phases 1–2 happens:
+every tool writes to them. Worktrees do not help here: each chat
+edits its own copy, and the conflict arrives when the branches merge.
+Until those files are split per tool:
 
 - **schema.ts** — keep each tool's tables in one block, and add new
   ones next to your tool's existing block rather than at the end. Two
