@@ -5739,6 +5739,60 @@ export const unit = {
         sc.sessionPatch("date", " 2026-08-24 ").date === "2026-08-24"
       );
 
+      // ---- attendance is picked from the roster -------------------
+      // The roster's spelling wins over what was typed, a name is
+      // never on the list twice, and a guest the roster has never
+      // heard of is still attendance.
+      const roster = ["Alex", "Steph"];
+      check(
+        "a typed name lands as the roster spells it",
+        sc.addPlayer([], "steph", roster).join("|") === "Steph"
+      );
+      check(
+        "a name already on the list is not added again, however capitalised",
+        sc.addPlayer(["Steph"], "STEPH", roster).join("|") === "Steph"
+      );
+      check(
+        "a guest is kept as typed, trimmed",
+        sc.addPlayer(["Alex"], "  Hank ", roster).join("|") === "Alex|Hank"
+      );
+      check(
+        "a blank adds nobody",
+        sc.addPlayer(["Alex"], "   ", roster).join("|") === "Alex"
+      );
+      check(
+        "a name comes off the list whichever way it was capitalised",
+        sc.removePlayer(["Alex", "Steph"], "alex").join("|") === "Steph"
+      );
+
+      // ---- the Date column reads the way this person reads dates ---
+      // The stored value stays ISO; only how it READS changes, and a
+      // value that is not an ISO day is shown as typed rather than lost.
+      const dated = sc.withDateFormat(sc.sessionColumnsFor("xp"), "mdy");
+      const dateCol = dated.find((c) => c.key === "date");
+      check(
+        "withDateFormat puts a reader on the date column",
+        typeof dateCol?.format === "function" &&
+          dateCol.format("2026-09-05") === "Sep 5, 2026"
+      );
+      check(
+        "and a different style reads differently",
+        sc
+          .withDateFormat(sc.sessionColumnsFor("xp"), "numeric")
+          .find((c) => c.key === "date")
+          .format("2026-09-05") === "09/05/2026"
+      );
+      check(
+        "a date that is not an ISO day is shown as typed",
+        dateCol.format("9/13/26") === "9/13/26"
+      );
+      check(
+        "withDateFormat leaves every other column alone",
+        dated.filter((c) => c.key !== "date").every((c, i) =>
+          c === sc.sessionColumnsFor("xp").filter((d) => d.key !== "date")[i]
+        )
+      );
+
       // The two lists that decide what the screen can do have to name
       // real columns; a facet or a sort key that is not one shows up as
       // an unlabelled option that groups everything under "—".
@@ -5912,34 +5966,20 @@ export const unit = {
           .join() === "Gus"
       );
 
-      // Toggling one name off a line of five is where the stored array
-      // and the typed line have to agree exactly.
-      check(
-        "a name not on the line goes on the end",
-        sc.toggleChip("Ana, Bo", "Cy") === "Ana, Bo, Cy"
-      );
-      check(
-        "a name already on it comes off",
-        sc.toggleChip("Ana, Bo, Cy", "Bo") === "Ana, Cy"
-      );
-      check(
-        "and comes off whatever case it was typed in",
-        sc.toggleChip("ana, Bo", "ANA") === "Bo"
-      );
-      check(
-        "toggling onto an empty line is just the name",
-        sc.toggleChip("", "Ana") === "Ana"
-      );
-      check(
-        "and the last one off leaves nothing",
-        sc.toggleChip("Ana", "Ana") === ""
-      );
-      // Which sessionPatch then has to read back as an empty list
+      // The picker commits its list as the comma line sessionPatch
+      // reads, so the two have to agree exactly — including when the
+      // last name comes off, which must store as an empty attendance
       // rather than as a list holding one empty string.
       check(
-        "an emptied line stores an empty attendance",
-        sc.sessionPatch("players", sc.toggleChip("Ana", "Ana")).players
-          .length === 0
+        "a picked list goes round through the comma line intact",
+        sc
+          .sessionPatch("players", sc.addPlayer(["Ana", "Bo"], "Cy", []).join(", "))
+          .players.join("|") === "Ana|Bo|Cy"
+      );
+      check(
+        "an emptied list stores an empty attendance",
+        sc.sessionPatch("players", sc.removePlayer(["Ana"], "Ana").join(", "))
+          .players.length === 0
       );
 
       // The primary column is a NUMBER, and a column of bare digits

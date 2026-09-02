@@ -31,12 +31,17 @@ import {
 import { ColumnDef } from "@/components/npcColumns";
 import {
   Leveling,
+  addPlayer,
   campaignPlayers,
+  chipsFromInput,
   milestoneOptions,
+  playerKey,
+  removePlayer,
   sessionColumnsFor,
   sessionPatch,
-  toggleChip,
+  withDateFormat,
 } from "@/components/sessionColumns";
+import { DateFormat } from "@/components/campaignCard";
 import { NotebookFormatBar } from "@/components/NotebookFormatBar";
 import {
   registerScrapbookSaver,
@@ -141,7 +146,14 @@ export function SessionDetail({
   const campaigns = useQuery(api.campaigns.myCampaigns);
   const leveling: Leveling =
     campaigns?.find((c) => c._id === campaignId)?.leveling ?? "xp";
-  const columns = useMemo(() => sessionColumnsFor(leveling), [leveling]);
+  /* How the date reads to somebody who cannot edit it — the same
+     Settings choice the list honours. AppShell's subscription. */
+  const settings = useQuery(api.settings.mySettings);
+  const dateFormat: DateFormat = settings?.dateFormat ?? "dmy";
+  const columns = useMemo(
+    () => withDateFormat(sessionColumnsFor(leveling), dateFormat),
+    [leveling, dateFormat]
+  );
 
   /* Every session, for the milestone dropdown's options: a level one
      night reached is not on offer to another. The same query the list
@@ -1061,7 +1073,7 @@ function SessionField({
   col: ColumnDef;
   value: string;
   editable: boolean;
-  /** Values to offer as one-click chips, above the free-text line. */
+  /** For the attendance field: the roster, as PlayerPicker offers it. */
   options?: string[];
   /** For a `level` field: the levels still available to pick. */
   levels?: number[];
@@ -1137,42 +1149,35 @@ function SessionField({
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
         />
+      ) : col.kind === "chips" ? (
+        /* Attendance is picked, not typed: the roster from Settings is
+           the list, and each pick is a commit of its own — there is no
+           half-typed line to hold, so no draft. The value is the live
+           row, and what comes back from the server is what shows. */
+        <PlayerPicker
+          value={chipsFromInput(value)}
+          options={options ?? []}
+          onChange={(next) => onCommit(next.join(", "))}
+        />
+      ) : col.key === "date" ? (
+        /* The browser's own picker, which only ever yields an ISO day
+           — the one shape the column sorts on and the date style in
+           Settings can read. A blank clears it. Committed on change
+           rather than on blur: a picker is done when it has picked. */
+        <input
+          className="detail-input"
+          type="date"
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            onCommit(e.target.value);
+          }}
+        />
       ) : (
-        <>
-          {/* One click each, above the line rather than instead of it.
-              The line stays because attendance is not a closed set —
-              a guest who played one night was there, and a field that
-              only offered the campaign's members would have no way to
-              say so. */}
-          {options && options.length > 0 && (
-            <div className="field-options">
-              {options.map((name) => {
-                const on = draft
-                  .split(",")
-                  .some((v) => v.trim().toLowerCase() === name.toLowerCase());
-                return (
-                  <button
-                    type="button"
-                    key={name}
-                    className={`chip chip-pick${on ? " on" : ""}`}
-                    aria-pressed={on}
-                    onClick={() => {
-                      const next = toggleChip(draft, name);
-                      setDraft(next);
-                      onCommit(next);
-                    }}
-                  >
-                    {name}
-                  </button>
-                );
-              })}
-            </div>
-          )}
         <input
           className="detail-input"
           type={col.kind === "number" ? "number" : "text"}
           value={draft}
-          placeholder={col.kind === "chips" ? "Comma separated" : undefined}
           onFocus={() => setFocused(true)}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
@@ -1185,8 +1190,158 @@ function SessionField({
             }
           }}
         />
-        </>
       )}
     </label>
+  );
+}
+
+/**
+ * Who was at the table, picked from the roster.
+ *
+ * The names already on the session are chips, each with its own ×.
+ * Click into the line and the roster from Settings drops down — every
+ * active player not yet on the list — and a click on a name adds it.
+ * Typing narrows the list; Enter takes the first match. The options
+ * are the live roster (see campaignPlayers), so a name added or
+ * retired in Settings is added to or gone from this list without
+ * anything here knowing.
+ *
+ * A guest is still possible, because attendance is who was in the
+ * room: type a name the roster does not have and the menu offers to
+ * add it as typed. That is a second gesture rather than the first, so
+ * a typo in a regular's name lands on the roster's spelling rather
+ * than beside it.
+ *
+ * Options are taken on MOUSEDOWN with the default prevented, the same
+ * rule NoteMentions runs on: a click would blur the input first, the
+ * blur would close the menu, and the click would land on nothing.
+ */
+function PlayerPicker({
+  value,
+  options,
+  onChange,
+}: {
+  value: string[];
+  options: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [text, setText] = useState("");
+  const [open, setOpen] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+
+  const has = (name: string) =>
+    value.some((v) => playerKey(v) === playerKey(name));
+  const q = playerKey(text);
+  const offered = options.filter(
+    (o) => !has(o) && (!q || playerKey(o).includes(q))
+  );
+  // A typed name that is on the roster is offered above; only a name
+  // the roster does not know needs the guest line.
+  const guest =
+    q && !options.some((o) => playerKey(o) === q) && !has(text)
+      ? text.replace(/\s+/g, " ").trim()
+      : null;
+
+  const add = (name: string) => {
+    const next = addPlayer(value, name, options);
+    if (next !== value) onChange(next);
+    setText("");
+  };
+
+  return (
+    <div className={`player-picker${open ? " open" : ""}`}>
+      <div
+        className="player-line"
+        onClick={() => input.current?.focus()}
+      >
+        {value.map((name) => (
+          <span className="chip player-chip" key={name}>
+            {name}
+            <button
+              type="button"
+              className="chip-x"
+              aria-label={`Remove ${name}`}
+              title={`Remove ${name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange(removePlayer(value, name));
+              }}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        <input
+          ref={input}
+          className="player-input"
+          type="text"
+          value={text}
+          placeholder={value.length === 0 ? "Who was there?" : "Add…"}
+          aria-label="Add a player"
+          aria-expanded={open}
+          onFocus={() => setOpen(true)}
+          onBlur={() => {
+            setOpen(false);
+            setText("");
+          }}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              if (offered.length > 0) add(offered[0]);
+              else if (guest) add(guest);
+            } else if (e.key === "Escape") {
+              e.currentTarget.blur();
+            } else if (e.key === "Backspace" && text === "" && value.length) {
+              // Backspace at an empty line takes the last chip off, the
+              // way every tag field people have used does.
+              onChange(value.slice(0, -1));
+            }
+          }}
+        />
+      </div>
+
+      {open && (
+        <ul className="player-menu" role="listbox" aria-label="Players">
+          {offered.map((name) => (
+            <li key={name} role="option" aria-selected={false}>
+              <button
+                type="button"
+                className="player-option"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  add(name);
+                }}
+              >
+                {name}
+              </button>
+            </li>
+          ))}
+          {guest && (
+            <li role="option" aria-selected={false}>
+              <button
+                type="button"
+                className="player-option player-guest"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  add(guest);
+                }}
+              >
+                Add “{guest}” as a guest
+              </button>
+            </li>
+          )}
+          {offered.length === 0 && !guest && (
+            <li className="player-menu-note">
+              {options.length === 0
+                ? "Nobody on the roster yet — add players under Settings."
+                : q
+                  ? "Nobody on the roster by that name."
+                  : "Everyone on the roster is already here."}
+            </li>
+          )}
+        </ul>
+      )}
+    </div>
   );
 }

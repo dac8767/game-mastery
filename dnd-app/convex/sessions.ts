@@ -528,6 +528,109 @@ export const updateSession = mutation({
   },
 });
 
+/** "9/13/26", "9/13/2026" or "2026-9-13" as an ISO day; else null. */
+function isoDay(raw: string): string | null {
+  const s = raw.trim();
+  const pad = (n: string) => n.padStart(2, "0");
+  const us = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  if (us) {
+    const year = us[3].length === 2 ? `20${us[3]}` : us[3];
+    return `${year}-${pad(us[1])}-${pad(us[2])}`;
+  }
+  const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (iso) return `${iso[1]}-${pad(iso[2])}-${pad(iso[3])}`;
+  return null;
+}
+
+/**
+ * One pass over a campaign's sessions, bringing the rows typed before
+ * the record's pickers existed into the shape the pickers write.
+ *
+ *   players   each name re-spelt the way the roster spells it — the
+ *             roster in Settings is what the attendance field offers
+ *             now, and "steph" beside "Steph" is two people on the
+ *             filter panel. Whitespace collapsed, duplicates dropped.
+ *             A name on no roster stays as typed: a guest was there.
+ *             Inactive players count for spelling — they are still on
+ *             the sessions they played.
+ *   date      "9/13/26" and the like become "2026-09-13", which is the
+ *             only shape the column sorts on and the date style in
+ *             Settings can read. A date this cannot read is left alone
+ *             rather than guessed at.
+ *
+ * Internal, so it needs no caller's identity: run it from the CLI as
+ *   npx convex run sessions:normalizeRecords '{"campaignId":"…"}'
+ * Idempotent — a second run finds nothing to change.
+ */
+export const normalizeRecords = internalMutation({
+  args: { campaignId: v.id("campaigns") },
+  handler: async (ctx, args) => {
+    const campaign = await ctx.db.get(args.campaignId);
+    if (!campaign) throw new Error("Campaign not found");
+
+    const key = (name: string) => name.replace(/\s+/g, " ").trim().toLowerCase();
+
+    const characters = await ctx.db
+      .query("characters")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
+      .collect();
+    const spelled = new Map<string, string>();
+    for (const c of characters) {
+      const name = (c.playerName ?? "").replace(/\s+/g, " ").trim();
+      if (name && !spelled.has(key(name))) spelled.set(key(name), name);
+    }
+
+    const sessions = await ctx.db
+      .query("sessions")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
+      .collect();
+
+    let playersFixed = 0;
+    let datesFixed = 0;
+    let datesUnread = 0;
+    const unknown = new Set<string>();
+
+    for (const s of sessions) {
+      const patch: Partial<Doc<"sessions">> = {};
+
+      const seen = new Set<string>();
+      const players: string[] = [];
+      for (const raw of s.players) {
+        const k = key(raw);
+        if (!k || seen.has(k)) continue;
+        seen.add(k);
+        const canonical = spelled.get(k);
+        if (!canonical) unknown.add(raw.replace(/\s+/g, " ").trim());
+        players.push(canonical ?? raw.replace(/\s+/g, " ").trim());
+      }
+      if (JSON.stringify(players) !== JSON.stringify(s.players)) {
+        patch.players = players;
+        playersFixed++;
+      }
+
+      if (s.date !== undefined && s.date.trim() !== "") {
+        const day = isoDay(s.date);
+        if (day === null) datesUnread++;
+        else if (day !== s.date) {
+          patch.date = day;
+          datesFixed++;
+        }
+      }
+
+      if (Object.keys(patch).length > 0) await ctx.db.patch(s._id, patch);
+    }
+
+    return {
+      campaign: campaign.name,
+      sessions: sessions.length,
+      playersFixed,
+      datesFixed,
+      datesUnread,
+      guests: Array.from(unknown).sort(),
+    };
+  },
+});
+
 export const deleteSession = mutation({
   args: { sessionId: v.id("sessions") },
   handler: async (ctx, args) => {

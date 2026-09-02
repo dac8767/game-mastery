@@ -19,6 +19,7 @@ import { ColumnDef } from "@/components/npcColumns";
 // unit guard imports the emitted JavaScript, where "@/" is not a thing
 // Node can resolve.
 import { isActive, retiredPlayerIds, type Rostered } from "./rosterModel";
+import { formatCardDate, type DateFormat } from "./campaignCard";
 
 export const SESSION_COLUMNS: ColumnDef[] = [
   {
@@ -44,6 +45,10 @@ export const SESSION_COLUMNS: ColumnDef[] = [
     // Stored as "YYYY-MM-DD" text rather than a timestamp: it is the
     // day you played, which has no time and no timezone, and in that
     // format it sorts correctly as a string.
+    //
+    // READ the way this person reads dates — see withDateFormat, which
+    // is where the `format` goes on. It cannot go on here: the setting
+    // is per person and this list is a module constant.
     key: "date",
     label: "Date",
     kind: "text",
@@ -52,10 +57,12 @@ export const SESSION_COLUMNS: ColumnDef[] = [
     editable: true,
   },
   {
-    // Free text, and chips rather than one string: attendance is who
-    // was in the room, which is not the campaign's membership rows. A
-    // friend who dropped in for one night was never a member, and a
-    // member who missed three sessions is still one.
+    // Chips rather than one string: attendance is who was in the room.
+    // The names are PICKED from the roster in Settings (see
+    // campaignPlayers), which is what keeps "Steph" and "steph" from
+    // being two people on the filter panel — but the stored shape stays
+    // a list of names, because a friend who dropped in for one night
+    // was there too and was never on the roster.
     key: "players",
     label: "Players",
     kind: "chips",
@@ -136,6 +143,35 @@ export const LEVELING_MODES: { value: Leveling; label: string; note: string }[] 
 export function sessionColumnsFor(leveling: Leveling): ColumnDef[] {
   const drop = leveling === "milestone" ? "xp" : "milestone";
   return SESSION_COLUMNS.filter((c) => c.key !== drop);
+}
+
+/**
+ * The same columns, with the Date column reading the way this person
+ * reads dates — the Settings choice that the campaign cards already
+ * honour, applied to the session log.
+ *
+ * A second pass over sessionColumnsFor rather than an argument to it,
+ * because the leveling mode is a fact about the CAMPAIGN and the date
+ * style is a fact about the READER; the guard that checks both screens
+ * build from sessionColumnsFor(leveling) is checking the first, and
+ * the second should not have to pass through it.
+ *
+ * `format` is read-side only (see ColumnDef.format): the stored value
+ * stays "YYYY-MM-DD", which is what sorts, filters and the date input
+ * all work on. formatCardDate hands back anything it cannot read as an
+ * ISO day unchanged, so a date typed some other way is shown as typed
+ * rather than lost — and convex/sessions.ts normalizeRecords is what
+ * turns those into ISO days.
+ */
+export function withDateFormat(
+  columns: ColumnDef[],
+  format: DateFormat
+): ColumnDef[] {
+  return columns.map((c) =>
+    c.key === "date"
+      ? { ...c, format: (raw) => formatCardDate(raw, format) }
+      : c
+  );
 }
 
 /**
@@ -300,10 +336,9 @@ export function campaignPlayers(
 /**
  * A chips field's value as a list, and back again.
  *
- * The stored shape is an array; the input's shape is a comma-separated
- * line. Toggling one name off a line of five is where the two have to
- * agree exactly, so both directions live here rather than being written
- * out at the call site.
+ * The stored shape is an array; the field's text shape is a
+ * comma-separated line, which is what sessionPatch reads and what the
+ * undo stack holds. Both directions live here so they agree exactly.
  */
 export function chipsFromInput(text: string): string[] {
   return text
@@ -312,13 +347,36 @@ export function chipsFromInput(text: string): string[] {
     .filter(Boolean);
 }
 
-/** Add a name to a chips line, or take it off if it is already there. */
-export function toggleChip(text: string, name: string): string {
-  const list = chipsFromInput(text);
-  const key = name.trim().toLowerCase();
-  const without = list.filter((v) => v.toLowerCase() !== key);
-  // Removing is the whole change when it was there; otherwise append,
-  // so the order somebody typed is not reshuffled by a click.
-  return (without.length === list.length ? [...list, name.trim()] : without)
-    .join(", ");
+/** The same name, however it was typed. */
+export function playerKey(name: string): string {
+  return name.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/**
+ * Add a name to the attendance list.
+ *
+ * The roster's spelling wins: "steph" typed into the field becomes the
+ * "Steph" on the roster, so the filter panel and the group-by see one
+ * person. A name on no roster is kept as typed, trimmed — a guest is
+ * still attendance. A name already on the list is not added twice,
+ * whichever way it was capitalised.
+ */
+export function addPlayer(
+  list: string[],
+  name: string,
+  options: string[]
+): string[] {
+  const key = playerKey(name);
+  if (!key) return list;
+  if (list.some((v) => playerKey(v) === key)) return list;
+  const canonical =
+    options.find((o) => playerKey(o) === key) ??
+    name.replace(/\s+/g, " ").trim();
+  return [...list, canonical];
+}
+
+/** Take a name off the attendance list, however it was capitalised. */
+export function removePlayer(list: string[], name: string): string[] {
+  const key = playerKey(name);
+  return list.filter((v) => playerKey(v) !== key);
 }

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { useUndoableMutation } from "@/components/useUndoable";
 import { Id } from "@/convex/_generated/dataModel";
+import { DateFormat } from "@/components/campaignCard";
 import { useViewPrefs } from "@/components/useViewPrefs";
 import { Pager } from "@/components/Pager";
 import { clampPageSize, pageSlice } from "@/components/pagerModel";
@@ -42,7 +43,7 @@ import {
   SESSION_EXTRA_SORTS,
   SESSION_FACET_KEYS,
   SESSION_PRIMARY_COLUMN,
-  sessionPatch,
+  withDateFormat,
 } from "@/components/sessionColumns";
 
 /**
@@ -59,6 +60,17 @@ import {
  *     diary rather than a reference
  *   - the row is the night's facts; the NOTES behind the expand button
  *     are two notebook pages, and the GM's is withheld by the server
+ *   - the row is READ here and EDITED in the record. A click anywhere
+ *     on it opens the session; there are no cells that turn into
+ *     inputs. The list used to edit in place, and a row whose every
+ *     cell is a different control is a row you cannot click to open.
+ *
+ * Which session is open is in the URL — `?session=<id>` — rather than
+ * in state. That is what makes the sidebar's Sessions link a way back:
+ * a link to the bare path is a navigation away from the open record,
+ * where a state flag was something the sidebar could not see or clear.
+ * Back and forward work on it, and a link to an open session can be
+ * sent to somebody.
  *
  * Every row here is an ordinary document, which after Groups is worth
  * saying out loud: no synthetic keys, no rows that become real when you
@@ -84,7 +96,30 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const levelingKnown = campaigns !== undefined;
   const leveling: Leveling =
     campaigns?.find((c) => c._id === campaignId)?.leveling ?? "xp";
-  const columns = useMemo(() => sessionColumnsFor(leveling), [leveling]);
+
+  /* Personal settings: the page size, and how dates read. AppShell
+     holds this subscription already. The date style rides on the
+     column definitions (see withDateFormat) so the grid, the tiles and
+     the search box all read the same words. */
+  const settings = useQuery(api.settings.mySettings);
+  const dateFormat: DateFormat = settings?.dateFormat ?? "dmy";
+  const columns = useMemo(
+    () => withDateFormat(sessionColumnsFor(leveling), dateFormat),
+    [leveling, dateFormat]
+  );
+
+  /* The open session, from the URL. Opening and closing are
+     navigations, so the browser's Back and the sidebar's Sessions link
+     both close the record without knowing anything about it. */
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const selected = params.get("session") as Id<"sessions"> | null;
+  const openSession = useCallback(
+    (id: Id<"sessions"> | null) =>
+      router.push(id ? `${pathname}?session=${id}` : pathname),
+    [router, pathname]
+  );
 
   const prefs = useViewPrefs(
     campaignId,
@@ -149,7 +184,6 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   ]);
 
   const createSession = useMutation(api.sessions.createSession);
-  const updateSession = useUndoableMutation(api.sessions.updateSession);
 
   const [search, setSearch] = useState("");
   const [panel, setPanel] = useState<
@@ -158,11 +192,6 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const togglePanel = (which: typeof panel) =>
     setPanel((cur) => (cur === which ? null : which));
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [selected, setSelected] = useState<Id<"sessions"> | null>(null);
-  const [editing, setEditing] = useState<{ id: string; key: string } | null>(
-    null
-  );
-  const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [columnSearch, setColumnSearch] = useState("");
   const [dragKey, setDragKey] = useState<string | null>(null);
@@ -245,7 +274,6 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
      counts rows, and the groups on screen are rebuilt from the page.
      Clamped rather than reset when the list shrinks under it. */
   const [page, setPage] = useState(0);
-  const settings = useQuery(api.settings.mySettings);
   const pageSize = clampPageSize(settings?.tableRows);
   const paged = useMemo(
     () => pageSlice(sorted, page, pageSize),
@@ -288,9 +316,6 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
     ],
     [columns]
   );
-
-  /** The night's facts are the GM's record of it. */
-  const canEdit = (def: ColumnDef) => isDm && Boolean(def.editable);
 
   function sortOn(def: ColumnDef) {
     if (def.sortable === false) return;
@@ -379,34 +404,6 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
     });
   }
 
-  async function commitEdit(row: SessionRow, def: ColumnDef, text: string) {
-    setEditing(null);
-    const patch = sessionPatch(def.key, text);
-    // Nothing to write is a normal outcome — a blank session number, or
-    // a typo where a number belongs. The cell goes back to what it was
-    // rather than storing NaN.
-    if (Object.keys(patch).length === 0) return;
-    // The way back is the cell's old text through the same patch
-    // builder, so a blank clears on undo exactly as it did on commit.
-    const raw = cell(row, def.key);
-    const shown = Array.isArray(raw)
-      ? (raw as string[]).join(", ")
-      : raw === null || raw === undefined
-        ? ""
-        : String(raw);
-    const before = sessionPatch(def.key, shown);
-    try {
-      setError(null);
-      await updateSession(
-        { sessionId: row._id, ...patch },
-        { sessionId: row._id, ...before },
-        `${def.label} of session ${row.number}`
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save that change.");
-    }
-  }
-
   if (result === undefined || !prefs.ready) {
     return <p className="centered-note">Loading the sessions…</p>;
   }
@@ -424,7 +421,7 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
               onClick={async () => {
                 try {
                   setError(null);
-                  setSelected(await createSession({ campaignId }));
+                  openSession(await createSession({ campaignId }));
                 } catch (e) {
                   setError(
                     e instanceof Error
@@ -716,7 +713,7 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
           session={selectedSession}
           campaignId={campaignId}
           isDm={isDm}
-          onClose={() => setSelected(null)}
+          onClose={() => openSession(null)}
         />
       ) : prefs.viewMode === "tiles" ? (
         <SessionTiles
@@ -726,7 +723,7 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
           perRow={prefs.tilesPerRow}
           collapsed={collapsed}
           onToggleGroup={toggleGroup}
-          onOpen={setSelected}
+          onOpen={openSession}
           emptyNote={
             all.length === 0
               ? "No sessions yet."
@@ -805,18 +802,7 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
                         key={`${groupValue}:${s._id}`}
                         row={s}
                         shown={shown}
-                        selected={s._id === selected}
-                        editing={editing}
-                        draft={draft}
-                        setDraft={setDraft}
-                        canEdit={canEdit}
-                        onOpen={() => setSelected(s._id)}
-                        onStartEdit={(def, value) => {
-                          setEditing({ id: s._id, key: def.key });
-                          setDraft(value);
-                        }}
-                        onCommit={(def, text) => void commitEdit(s, def, text)}
-                        onCancel={() => setEditing(null)}
+                        onOpen={() => openSession(s._id)}
                       />
                     ))}
                 </tbody>
@@ -828,18 +814,7 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
                     key={s._id}
                     row={s}
                     shown={shown}
-                    selected={s._id === selected}
-                    editing={editing}
-                    draft={draft}
-                    setDraft={setDraft}
-                    canEdit={canEdit}
-                    onOpen={() => setSelected(s._id)}
-                    onStartEdit={(def, value) => {
-                      setEditing({ id: s._id, key: def.key });
-                      setDraft(value);
-                    }}
-                    onCommit={(def, text) => void commitEdit(s, def, text)}
-                    onCancel={() => setEditing(null)}
+                    onOpen={() => openSession(s._id)}
                   />
                 ))}
               </tbody>
@@ -869,33 +844,30 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   );
 }
 
+/**
+ * One session, one row, one gesture: click it anywhere and it opens.
+ *
+ * Nothing on the row edits in place any more — the facts are edited in
+ * the record, where the players field can offer the roster and the
+ * date field can offer a picker. The expand button stays as the
+ * visible promise that the row goes somewhere; the whole row honours
+ * it.
+ */
 function SessionRowCells({
   row,
   shown,
-  selected,
-  editing,
-  draft,
-  setDraft,
-  canEdit,
   onOpen,
-  onStartEdit,
-  onCommit,
-  onCancel,
 }: {
   row: SessionRow;
   shown: { state: ColumnState; def: ColumnDef }[];
-  selected: boolean;
-  editing: { id: string; key: string } | null;
-  draft: string;
-  setDraft: (v: string) => void;
-  canEdit: (def: ColumnDef) => boolean;
   onOpen: () => void;
-  onStartEdit: (def: ColumnDef, value: string) => void;
-  onCommit: (def: ColumnDef, text: string) => void;
-  onCancel: () => void;
 }) {
   return (
-    <tr className={selected ? "selected" : undefined}>
+    <tr
+      className="session-row"
+      onClick={onOpen}
+      title={`Open session ${row.number}`}
+    >
       <td className="expand-cell">
         <button
           type="button"
@@ -909,49 +881,10 @@ function SessionRowCells({
       </td>
 
       {shown.map(({ state, def }) => {
-        const isEditing = editing?.id === row._id && editing.key === def.key;
-
-        if (isEditing) {
-          return (
-            <td key={state.key} className="editing-cell">
-              <input
-                autoFocus
-                className="cell-input"
-                type={def.kind === "number" ? "number" : "text"}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onBlur={() => onCommit(def, draft)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") onCommit(def, draft);
-                  if (e.key === "Escape") onCancel();
-                }}
-              />
-            </td>
-          );
-        }
-
-        const editable = canEdit(def);
-        const open = () => {
-          if (!editable) return;
-          const raw = cell(row, def.key);
-          onStartEdit(
-            def,
-            Array.isArray(raw)
-              ? (raw as string[]).join(", ")
-              : raw === null || raw === undefined
-                ? ""
-                : String(raw)
-          );
-        };
-
         if (def.kind === "chips") {
           const vals = chipValues(row, def.key);
           return (
-            <td
-              key={state.key}
-              className={editable ? "editable" : undefined}
-              onClick={editable ? open : undefined}
-            >
+            <td key={state.key}>
               {vals.length === 0 ? (
                 <span className="blank">{BLANK}</span>
               ) : (
@@ -968,17 +901,14 @@ function SessionRowCells({
         }
 
         const text = display(row, def.key, def.format);
-        /* The title is the way IN, same as a name anywhere else: it
-           opens the session rather than editing in place. Renumbering
-           lives inside the record — an editable cell here meant a
-           click on "Session 40" turned the label into an input, which
-           reads as the row refusing to open. */
+        /* The title keeps its own class: the gap and cursor rules in
+           globals.css aim at it, and the integrity guard checks it
+           still opens the record on click. */
         if (def.key === SESSION_PRIMARY_COLUMN) {
           return (
             <td
               key={state.key}
               className="name-cell session-title"
-              title={`Open session ${row.number}`}
               onClick={onOpen}
             >
               {text === "" ? <span className="blank">{BLANK}</span> : text}
@@ -986,13 +916,7 @@ function SessionRowCells({
           );
         }
         return (
-          <td
-            key={state.key}
-            className={editable ? "editable" : undefined}
-            title={text || undefined}
-            onDoubleClick={open}
-            onClick={editable ? open : undefined}
-          >
+          <td key={state.key}>
             {text === "" ? <span className="blank">{BLANK}</span> : text}
           </td>
         );

@@ -8987,33 +8987,96 @@ button.cal-day:hover {
   min-width: 8rem;
 }
 
-/* Values offered as one-click chips, above the free-text line the
-   field keeps. */
-.field-options {
+/* Attendance, picked from the roster: the chips already on the session
+   and a line to add to, with the roster dropping down under it while
+   the line has focus. The picker owns its own positioning context so
+   the menu can hang off the line without pushing the facts row
+   about. */
+.player-picker {
+  position: relative;
+}
+
+.player-line {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.25rem;
-  margin-bottom: 0.15rem;
-}
-
-.chip-pick {
+  min-height: 2rem;
+  padding: 0.25rem 0.4rem;
   border: 1px solid var(--border);
-  background: none;
-  color: var(--text-dim);
-  cursor: pointer;
+  border-radius: 8px;
+  background: var(--bg-inset);
+  cursor: text;
 }
 
-.chip-pick:hover {
-  border-color: var(--text-dim);
+.player-picker.open .player-line {
+  border-color: var(--accent);
+}
+
+.player-chip {
+  display: inline-flex;
+  align-items: center;
   color: var(--text);
 }
 
-/* Already on the line, said the way "this is current" is said
-   everywhere else in the app. */
-.chip-pick.on {
-  border-color: var(--accent);
+.player-input {
+  flex: 1;
+  min-width: 6rem;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  padding: 0.1rem 0.2rem;
+}
+
+.player-input:focus {
+  outline: none;
+}
+
+.player-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 0.2rem);
+  left: 0;
+  min-width: 100%;
+  max-height: 14rem;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.player-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.35rem 0.6rem;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.player-option:hover {
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+.player-guest {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.player-menu-note {
+  padding: 0.35rem 0.6rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
 }
 
 /* The two that want room: the description, and attendance once it is
