@@ -9,7 +9,16 @@
 #
 # The message is the commit message. Without one the script asks.
 #
+# Run it from YOUR terminal, not from the Claude session inside the
+# worktree. That session is sandboxed to its own checkout and cannot
+# reach the root where main lives, so asked to finish, it can only
+# commit and rebase, and then has to hand the rest back to you. In
+# Claude Code, type the line with a ! in front and it runs in your
+# shell.
+#
 # Where it stops, and why:
+#   - the root checkout is not reachable: see above. Nothing has been
+#     touched; run the same line from a terminal.
 #   - run from the root checkout: there is nothing to merge main into.
 #   - the rebase hits a conflict: the worktree is put back as it was;
 #     resolve it by hand (WORKTREES.md, "Keep one worktree current").
@@ -36,6 +45,23 @@ case "$branch" in
   worktree-*) ;;
   *) echo "On '$branch', not a worktree-* branch. Stopping."; exit 1 ;;
 esac
+
+# Before anything else: can this shell reach the root checkout? A
+# Claude session inside a worktree cannot — its sandbox stops at the
+# worktree's own folder — and finding that out AFTER committing and
+# rebasing leaves the job half done with the merge still to do.
+probe="$root/.finish-worktree-probe"
+if ! ( git -C "$root" rev-parse --show-toplevel >/dev/null 2>&1 \
+       && touch "$probe" 2>/dev/null && rm -f "$probe" ); then
+  echo "Cannot reach the root checkout at $root from here."
+  echo "This is what a Claude session inside a worktree sees: it is"
+  echo "sandboxed to its own folder. Nothing has been changed."
+  echo
+  echo "Run the same line from your own terminal:"
+  echo "  ~/Developer/game-mastery/finish-worktree.sh \"${1:-Tool: what changed}\""
+  echo "In Claude Code, put a ! in front and it runs in your shell."
+  exit 1
+fi
 
 message="${1:-}"
 if [ -z "$message" ] && [ -n "$(git status --porcelain)" ]; then
@@ -96,8 +122,18 @@ if [ -n "$(git -C "$root" status --porcelain --untracked-files=no)" ]; then
   exit 1
 fi
 
+# Say what main actually is, from Git, before moving it. The state of
+# main is something to read, not something to remember: a session
+# once corrected a correct command on the strength of a push it
+# recalled making, which had already been taken in.
+echo "main, local:  $(git -C "$root" log --oneline -1 main)"
+echo "main, github: $(git log --oneline -1 origin/main)"
 echo "merging into main"
-git -C "$root" pull --ff-only --quiet origin main || exit 1
+git -C "$root" pull --ff-only --quiet origin main || {
+  echo "Could not fast-forward local main to GitHub's. The root has"
+  echo "commits GitHub does not; sort that out there first."
+  exit 1
+}
 git -C "$root" merge --ff-only --quiet "$branch" || {
   echo "main moved between the rebase and the merge. Rerun."
   exit 1

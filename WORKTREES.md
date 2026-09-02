@@ -60,6 +60,16 @@ rebase conflicts, a guard is red, or the root has uncommitted edits;
 each stop says what to do. Run from the root it refuses, since main
 has nothing to merge into itself.
 
+**Run it from your terminal, not from the worktree's Claude session.**
+That session is sandboxed to its own folder and cannot reach the root
+where main lives. Asked to finish, the most it can do is commit and
+rebase, and it then hands the merge back to you — and it may describe
+main's state from memory rather than from Git, which is how one session
+"corrected" a command that was already right. The script checks this
+first and stops before touching anything if it cannot reach the root.
+In Claude Code, type the line with a `!` in front and it runs in your
+own shell instead.
+
 ## Finish a worktree, by hand
 
 The same steps, one at a time. The rebase brings the branch up to
