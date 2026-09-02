@@ -6,6 +6,7 @@ import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { DiceIcon } from "@/components/DiceIcon";
 import { DiceCanvas } from "@/components/DiceCanvas";
+import { previewKey } from "@/components/dddiceMap";
 import {
   STANDARD_DICE,
   addDie,
@@ -266,27 +267,34 @@ export function DiceRoller({ campaignId }: { campaignId: Id<"campaigns"> }) {
             words, because picking a die out of a handful is something
             a player already knows how to do. */}
         <div className="dice-tray">
-          {STANDARD_DICE.map((sides) => (
-            <button
-              key={sides}
-              type="button"
-              className="dice-tray-die"
-              title={`Add a d${sides}`}
-              aria-label={`Add a d${sides}`}
-              onClick={() => setNotation((n) => addDie(n, sides))}
-            >
-              {/* dddice's own render of the die you are about to
-                  throw, so the tray matches what lands. The drawn
-                  icon stays as the fallback — it is what a table with
-                  no dddice room sees, and what shows before the theme
-                  has loaded. */}
-              {previews?.[`d${sides}`] ? (
-                <img src={previews[`d${sides}`]} alt="" />
-              ) : (
-                <DiceIcon sides={sides} />
-              )}
-            </button>
-          ))}
+          {STANDARD_DICE.map((sides) => {
+            // Looked up by dddice's die TYPE rather than by `d${sides}`:
+            // the two agree for six dice and not for the d100, whose
+            // picture is filed under the tens die.
+            const key = previewKey(sides);
+            const preview = key ? previews?.[key] : undefined;
+            return (
+              <button
+                key={sides}
+                type="button"
+                className="dice-tray-die"
+                title={`Add a d${sides}`}
+                aria-label={`Add a d${sides}`}
+                onClick={() => setNotation((n) => addDie(n, sides))}
+              >
+                {/* dddice's own render of the die you are about to
+                    throw, so the tray matches what lands. The drawn
+                    icon stays as the fallback — it is what a table with
+                    no dddice room sees, and what shows before the theme
+                    has loaded. */}
+                {preview ? (
+                  <img src={preview} alt="" />
+                ) : (
+                  <DiceIcon sides={sides} />
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Still typeable, because a tray cannot express 4d6kh3 and

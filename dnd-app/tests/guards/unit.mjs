@@ -8323,6 +8323,16 @@ export const unit = {
           );
         })()
       );
+      // The tray's pictures are keyed by dddice's die types, and there
+      // is no "d100" type. Looked up by side count, six dice rendered
+      // and the seventh stayed a drawn outline — the one regression
+      // here that a screenshot does show.
+      check(
+        "the d100's tray picture is the tens die, and a d7 has none",
+        map.previewKey(100) === "d10x" &&
+          map.previewKey(20) === "d20" &&
+          map.previewKey(7) === null
+      );
 
       // Nothing rather than something wrong: half a fireball on the
       // table disagrees with the log, and the log is the real answer.

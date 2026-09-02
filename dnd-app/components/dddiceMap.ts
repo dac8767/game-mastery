@@ -53,6 +53,23 @@ const MESHES: Record<number, string> = {
 };
 
 /**
+ * The key a die's picture is filed under in a theme's `preview` map.
+ *
+ * The previews are keyed by dddice's die TYPES, and dddice has no d100
+ * type: the percentile die is the tens die, `d10x`, wearing 00–90. So
+ * `preview["d100"]` is nothing, and a tray that looked it up by our
+ * side count showed six rendered dice and one drawn outline. The d100
+ * button shows the die that actually lands on the felt for it.
+ *
+ * Null for a size dddice cannot draw, so the tray falls back to the
+ * outline rather than to a wrong picture.
+ */
+export function previewKey(sides: number): string | null {
+  if (sides === 100) return "d10x";
+  return MESHES[sides] ?? null;
+}
+
+/**
  * A d100 result, split into the two dice that show it.
  *
  * 73 is a 70 and a 3. The edges are the whole difficulty: 100 is 90
