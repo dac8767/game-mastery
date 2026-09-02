@@ -129,7 +129,23 @@ const ALLOWED: Record<string, string[]> = {
   // `data-gm` is what makes a link OURS: the canvas follows those with
   // the router and leaves anything else alone.
   a: ["href", "data-gm"],
+  // An image pasted into the text. What is kept is the storage KEY and
+  // never a src: a data: URL is a megabyte in a document, an external
+  // URL is a request to somebody's server from every member's browser,
+  // and a blob: URL is dead by the next reload — which was the report,
+  // word for word: pasted images that were images until the next day.
+  // The URL is minted on every read (sessions.withImages) from the key.
+  img: ["data-storage"],
 };
+
+/**
+ * Whether this could be a storage id. Letters and digits, the length
+ * Convex mints; the server's normalizeId is the real check, and this
+ * keeps a quote or a space out of the attribute on the way there.
+ */
+export function isStorageKey(raw: unknown): boolean {
+  return /^[a-z0-9]{16,64}$/.test(String(raw ?? ""));
+}
 
 const escapeAttr = (s: string) =>
   s
@@ -152,6 +168,9 @@ export const BOX_POLICY: HtmlPolicy = {
       // the router, and opening the campaign in a second tab is not
       // what following a link to an NPC means.
       return href === null ? null : ` href="${escapeAttr(href)}"`;
+    }
+    if (attr === "data-storage") {
+      return isStorageKey(value) ? ` data-storage="${value}"` : null;
     }
     if (attr === "data-gm") {
       // A kind, and only a kind. It reaches a route builder, so it is
@@ -176,7 +195,70 @@ export const BOX_POLICY: HtmlPolicy = {
   },
 };
 
-/** A note box's HTML, rebuilt from what a note box may contain. */
+/**
+ * A note box's HTML, rebuilt from what a note box may contain.
+ *
+ * An <img> that kept no storage key is an <img> pointing at nothing
+ * — an external picture, a data: URL, a paste from somewhere that was
+ * not this app — and is removed whole rather than left as a bare tag
+ * that draws a broken-image icon where the picture was.
+ */
 export function sanitizeBoxHtml(input: string): string {
-  return sanitizeHtml(input, BOX_POLICY);
+  return sanitizeHtml(input, BOX_POLICY).replace(/<img>/g, "");
+}
+
+/* The canonical form the sanitizer emits, which is the only form a
+   stored page has. Matching on it is what makes the two helpers below
+   a pair of string replaces rather than a parser. */
+const INLINE_IMAGE = /<img data-storage="([a-z0-9]+)">/g;
+
+/**
+ * Pasted pictures in their stored form, in HTML that is otherwise left
+ * alone.
+ *
+ * For the notebook, whose boxes are private and are NOT sanitized —
+ * they go to the database and back untouched, and a picture somebody
+ * pasted there last year as a data: URL still works and must go on
+ * working. Only the tags carrying a storage key are rewritten, to the
+ * one form withImageSrcs matches: the key, and nothing else — the
+ * blob: src the editor put on for its preview is dropped here, as the
+ * sanitizer drops it for a session. A tag whose key is not a key is
+ * left as it was.
+ */
+export function canonicalInlineImages(html: string): string {
+  return String(html ?? "").replace(
+    /<img\b[^>]*\bdata-storage\s*=\s*"([^"]*)"[^>]*>/gi,
+    (tag, id: string) =>
+      isStorageKey(id) ? `<img data-storage="${id}">` : tag
+  );
+}
+
+/** The storage keys a stored page or box refers to, each once. */
+export function imageStorageIds(html: string): string[] {
+  const ids = new Set<string>();
+  for (const m of String(html ?? "").matchAll(INLINE_IMAGE)) ids.add(m[1]);
+  return [...ids];
+}
+
+/**
+ * A stored page with its images made visible: a src beside each key,
+ * from the URLs the server minted. A key whose file is gone is marked
+ * rather than dropped, so a picture that went missing is a visible
+ * gap and not a silent one.
+ *
+ * The src is NOT in the sanitizer's vocabulary, deliberately, so a
+ * page written back after being read is the stored form again — the
+ * key stays, the URL does not, and no URL of anybody's choosing is
+ * ever stored.
+ */
+export function withImageSrcs(
+  html: string,
+  urls: ReadonlyMap<string, string | null>
+): string {
+  return String(html ?? "").replace(INLINE_IMAGE, (tag, id: string) => {
+    const url = urls.get(id) ?? null;
+    return url === null
+      ? `<img data-storage="${id}" alt="Image missing">`
+      : `<img data-storage="${id}" src="${escapeAttr(url)}">`;
+  });
 }

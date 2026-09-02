@@ -265,7 +265,13 @@ Owns    components/NotebookTool.tsx, components/BoxCanvas.tsx,
         app/campaign/[campaignId]/notebook/
 Tables  notebooks, notebookBoxes
 Branch  claude/tool-notebook
-Note    boxHtml.ts is the sanitizer for every stored HTML in the app,
+Note    A picture pasted into a text box is uploaded and stored as
+        `<img data-storage="…">`; convex/inlineImages.ts mints the src
+        on read and deletes the file with the box. Shared with
+        sessions — see that entry. The notebook is NOT sanitized, so
+        canonicalInlineImages puts only that tag in its stored form on
+        write and leaves the rest of the box alone.
+        boxHtml.ts is the sanitizer for every stored HTML in the app,
         including session pages and GM notes — changing its allowlist
         affects other tools. Treat it as Common when you touch it.
         contentEditable rule: innerHTML is written only when the caret
@@ -408,11 +414,25 @@ Tables  sessions, sessionBoxes, sessionPages, sessionTabs
 Branch  claude/tool-sessions
 Note    Session NUMBERS are the GM's to change; the importer matches on
         date for exactly that reason. A session's notes are TABS — three
-        built in (GM notes, GM Prep, Player notes) and up to eight
+        built in (Notes and Prep, both GM-tagged, and Player Notes) and up to eight
         anybody makes. A GM-only tab never leaves the server for a
         player, and neither does its TITLE: getNotes narrows on
         by_session_dmOnly rather than reading the rows and dropping
         them. See sessions.getNotes and sessions.resolveTab.
+        The strip is names, a +, and a pencil. The pencil opens the
+        tab editor (TabEditor in SessionDetail), which is the only
+        place tabs are moved, renamed, or deleted — drag a row, or
+        Move up / Move down. The order is sessions.tabOrder, keys in
+        strip order, absent until somebody moves one. A player's order
+        is merged around the tabs they cannot see
+        (sessionTabs.mergeOrder), so the GM's hidden tabs keep their
+        slots.
+        A picture pasted into a page or text box is uploaded and the
+        text keeps `<img data-storage="…">` — never a src. getNotes
+        mints the src on read (convex/inlineImages.withImages) and
+        deleteTab/deleteSession delete the files. The sanitizer keeps
+        the key and drops every src, so no URL of anybody's choosing
+        is stored.
         components/notePage.ts (notebook's) was this tool's page-id
         helper and no longer has a caller — sessionTabs.ts replaced it,
         because a tab key is wider than a side.

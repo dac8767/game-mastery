@@ -309,10 +309,11 @@ export const dmVisibility = {
     requirePattern(
       problems,
       getNotes,
-      /const visible = orderTabs\(isDm, custom\)/,
+      /const visible = orderTabs\(isDm, custom, session\.tabOrder \?\? null\)/,
       "sessions.getNotes must settle the visible tabs before reading " +
         "any of them — orderTabs(isDm, …) is what drops the GM-only " +
-        "built-ins for a player"
+        "built-ins for a player, and the session's own tabOrder is " +
+        "what puts them where somebody dragged them"
     );
     requirePattern(
       problems,
@@ -404,6 +405,42 @@ export const dmVisibility = {
       /if \(args\.dmOnly && !isDm\) \{\s*\n\s*throw new Error/,
       "sessions.createTab must refuse a non-GM a GM-only tab"
     );
+    // Rearranging is the third way a player's request meets the hidden
+    // tabs. The order they send names only what they were sent, and it
+    // must be held to exactly that — a list with a tab missing would
+    // otherwise be written as the strip — and then merged around the
+    // tabs they cannot see, so a player never moves the GM's Prep.
+    const reorder = bodyOf("reorderTabs");
+    requirePattern(
+      problems,
+      reorder,
+      /const isDm = isCampaignDm && !viewAsPlayer/,
+      "sessions.reorderTabs must decide what the caller can see the " +
+        "way getNotes does — a GM previewing as a player was sent the " +
+        "player's strip and must be merged as a player"
+    );
+    requirePattern(
+      problems,
+      reorder,
+      /if \(!samePermutation\(visible, args\.order\)\) \{\s*\n\s*throw new Error/,
+      "sessions.reorderTabs must refuse an order that is not a " +
+        "permutation of the tabs the caller was sent"
+    );
+    requirePattern(
+      problems,
+      reorder,
+      /mergeOrder\(full, visible, args\.order\)/,
+      "sessions.reorderTabs must merge the caller's order around the " +
+        "tabs they cannot see (mergeOrder) rather than writing it as " +
+        "the whole strip"
+    );
+    if (/return\s+(custom|full|visible|next)\b/.test(reorder)) {
+      problems.push(
+        "sessions.reorderTabs returns tab rows or keys — the hidden " +
+          "rows are read there for their slots and nothing of them " +
+          "may go back to the caller"
+      );
+    }
     for (const fn of ["updateBox", "deleteBox"]) {
       const at = sessions.indexOf(`export const ${fn} = mutation`);
       if (at === -1) {

@@ -3264,6 +3264,14 @@ body.col-resizing {
   object-fit: contain;
 }
 
+/* A picture pasted into the text. A retina screenshot arrives at twice
+   the page's width; held to the page rather than scrolled sideways. */
+.nb-page img,
+.nb-text img {
+  max-width: 100%;
+  height: auto;
+}
+
 .nb-image-missing {
   display: grid;
   place-items: center;
@@ -9137,6 +9145,129 @@ button.cal-day:hover {
 
 .session-tab-confirm {
   margin-top: 0.6rem;
+}
+
+/* The pencil: dim, borderless, at the end of the row. It opens the
+   editor, which is where everything that can be done to the strip
+   lives; the strip itself is names, a +, and this. */
+.session-tab-edit {
+  align-self: center;
+  margin-bottom: -1px;
+  padding: 0 0.35rem;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  line-height: 1.6rem;
+  opacity: 0.55;
+  cursor: pointer;
+}
+
+.session-tab-edit:hover,
+.session-tab-edit.open {
+  color: var(--text);
+  opacity: 1;
+}
+
+/* The editor: a panel under the strip, the way the view menu hangs
+   under its button. The strip is its anchor. Wide enough for a name,
+   a GM tag, and four small buttons, and no wider than the page. */
+.session-tabs {
+  position: relative;
+}
+
+.session-tab-editor {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  z-index: 41;
+  width: min(28rem, 100%);
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.4rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.session-tab-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.1rem 0.4rem 0.35rem;
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.session-tab-editor-head .text-button {
+  font-size: 0.75rem;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+}
+
+/* One tab per row, drawn as a dnd-row so it drags like every other
+   rearrangeable list in the app. The edge the drop will land on is an
+   inset shadow rather than a border, because a border that changed
+   width would shift the rows mid-drag. */
+.session-tab-row.over {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.session-tab-row-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-tab-row-btns {
+  display: flex;
+  gap: 0.1rem;
+  margin-left: auto;
+  flex: none;
+}
+
+.session-tab-row-btns .dnd-rowbtn {
+  margin-left: 0;
+  cursor: pointer;
+}
+
+/* Up at the top and down at the bottom: still there, so the row does
+   not change shape, but plainly not a thing that will do anything. */
+.session-tab-row-btns .dnd-rowbtn:disabled {
+  opacity: 0.3;
+  cursor: default;
+  background: none;
+  color: var(--text-dim);
+}
+
+/* The last row makes a tab rather than being one. Same row, no grip,
+   dim until you reach for it. */
+.session-tab-row-add {
+  width: 100%;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.session-tab-row-add:hover {
+  color: var(--text);
+}
+
+.session-tab-editor .session-tab-form {
+  margin: 0.15rem 0.2rem;
+}
+
+.session-tab-editor .session-tab-confirm {
+  margin: 0.15rem 0.4rem 0.3rem;
 }
 
 .session-notes .nb-canvas {

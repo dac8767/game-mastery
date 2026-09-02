@@ -339,14 +339,14 @@ export const integrity = {
         throw new Error("read no built-in tabs out of sessionTabs.ts");
       }
       for (const [at, key, title] of [
-        [0, "dm", "GM notes"],
-        [1, "prep", "GM Prep"],
-        [2, "player", "Player notes"],
+        [0, "dm", "Notes"],
+        [1, "prep", "Prep"],
+        [2, "player", "Player Notes"],
       ]) {
         if (builtins[at]?.key !== key || builtins[at]?.title !== title) {
           problems.push(
             `BUILTIN_TABS[${at}] is not the "${title}" tab — the GM's own ` +
-              "tabs come first, and Prep sits beside GM notes rather " +
+              "tabs come first, and Prep sits beside Notes rather " +
               "than after the page the players share"
           );
         }
@@ -356,7 +356,7 @@ export const integrity = {
       const dmOnlyLine = /key: "(dm|prep)", title: "[^"]+", dmOnly: true/g;
       if ([...stripComments(tabsSrc).matchAll(dmOnlyLine)].length !== 2) {
         problems.push(
-          "GM notes and GM Prep are not both marked dmOnly — a built-in " +
+          "Notes and Prep are not both marked dmOnly — a built-in " +
             "that is not marked is a tab getNotes hands to players"
         );
       }
@@ -368,7 +368,7 @@ export const integrity = {
             "second page you were usually not looking at, and left no " +
             "answer to which page a new box went on"
         );
-      } else if (!/tabs\.map\(\(t\) => \(/.test(detailSrc.slice(tabs))) {
+      } else if (!/tabs\.map\(\(t(?:, idx)?\) => \(/.test(detailSrc.slice(tabs))) {
         problems.push(
           "the session tab strip is not drawn from the tabs the server " +
             "sent — a strip built from a list of its own would need a " +
@@ -379,6 +379,139 @@ export const integrity = {
       if (/session-notes-split/.test(detailSrc)) {
         problems.push(
           "SessionDetail still renders the old side-by-side split"
+        );
+      }
+
+      // Tabs can be put in an order, every one of them — the built-ins
+      // may be moved, only not removed — and it is done in the EDITOR
+      // behind the pencil, not on the strip. The strip is names, a +,
+      // and the pencil; a Rename or a Move that crept back beside the
+      // tabs would render perfectly and be exactly what was reported.
+      if (!detailSrc.includes('className="session-tab-add"')) {
+        problems.push("the session tab strip lost its + button");
+      }
+      if (!/className=\{`session-tab-edit/.test(detailSrc)) {
+        problems.push(
+          "the session tab strip has no pencil — the editor is the only " +
+            "place tabs are moved, renamed, or deleted"
+        );
+      }
+      const stripStart = detailSrc.indexOf('className="session-tabs"');
+      const editorStart = detailSrc.indexOf('className="session-tab-editor"');
+      if (editorStart === -1) {
+        problems.push(
+          "SessionDetail has no tab editor — rearranging, renaming and " +
+            "deleting tabs were asked for behind one discreet button"
+        );
+      } else {
+        const strip = detailSrc.slice(stripStart, editorStart);
+        // Whole words: the strip hands the editor an `onRename`, which
+        // is the wiring and not a button.
+        for (const crept of ["Rename", "Delete Tab", "Move left", "Move right", "draggable"]) {
+          if (new RegExp(`(^|[^A-Za-z])${crept}(?![A-Za-z])`).test(strip)) {
+            problems.push(
+              `"${crept}" is on the session tab strip — it belongs in the ` +
+                "editor, and the strip stays a row of names"
+            );
+          }
+        }
+        const editor = detailSrc.slice(editorStart);
+        if (!/draggable\s+onDragStart/.test(editor) || !/onDrop=/.test(editor)) {
+          problems.push(
+            "the tab editor's rows are not draggable — rearranging them " +
+              "by hand is the whole of what 'reorganize' asked for"
+          );
+        }
+        if (!/e\.dataTransfer\.setData\("text\/plain"/.test(editor)) {
+          problems.push(
+            "the tab editor's drag sets no transfer data — WebKit will " +
+              "not start the drag at all, and it looks fine in Chrome"
+          );
+        }
+        // Title case, which is how the editor's items were asked for.
+        for (const label of ["Move Up", "Move Down", "Add a Tab", "Built In"]) {
+          if (!editor.includes(label)) {
+            problems.push(
+              `the tab editor has no "${label}" — the keyboard's and a ` +
+                "touchscreen's way of doing what the drag does"
+            );
+          }
+        }
+        if (!/moveKey\(keys, /.test(editor)) {
+          problems.push(
+            "the tab editor does not rearrange through moveKey over the " +
+              "keys the server sent — an order built any other way is " +
+              "one reorderTabs will refuse"
+          );
+        }
+      }
+
+      // Pictures pasted into the text stay pictures. Reported: pasted
+      // images that were images until the next day. The editor uploads
+      // the file and writes the KEY; the server writes the src on read;
+      // a page or box that goes takes its files with it. Each half is
+      // quiet on its own — a key nothing resolves is a picture that
+      // never shows, which is the bug in a different coat.
+      const canvasSrc = stripComments(read("components", "BoxCanvas.tsx"));
+      if (!/onPaste=\{/.test(canvasSrc) || !/data-storage="\$\{storageId\}"/.test(canvasSrc)) {
+        problems.push(
+          "BoxCanvas does not take a pasted picture through onPasteImage " +
+            "and write <img data-storage> — the browser's own paste puts " +
+            "a data: or blob: URL in the markup, which the sanitizer " +
+            "strips and the next visit loses"
+        );
+      }
+      if (!/inlineImages\b/.test(detailSrc)) {
+        problems.push(
+          "SessionDetail's canvas does not opt into inlineImages — a " +
+            "pasted picture goes back to being lost on reload"
+        );
+      }
+      const sessionsForImages = stripComments(read("convex", "sessions.ts"));
+      if (!/return await withImages\(ctx, page\?\.html \?\? ""\)/.test(sessionsForImages) ||
+          !/html: b\.html \? await withImages\(ctx, b\.html\) : null/.test(sessionsForImages)) {
+        problems.push(
+          "sessions.getNotes does not mint a src for each page's and " +
+            "box's pasted pictures (withImages) — the stored key is all " +
+            "the browser would get, and a key draws nothing"
+        );
+      }
+      if ((sessionsForImages.match(/await deleteInlineImages\(ctx, /g) ?? []).length < 4) {
+        problems.push(
+          "deleteSession and deleteTab do not delete the files their " +
+            "pages' and boxes' pasted pictures point at — storage that " +
+            "nothing can reach and nothing will free"
+        );
+      }
+      // The notebook, the same way — with one more step, because its
+      // boxes are not sanitized: the pasted tag is put in the stored
+      // form on every write, or the read side has nothing to match.
+      const notebookSrc = stripComments(read("convex", "notebook.ts"));
+      if (!/html: b\.html \? await withImages\(ctx, b\.html\) : null/.test(notebookSrc)) {
+        problems.push(
+          "notebook.getPage does not mint a src for a box's pasted " +
+            "pictures (withImages) — the stored key draws nothing"
+        );
+      }
+      if ((notebookSrc.match(/canonicalInlineImages\(/g) ?? []).length < 2) {
+        problems.push(
+          "notebook.addBox and updateBox do not store a pasted picture " +
+            "in its canonical form (canonicalInlineImages) — with the " +
+            "blob: src left on the tag, withImageSrcs never matches it " +
+            "and the picture is gone on reload"
+        );
+      }
+      if ((notebookSrc.match(/await deleteInlineImages\(ctx, /g) ?? []).length < 2) {
+        problems.push(
+          "notebook.deleteNode and deleteBox do not delete the files " +
+            "their boxes' pasted pictures point at"
+        );
+      }
+      if (!/inlineImages\b/.test(stripComments(read("components", "NotebookTool.tsx")))) {
+        problems.push(
+          "NotebookTool's canvas does not opt into inlineImages — a " +
+            "pasted picture there goes back to being a data: URL in the " +
+            "document, and a big one goes over the document limit"
         );
       }
 
