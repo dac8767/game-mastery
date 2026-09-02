@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useUndoableMutation } from "@/components/useUndoable";
 import { Id } from "@/convex/_generated/dataModel";
 
 /**
@@ -60,7 +61,7 @@ export function GroupDetail({
   onClose: () => void;
 }) {
   const describeGroup = useMutation(api.groups.describeGroup);
-  const updateGroup = useMutation(api.groups.updateGroup);
+  const updateGroup = useUndoableMutation(api.groups.updateGroup);
   const deleteGroup = useMutation(api.groups.deleteGroup);
   const generateUploadUrl = useMutation(api.groups.generateUploadUrl);
   const addAttachment = useMutation(api.groups.addAttachment);
@@ -159,9 +160,14 @@ export function GroupDetail({
               value={group.name}
               editable={isDm}
               onCommit={(name) =>
-                void run(async () =>
-                  updateGroup({ groupId: await ensure(), name })
-                )
+                void run(async () => {
+                  const groupId = await ensure();
+                  return updateGroup(
+                    { groupId, name },
+                    { groupId, name: group.name },
+                    `Name of ${group.name}`
+                  );
+                })
               }
             />
             {/* Said out loud, because an empty description on a group
@@ -192,14 +198,19 @@ export function GroupDetail({
               onBlur={() => {
                 const next = description.trim();
                 if (next === (group.description ?? "").trim()) return;
-                void run(async () =>
-                  updateGroup({
-                    groupId: await ensure(),
-                    // null empties the field; "" would store a blank
-                    // string and the column would stop reading as empty.
-                    description: next === "" ? null : next,
-                  })
-                );
+                void run(async () => {
+                  const groupId = await ensure();
+                  return updateGroup(
+                    {
+                      groupId,
+                      // null empties the field; "" would store a blank
+                      // string and the column would stop reading as empty.
+                      description: next === "" ? null : next,
+                    },
+                    { groupId, description: group.description ?? null },
+                    `Description of ${group.name}`
+                  );
+                });
               }}
             />
           ) : (

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import { useUndoableMutation } from "@/components/useUndoable";
 import { THEMES } from "@/components/themes";
 import { RULES_VERSIONS } from "@/components/lookupFilters";
 import { LEVELING_MODES } from "@/components/sessionColumns";
@@ -44,8 +45,8 @@ export function SettingsPanel({
   const settings = useQuery(api.settings.mySettings);
   const campaigns = useQuery(api.campaigns.myCampaigns);
   const save = useMutation(api.settings.saveMySettings);
-  const setRulesVersion = useMutation(api.campaigns.setRulesVersion);
-  const setLeveling = useMutation(api.campaigns.setLeveling);
+  const setRulesVersion = useUndoableMutation(api.campaigns.setRulesVersion);
+  const setLeveling = useUndoableMutation(api.campaigns.setLeveling);
   const [selected, setSelected] = useState<string>("general");
 
   if (settings === undefined || campaigns === undefined) {
@@ -288,10 +289,12 @@ export function SettingsPanel({
                     (current?.rulesVersion ?? "2014") === r.value ? " on" : ""
                   }`}
                   onClick={() =>
-                    void setRulesVersion({
-                      campaignId,
-                      rulesVersion: r.value,
-                    })
+                    void setRulesVersion(
+                      { campaignId, rulesVersion: r.value },
+                      // The default is what an unset campaign shows.
+                      { campaignId, rulesVersion: current?.rulesVersion ?? "2014" },
+                      "Rules edition"
+                    )
                   }
                 >
                   <span className="theme-name">{r.label}</span>
@@ -318,7 +321,11 @@ export function SettingsPanel({
                     (current?.leveling ?? "xp") === m.value ? " on" : ""
                   }`}
                   onClick={() =>
-                    void setLeveling({ campaignId, leveling: m.value })
+                    void setLeveling(
+                      { campaignId, leveling: m.value },
+                      { campaignId, leveling: current?.leveling ?? "xp" },
+                      "Leveling"
+                    )
                   }
                 >
                   <span className="theme-name">{m.label}</span>

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { record } from "@/components/undoHistory";
 
 /**
  * Your display name, saved on blur.
@@ -48,6 +49,24 @@ export function NameField({ current }: { current: string | null }) {
           try {
             await setMyName({ displayName: next });
             setSaved(true);
+            // The draft is seeded once and never re-read (see above), so
+            // the way back sets it by hand. A name that was blank cannot
+            // be put back — the server refuses a blank — so that edit
+            // has no undo rather than one that always fails.
+            const prev = (current ?? "").trim();
+            if (prev) {
+              record({
+                label: "Your name",
+                undo: async () => {
+                  await setMyName({ displayName: prev });
+                  setValue(prev);
+                },
+                redo: async () => {
+                  await setMyName({ displayName: next });
+                  setValue(next);
+                },
+              });
+            }
           } catch (err) {
             setError(err instanceof Error ? err.message : "Could not save it");
           }

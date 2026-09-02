@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import { useUndoableMutation } from "@/components/useUndoable";
 
 /**
  * The party, as the GM knows it before anyone signs up.
@@ -33,8 +34,11 @@ export function CampaignRoster({
 }) {
   const characters = useQuery(api.campaigns.listCharacters, { campaignId });
   const upsert = useMutation(api.campaigns.upsertCharacter);
+  // The same mutation, wrapped for the edits on existing rows. Adding
+  // somebody stays on the plain one: a create has no old value.
+  const edit = useUndoableMutation(api.campaigns.upsertCharacter);
   const remove = useMutation(api.campaigns.deleteCharacter);
-  const setActive = useMutation(api.campaigns.setCharacterActive);
+  const setActive = useUndoableMutation(api.campaigns.setCharacterActive);
 
   const [playerName, setPlayerName] = useState("");
   const [name, setName] = useState("");
@@ -93,22 +97,37 @@ export function CampaignRoster({
               />
               <input
                 className="roster-field roster-character"
+                /* Keyed on the value so a name put back by Cmd+Z
+                   redraws an uncontrolled input. */
+                key={c.name}
                 defaultValue={c.name}
                 aria-label="Character name"
                 onBlur={(e) => {
                   const next = e.target.value.trim();
                   if (!next || next === c.name) return;
-                  void upsert({
-                    characterId: c._id,
-                    campaignId,
-                    name: next,
-                    maxHp: c.maxHp,
-                  });
+                  void edit(
+                    {
+                      characterId: c._id,
+                      campaignId,
+                      name: next,
+                      maxHp: c.maxHp,
+                      playerName: c.playerName ?? undefined,
+                    },
+                    {
+                      characterId: c._id,
+                      campaignId,
+                      name: c.name,
+                      maxHp: c.maxHp,
+                      playerName: c.playerName ?? undefined,
+                    },
+                    `Name of ${c.name}`
+                  );
                 }}
               />
               <span className="roster-player-cell">
                 <input
                   className="roster-field roster-player"
+                  key={c.playerName ?? ""}
                   defaultValue={c.playerName ?? ""}
                   placeholder="Player's name"
                   aria-label="Player name"
@@ -116,13 +135,23 @@ export function CampaignRoster({
                   onBlur={(e) => {
                     const next = e.target.value.trim();
                     if (next === (c.playerName ?? "")) return;
-                    void upsert({
-                      characterId: c._id,
-                      campaignId,
-                      name: c.name,
-                      maxHp: c.maxHp,
-                      playerName: next || undefined,
-                    });
+                    void edit(
+                      {
+                        characterId: c._id,
+                        campaignId,
+                        name: c.name,
+                        maxHp: c.maxHp,
+                        playerName: next || undefined,
+                      },
+                      {
+                        characterId: c._id,
+                        campaignId,
+                        name: c.name,
+                        maxHp: c.maxHp,
+                        playerName: c.playerName ?? undefined,
+                      },
+                      `Player of ${c.name}`
+                    );
                   }}
                 />
                 {/* Only when it IS claimed. "Unclaimed" was a word on
@@ -140,10 +169,11 @@ export function CampaignRoster({
                 aria-label={`Is ${c.name} still at the table?`}
                 value={c.active ? "active" : "inactive"}
                 onChange={(e) =>
-                  void setActive({
-                    characterId: c._id,
-                    active: e.target.value === "active",
-                  })
+                  void setActive(
+                    { characterId: c._id, active: e.target.value === "active" },
+                    { characterId: c._id, active: c.active },
+                    `Status of ${c.name}`
+                  )
                 }
               >
                 <option value="active">Active</option>

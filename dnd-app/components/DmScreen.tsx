@@ -13,6 +13,9 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { RibbonBar } from "@/components/RibbonBar";
+import { releaseBox } from "@/components/BoxCanvas";
+import { useUndoableMutation } from "@/components/useUndoable";
+import { record } from "@/components/undoHistory";
 import { NotebookFormatBar } from "@/components/NotebookFormatBar";
 import {
   focusScrapbookBox,
@@ -115,9 +118,11 @@ function DmScreenBoard({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const saveLayout = useMutation(api.dmscreen.saveLayout);
   const saveWorkspace = useMutation(api.dmscreen.saveWorkspace);
   const updateWorkspace = useMutation(api.dmscreen.updateWorkspace);
+  const renameWorkspace = useUndoableMutation(api.dmscreen.updateWorkspace);
   const deleteWorkspace = useMutation(api.dmscreen.deleteWorkspace);
   const addNote = useMutation(api.dmscreen.addNote);
   const updateNote = useMutation(api.dmscreen.updateNote);
+  const retitleNote = useUndoableMutation(api.dmscreen.updateNote);
   const deleteNote = useMutation(api.dmscreen.deleteNote);
 
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -197,14 +202,37 @@ function DmScreenBoard({ campaignId }: { campaignId: Id<"campaigns"> }) {
     return () =>
       document.removeEventListener("selectionchange", trackScrapbookSelection);
   }, []);
+  // The saver is registered once, so it reads the notes through a ref
+  // or it would put back the text as it was when the screen mounted.
+  const notesRef = useRef(noteById);
+  notesRef.current = noteById;
   useEffect(
     () =>
       registerScrapbookSaver((boxId, html) => {
         if (!boxId.startsWith("dmnote:")) return;
-        const noteId = boxId.slice("dmnote:".length);
-        void updateNote({ noteId: noteId as Id<"dmNotes">, html }).catch(
-          (e) => setError(e instanceof Error ? e.message : "That didn't save.")
-        );
+        const noteId = boxId.slice("dmnote:".length) as Id<"dmNotes">;
+        const note = notesRef.current.get(noteId);
+        const next = { noteId, html };
+        const prev = { noteId, html: note?.html ?? "" };
+        void updateNote(next)
+          .then(() =>
+            // A pane you are standing in refuses the server's text;
+            // step out of it first, so what comes back is seen.
+            record({
+              label: `Text of ${note?.title ?? "a note"}`,
+              undo: () => {
+                releaseBox(boxId);
+                return updateNote(prev);
+              },
+              redo: () => {
+                releaseBox(boxId);
+                return updateNote(next);
+              },
+            })
+          )
+          .catch((e) =>
+            setError(e instanceof Error ? e.message : "That didn't save.")
+          );
       }),
     [updateNote]
   );
@@ -370,10 +398,15 @@ function DmScreenBoard({ campaignId }: { campaignId: Id<"campaigns"> }) {
     beginDividerDrag,
     closeTabAt,
     onFocus: (groupId) => setLayout((cur) => focusGroup(cur, groupId)),
-    onRenameNote: (noteId, title) =>
-      void updateNote({ noteId: noteId as Id<"dmNotes">, title }).catch(
-        () => {}
-      ),
+    onRenameNote: (noteId, title) => {
+      const id = noteId as Id<"dmNotes">;
+      const was = noteById.get(noteId)?.title ?? "Note";
+      void retitleNote(
+        { noteId: id, title },
+        { noteId: id, title: was },
+        `Title of ${was}`
+      ).catch(() => {});
+    },
   };
 
   /**
@@ -489,10 +522,11 @@ function DmScreenBoard({ campaignId }: { campaignId: Id<"campaigns"> }) {
                     )
                   }
                   onRename={(ws, name) =>
-                    void updateWorkspace({
-                      workspaceId: ws._id as Id<"dmWorkspaces">,
-                      name,
-                    }).catch((e) =>
+                    void renameWorkspace(
+                      { workspaceId: ws._id as Id<"dmWorkspaces">, name },
+                      { workspaceId: ws._id as Id<"dmWorkspaces">, name: ws.name },
+                      `Name of workspace ${ws.name}`
+                    ).catch((e) =>
                       setError(
                         e instanceof Error ? e.message : "That didn't save."
                       )

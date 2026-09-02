@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import { useUndoableMutation } from "@/components/useUndoable";
 import {
   RECORDER_STAGES,
   SUMMARY_SECTIONS,
@@ -395,7 +396,7 @@ function SpeakerForm({
   segments: Segment[];
   speakers: Record<string, string>;
 }) {
-  const setSpeakers = useMutation(api.recorder.setSpeakers);
+  const setSpeakers = useUndoableMutation(api.recorder.setSpeakers);
   const { error, run } = useRunner();
   const [draft, setDraft] = useState<Record<string, string>>(speakers);
 
@@ -465,7 +466,11 @@ function SpeakerForm({
                 }
                 onBlur={() =>
                   run(() =>
-                    setSpeakers({ campaignId, recordingId, speakers: draft })
+                    setSpeakers(
+                      { campaignId, recordingId, speakers: draft },
+                      { campaignId, recordingId, speakers },
+                      "Speaker names"
+                    )
                   )
                 }
               />
@@ -689,7 +694,7 @@ function RecordingDetail({
 }) {
   const data = useQuery(api.recorder.getRecording, { campaignId, recordingId });
   const sessions = useQuery(api.sessions.listForCampaign, { campaignId });
-  const rename = useMutation(api.recorder.rename);
+  const rename = useUndoableMutation(api.recorder.rename);
   const linkSession = useMutation(api.recorder.linkSession);
   const deleteRecording = useAction(api.recorder.deleteRecording);
   const { error, run } = useRunner();
@@ -720,7 +725,16 @@ function RecordingDetail({
           value={title}
           maxLength={120}
           onChange={(e) => setTitle(e.target.value)}
-          onBlur={() => run(() => rename({ campaignId, recordingId, title }))}
+          onBlur={() => {
+            if (title === rec.title) return;
+            run(() =>
+              rename(
+                { campaignId, recordingId, title },
+                { campaignId, recordingId, title: rec.title },
+                "Recording title"
+              )
+            );
+          }}
           aria-label="Recording title"
         />
         <div className="rec-detail-facts">

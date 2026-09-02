@@ -9788,6 +9788,129 @@ export const unit = {
       );
     }
 
+    // ---- undoHistory ---------------------------------------------
+    // The stack behind Cmd+Z. Driven here with fake mutations so the
+    // ordering rules can be checked without a server: a new edit
+    // throws away the redo stack, a refused inverse stays on the stack,
+    // and two Cmd+Zs in flight do not race each other.
+    {
+      const out = compile("components/undoHistory.ts");
+      const uh = await import(pathToFileURL(join(out, "undoHistory.js")).href);
+
+      const calls = [];
+      const entry = (label, fail = false) => ({
+        label,
+        undo: async () => {
+          if (fail) throw new Error("refused");
+          calls.push(`undo:${label}`);
+        },
+        redo: async () => {
+          calls.push(`redo:${label}`);
+        },
+      });
+
+      uh.clearHistory();
+      check("an empty history has nothing to undo", !uh.canUndo() && !uh.canRedo());
+      check(
+        "undo on nothing says so rather than throwing",
+        (await uh.undo()).kind === "nothing"
+      );
+
+      uh.record(entry("first"));
+      uh.record(entry("second"));
+      check("the newest edit is the one Cmd+Z names", uh.peekUndo() === "second");
+
+      let r = await uh.undo();
+      check(
+        "undo runs the inverse and reports the label",
+        r.kind === "undid" && r.label === "second" && calls.at(-1) === "undo:second"
+      );
+      check("what was undone is now redoable", uh.peekRedo() === "second");
+
+      r = await uh.redo();
+      check(
+        "redo re-applies it",
+        r.kind === "redid" && calls.at(-1) === "redo:second" && !uh.canRedo()
+      );
+
+      await uh.undo();
+      uh.record(entry("third"));
+      check(
+        "a fresh edit throws the redo stack away",
+        !uh.canRedo() && uh.peekUndo() === "third"
+      );
+
+      uh.record(entry("stuck", true));
+      r = await uh.undo();
+      check(
+        "a refused inverse reports the failure",
+        r.kind === "failed" && r.label === "stuck"
+      );
+      check(
+        "and stays on the stack, so the next Cmd+Z does not skip it",
+        uh.peekUndo() === "stuck" && !uh.canRedo()
+      );
+
+      // Two keystrokes before the first inverse has landed.
+      uh.clearHistory();
+      let release;
+      const slow = {
+        label: "slow",
+        undo: () => new Promise((res) => (release = res)),
+        redo: async () => {},
+      };
+      uh.record(slow);
+      uh.record(entry("quick"));
+      const a = uh.undo();
+      const b = await uh.undo();
+      check("a second undo while one is in flight is refused", b.kind === "busy");
+      // "quick" was on top and resolved at once; "slow" is the one in flight.
+      check("the in-flight one is the right one", calls.at(-1) === "undo:quick");
+      const aOut = await a;
+      check("and the first still completes", aOut.kind === "undid");
+      const c = uh.undo();
+      await new Promise((res) => setTimeout(res, 0));
+      check("and the lock is released for the next one", typeof release === "function");
+      release();
+      const cOut = await c;
+      check("which then completes in turn", cOut.kind === "undid" && cOut.label === "slow");
+
+      // An inverse that registers a fresh entry while it runs — a
+      // notebook box being undone is blurred first, and the blur commits.
+      uh.clearHistory();
+      uh.record({
+        label: "outer",
+        undo: async () => {
+          uh.record(entry("from-inside"));
+        },
+        redo: async () => {},
+      });
+      r = await uh.undo();
+      check(
+        "an entry recorded mid-undo goes on top and the undone one goes to redo",
+        r.kind === "undid" &&
+          r.label === "outer" &&
+          uh.peekUndo() === "from-inside" &&
+          uh.peekRedo() === "outer"
+      );
+
+      let ticks = 0;
+      const off = uh.subscribe(() => ticks++);
+      uh.record(entry("watched"));
+      off();
+      uh.record(entry("unwatched"));
+      check("subscribers hear a change until they unsubscribe", ticks === 1);
+
+      for (let i = 0; i < uh.HISTORY_LIMIT + 5; i++) uh.record(entry(`e${i}`));
+      let n = 0;
+      while (uh.canUndo()) {
+        await uh.undo();
+        n++;
+      }
+      check("the history is capped", n === uh.HISTORY_LIMIT);
+      uh.clearHistory();
+    }
+
     return problems;
   },
 };

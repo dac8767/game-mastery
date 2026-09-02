@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useUndoableMutation } from "@/components/useUndoable";
 import { Id } from "@/convex/_generated/dataModel";
 import { useViewPrefs } from "@/components/useViewPrefs";
 import { Pager } from "@/components/Pager";
@@ -148,7 +149,7 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   ]);
 
   const createSession = useMutation(api.sessions.createSession);
-  const updateSession = useMutation(api.sessions.updateSession);
+  const updateSession = useUndoableMutation(api.sessions.updateSession);
 
   const [search, setSearch] = useState("");
   const [panel, setPanel] = useState<
@@ -385,9 +386,22 @@ export function SessionTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
     // a typo where a number belongs. The cell goes back to what it was
     // rather than storing NaN.
     if (Object.keys(patch).length === 0) return;
+    // The way back is the cell's old text through the same patch
+    // builder, so a blank clears on undo exactly as it did on commit.
+    const raw = cell(row, def.key);
+    const shown = Array.isArray(raw)
+      ? (raw as string[]).join(", ")
+      : raw === null || raw === undefined
+        ? ""
+        : String(raw);
+    const before = sessionPatch(def.key, shown);
     try {
       setError(null);
-      await updateSession({ sessionId: row._id, ...patch });
+      await updateSession(
+        { sessionId: row._id, ...patch },
+        { sessionId: row._id, ...before },
+        `${def.label} of session ${row.number}`
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save that change.");
     }

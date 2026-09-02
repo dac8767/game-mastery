@@ -4891,7 +4891,7 @@ export const integrity = {
             "level 200 would store and sort"
         );
       }
-      if (!/setLeveling\(\{ campaignId, leveling: m\.value \}\)/.test(panel2)) {
+      if (!/setLeveling\(\s*\{ campaignId, leveling: m\.value \}/.test(panel2)) {
         problems.push(
           "the Campaign settings tab has no leveling choice — the mode " +
             "exists and nobody can reach it"

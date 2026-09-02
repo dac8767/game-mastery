@@ -13,6 +13,7 @@ import {
   tableSort,
 } from "@/components/notebookTree";
 import {
+  BOX_ATTR,
   focusScrapbookBox,
   forgetScrapbookBox,
 } from "@/components/notebookFormat";
@@ -845,4 +846,76 @@ export function ContextMenu({
     </div>,
     document.body
   );
+}
+
+// ---------------------------------------------------------------------
+// Undoing a box edit — shared by the two owners of a canvas
+// ---------------------------------------------------------------------
+
+/**
+ * The way back from a patch: the same keys, with what the box has NOW.
+ *
+ * A key the box never had goes back to its neutral value rather than
+ * being left out. The mutation reads a missing key as "leave it", so
+ * dropping it would make undoing an image's first rotation a no-op.
+ * Column widths and row heights have no neutral the validator accepts,
+ * so those stay as patched — the table keeps its new widths, and the
+ * next Cmd+Z moves on to the edit before.
+ */
+export function boxPatchInverse(
+  box: CanvasBox,
+  patch: Record<string, unknown>
+): Record<string, unknown> {
+  const neutral: Record<string, unknown> = {
+    html: "",
+    rows: [[""]],
+    rotate: 0,
+    borderW: 0,
+    borderColor: null,
+    borderless: false,
+    shading: null,
+    align: "left",
+  };
+  const cur = box as unknown as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(patch)) {
+    if (cur[key] !== null && cur[key] !== undefined) out[key] = cur[key];
+    else if (key in neutral) out[key] = neutral[key];
+  }
+  return out;
+}
+
+/** What the toast calls a patch: the part of the box it touched. */
+export function boxPatchLabel(
+  patch: Record<string, unknown>,
+  kind: CanvasBox["type"]
+): string {
+  const keys = Object.keys(patch);
+  const has = (...k: string[]) => k.some((x) => keys.includes(x));
+  const what =
+    kind === "table" ? "Table" : kind === "image" ? "Image" : "Text box";
+  if (has("html")) return "Text box";
+  if (has("rows")) return "Table contents";
+  if (has("x", "y")) return `${what} position`;
+  if (has("w", "h")) return `${what} size`;
+  if (has("rotate")) return `${what} rotation`;
+  if (has("borderW", "borderColor", "borderless")) return `${what} border`;
+  if (has("shading")) return "Table shading";
+  if (has("colWidths", "rowHeights")) return "Table layout";
+  if (has("align")) return `${what} alignment`;
+  if (has("order")) return `${what} order`;
+  return what;
+}
+
+/**
+ * Take the caret out of a rich-text region before the server's value
+ * lands. RichText writes innerHTML in only while the region is NOT
+ * focused, so an undo arriving into the box you are standing in would
+ * be refused by the very rule that keeps typing from being reset.
+ */
+export function releaseBox(boxId: string): void {
+  const el = document.activeElement;
+  if (el instanceof HTMLElement && el.getAttribute(BOX_ATTR) === boxId) {
+    el.blur();
+  }
 }

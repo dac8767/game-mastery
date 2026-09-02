@@ -3,6 +3,7 @@
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
 import { ReactNode, useMemo } from "react";
+import { UndoKeys } from "@/components/UndoKeys";
 
 /**
  * Client-side Convex + auth provider.
@@ -17,5 +18,11 @@ export function Providers({ children }: { children: ReactNode }) {
     () => new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL as string),
     []
   );
-  return <ConvexAuthProvider client={convex}>{children}</ConvexAuthProvider>;
+  return (
+    <ConvexAuthProvider client={convex}>
+      {children}
+      {/* Cmd+Z on every screen, campaign list included. */}
+      <UndoKeys />
+    </ConvexAuthProvider>
+  );
 }
