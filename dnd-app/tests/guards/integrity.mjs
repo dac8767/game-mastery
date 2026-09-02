@@ -4434,9 +4434,6 @@ export const integrity = {
             "the window has nowhere to go but out of it"
         );
       }
-      // Line-anchored: the phone layout's indented .dm-canvas rule MAY
-      // keep a floor — the pin is released there — so only the desktop
-      // rule at column 0 is held to zero.
       const canvasRule = /^\.dm-canvas\s*\{([^}]*)\}/m.exec(dmCss);
       if (!canvasRule) {
         problems.push("no .dm-canvas rule — the window field is unstyled");
@@ -4446,13 +4443,17 @@ export const integrity = {
             "it is the one thing able to push windows past the fold"
         );
       }
-      const dmMobile = /@media \(max-width: 900px\) \{([\s\S]*?)\n\}/.exec(
-        dmCss
-      );
-      if (!dmMobile || !/\.dmscreen\s*\{[^}]*height:\s*auto/.test(dmMobile[1])) {
+      // The pin holds at every width. It used to be released under
+      // 900px because the sidebar became a strip ABOVE the screen
+      // there, and a full-dvh screen under a strip ended below the
+      // fold. The sidebar is a rail BESIDE the screen at that width
+      // now, so a release would only let the tiling grow past the
+      // fold again — on the one layout with the least room.
+      if (/@media \(max-width: 900px\) \{[^@]*?\.dmscreen\s*\{[^}]*height:\s*auto/.test(dmCss)) {
         problems.push(
-          "the viewport pin is not released on the phone layout — the " +
-            "sidebar strip above would push a full-dvh screen below one"
+          "the viewport pin is released under 900px — the sidebar is a " +
+            "rail beside the screen there, not a strip above it, so the " +
+            "release only lets a tall tool push windows past the fold"
         );
       }
 
@@ -4658,12 +4659,14 @@ export const integrity = {
     }
 
     // ---- the sidebar collapses to a rail, and stays collapsed -------
-    // Airtable's arrow button. Three ways it breaks with nothing red:
+    // Airtable's arrow button. Four ways it breaks with nothing red:
     // a collapse kept in component state springs open on every
     // navigation, a rail without the label rules is a 3.4rem strip
-    // with every label overflowing under the workspace, and a saved
-    // collapse carried onto the phone strips the top-strip layout of
-    // its labels with no arrow there to undo it.
+    // with every label overflowing under the workspace, a narrow
+    // viewport that is not treated as collapsed brings back the
+    // sideways top strip that read as the sidebar glitching, and an
+    // arrow left showing at that width offers to expand a rail into a
+    // column the workspace has no room for.
     {
       const shell = stripComments(read("components", "AppShell.tsx"));
       const shellCss = read("app", "globals.css");
@@ -4694,24 +4697,43 @@ export const integrity = {
             "overflows a 3.4rem strip"
         );
       }
-      const mobile = /@media \(max-width: 900px\) \{([\s\S]*?)\n\}/.exec(
+      if (
+        !/const collapsed = narrow \|\| Boolean\(settings\?\.sidebarCollapsed\)/.test(
+          shell
+        ) ||
+        !/useMediaQuery\("\(max-width: 900px\)"\)/.test(shell)
+      ) {
+        problems.push(
+          "a narrow viewport is not treated as collapsed — under 900px " +
+            "the sidebar opens at full width beside a workspace with no " +
+            "room for it, or worse, stacks across the top again"
+        );
+      }
+      // The narrow block must only take the arrow away. Any rule that
+      // reshapes .shell or .sidebar there is the top strip creeping
+      // back in, one property at a time.
+      const mobile = /@media \(max-width: 900px\) \{\n  \.nav-collapse-toggle([\s\S]*?)\n\}/.exec(
         shellCss
       );
       if (!mobile) {
-        problems.push("could not find the 900px sidebar media block");
-      } else {
-        if (!/\.shell\.nav-collapsed\s*\{[^}]*1fr/.test(mobile[1])) {
-          problems.push(
-            "a saved collapse is not neutralised on the phone layout — " +
-              "the top strip loses its labels with no arrow to undo it"
-          );
-        }
-        if (!/\.nav-collapse-toggle\s*\{[^}]*display:\s*none/.test(mobile[1])) {
-          problems.push(
-            "the collapse arrow still renders in the phone layout, " +
-              "where the rail it toggles does not exist"
-          );
-        }
+        problems.push(
+          "could not find the 900px block that hides the collapse arrow"
+        );
+      } else if (!/display:\s*none/.test(mobile[1])) {
+        problems.push(
+          "the collapse arrow still renders under 900px, offering to " +
+            "expand a rail the workspace cannot make room for"
+        );
+      }
+      const stripRules = /@media \(max-width: 900px\) \{[^@]*?\.(?:shell|sidebar)\s*\{/.exec(
+        shellCss
+      );
+      if (stripRules) {
+        problems.push(
+          "a 900px rule restyles .shell or .sidebar — the sideways top " +
+            "strip is coming back; narrow is the rail, and the rail's " +
+            "rules live on .nav-collapsed"
+        );
       }
     }
 

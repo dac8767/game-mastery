@@ -8,6 +8,7 @@ import { ReactNode, useEffect, useMemo, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import { BackIcon, NavIcon } from "@/components/NavIcon";
 import { ThemeSync } from "@/components/ThemeSync";
+import { useMediaQuery } from "@/components/useMediaQuery";
 import { FeedbackForm } from "@/components/FeedbackForm";
 import { UiProvider } from "@/components/UiEditor";
 import { Id } from "@/convex/_generated/dataModel";
@@ -258,8 +259,17 @@ export function AppShell({
    * Saved, not component state, for the same reason the section folds
    * are: navigation remounts this shell, and a collapse kept in a
    * useState would spring open on every screen change.
+   *
+   * Under 900px the rail is not a choice but the layout. The sidebar
+   * used to become a strip across the top there — every group flowing
+   * sideways and wrapping — which read as broken in a narrow browser
+   * pane, not as a phone layout. A rail keeps the nav vertical at any
+   * width and costs 3.4rem; the arrow that would expand it is withheld
+   * (see the 900px block in globals.css), since expanding would put the
+   * 232px column back beside a workspace that has no room for it.
    */
-  const collapsed = Boolean(settings?.sidebarCollapsed);
+  const narrow = useMediaQuery("(max-width: 900px)");
+  const collapsed = narrow || Boolean(settings?.sidebarCollapsed);
 
   return (
     /* The provider wraps the whole shell, not one screen: edit mode has

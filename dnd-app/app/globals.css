@@ -1880,86 +1880,19 @@ body.col-resizing {
   margin: 0 0 0.6rem;
 }
 
+/* ---------- Narrow: the rail, not a strip ----------
+   Under 900px the sidebar used to turn into a strip across the top,
+   every group flowing sideways and wrapping onto the next line. In a
+   phone-width window that was a layout; in a browser pane docked
+   beside an editor it read as the sidebar breaking. So the rail is the
+   narrow layout now: AppShell treats this width as collapsed, and the
+   .nav-collapsed rules above do the rest. Nothing here restyles the
+   nav — it only takes away the arrow, because expanding to the 232px
+   column would leave the workspace no room, and a rail you cannot
+   expand needs no control pretending you can. */
 @media (max-width: 900px) {
-  .shell {
-    grid-template-columns: 1fr;
-  }
-
-  .sidebar {
-    position: static;
-    height: auto;
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    align-items: center;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .sidebar .nav-list {
-    grid-auto-flow: column;
-    grid-auto-columns: max-content;
-  }
-
-  /* The sidebar is a top strip at this width, so a tool's sub-screens
-     join it inline. The indent and the rule down the left say "inside"
-     in a column and say nothing in a row — worse than nothing, since
-     the rule then reads as a divider between two unrelated items. */
-  .sidebar .nav-sub {
-    margin: 0;
-    padding-left: 0;
-    border-left: none;
-  }
-
-  .sidebar-footer {
-    margin-top: 0;
-    border-top: none;
-    padding-top: 0;
-    grid-auto-flow: column;
-  }
-
-  .soon {
-    display: none;
-  }
-
-  /* The rail is a desktop idea. The sidebar is already a top strip
-     here, so a saved collapse must not carry over and strip the strip
-     of its labels — everything the rail hides comes back, and the
-     arrow that would toggle it goes instead. */
-  .shell.nav-collapsed {
-    grid-template-columns: 1fr;
-  }
-
-  .nav-collapsed .nav-label {
-    display: inline;
-  }
-
-  .nav-collapsed .nav-campaign,
-  .nav-collapsed .nav-group-title,
-  .nav-collapsed .view-as {
-    display: flex;
-  }
-
-  .nav-collapsed .nav-item {
-    justify-content: flex-start;
-    gap: 0.6rem;
-    padding: 0.42rem 0.6rem;
-  }
-
   .nav-collapse-toggle {
     display: none;
-  }
-
-  /* The sidebar strip sits ABOVE the workspace here, so a full-dvh
-     GM Screen would start a viewport tall and end below one. Let it
-     size to content again, with a usable floor on the canvas. */
-  .dmscreen {
-    height: auto;
-    flex: 1;
-  }
-
-  .dm-canvas {
-    min-height: 24rem;
   }
 }
 
