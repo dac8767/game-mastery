@@ -182,6 +182,7 @@ export function BoxCanvas({
   onFollowLink,
   page,
   emptyNote,
+  inlineImages = false,
   children,
 }: {
   boxes: CanvasBox[];
@@ -224,6 +225,19 @@ export function BoxCanvas({
    */
   page?: { id: string; html: string; onChange: (html: string) => void };
   emptyNote?: string;
+  /**
+   * Whether a picture pasted or dropped INTO the text is kept.
+   *
+   * On, the file goes through onUploadImage and the text keeps an
+   * <img data-storage="…"> where it was pasted; the screen's backend
+   * has to mint the src on read (sessions.withImages does). Off, the
+   * browser does what it does — a data: or blob: URL in the markup,
+   * which a sanitizer strips and a reload loses. Opt-in rather than
+   * always on, because a key the screen's backend does not resolve is
+   * a picture that never shows — both screens that mount this have
+   * done the wiring (convex/inlineImages), and the next one has to.
+   */
+  inlineImages?: boolean;
   /** Anything the owner wants on the toolbar, after the three buttons. */
   children?: React.ReactNode;
 }) {
@@ -278,6 +292,7 @@ export function BoxCanvas({
             className="nb-page"
             editable={canEdit}
             onCommit={page.onChange}
+            onPasteImage={inlineImages ? onUploadImage : undefined}
           />
         )}
 
@@ -292,6 +307,7 @@ export function BoxCanvas({
             onFocus={() => setFocusedBoxId(box._id)}
             onChange={(patch) => onUpdate(box._id, patch)}
             onMenu={(x, y) => (canEdit ? setMenu({ x, y, box }) : undefined)}
+            onPasteImage={inlineImages ? onUploadImage : undefined}
           />
         ))}
       </div>
@@ -316,12 +332,14 @@ function BoxView({
   onFocus,
   onChange,
   onMenu,
+  onPasteImage,
 }: {
   box: CanvasBox;
   focused: boolean;
   onFocus: () => void;
   onChange: (patch: Record<string, unknown>) => void;
   onMenu: (x: number, y: number) => void;
+  onPasteImage?: (file: File) => Promise<string | null>;
 }) {
   const [pos, setPos] = useState({ x: box.x, y: box.y, w: box.w, h: box.h });
 
@@ -428,7 +446,9 @@ function BoxView({
         </button>
       </div>
       <div className="nb-box-body">
-        {box.type === "text" && <TextBox box={box} onChange={onChange} />}
+        {box.type === "text" && (
+          <TextBox box={box} onChange={onChange} onPasteImage={onPasteImage} />
+        )}
         {box.type === "image" && <ImageBox box={box} />}
         {box.type === "table" && <TableBox box={box} onChange={onChange} />}
       </div>
@@ -466,12 +486,15 @@ function RichText({
   className,
   editable,
   onCommit,
+  onPasteImage,
 }: {
   id: string;
   html: string;
   className: string;
   editable: boolean;
   onCommit: (html: string) => void;
+  /** Upload a pasted picture and answer with its storage id, or null. */
+  onPasteImage?: (file: File) => Promise<string | null>;
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -483,6 +506,53 @@ function RichText({
 
   // Nothing may format a region that has gone away.
   useEffect(() => () => forgetScrapbookBox(id), [id]);
+
+  /**
+   * Pictures pasted or dropped into the text, kept.
+   *
+   * Left to itself the browser writes the picture into the markup as
+   * a data: URL (Chrome) or a URL that only that page load can read
+   * (Safari), and either way the sanitizer strips it — so it was a
+   * picture until the next visit and then it was not. Reported as
+   * exactly that.
+   *
+   * Instead each file is uploaded through the same path an image BOX
+   * takes, and what goes into the text is `<img data-storage="…">` —
+   * the key, which the server turns back into a src on every read —
+   * with a blob: URL on it for now so the picture shows before the
+   * round trip. The sanitizer drops the blob: src; the server's echo
+   * carries the real one, and this element takes it the next time it
+   * is not being typed in.
+   *
+   * Committed at once rather than on blur: a picture pasted and the
+   * tab closed is a picture worth keeping, and the upload has already
+   * been paid for.
+   *
+   * False when there was no picture in the paste, so the browser's own
+   * paste — text, formatting, a table — goes ahead untouched.
+   */
+  const takeImages = async (files: FileList | null | undefined) => {
+    if (!onPasteImage) return false;
+    const images = Array.from(files ?? []).filter((f) =>
+      f.type.startsWith("image/")
+    );
+    if (images.length === 0) return false;
+    for (const file of images) {
+      const storageId = await onPasteImage(file);
+      const el = ref.current;
+      if (!storageId || !el) continue;
+      el.focus();
+      // The key is a Convex id — letters and digits — and the URL is
+      // one this browser minted; neither needs escaping.
+      document.execCommand(
+        "insertHTML",
+        false,
+        `<img data-storage="${storageId}" src="${URL.createObjectURL(file)}">`
+      );
+      onCommit(el.innerHTML);
+    }
+    return true;
+  };
 
   return (
     <div
@@ -496,16 +566,41 @@ function RichText({
         const next = ref.current?.innerHTML ?? "";
         if (next !== html) onCommit(next);
       }}
+      onPaste={(e) => {
+        const files = e.clipboardData?.files;
+        if (!onPasteImage || !hasImage(files)) return;
+        e.preventDefault();
+        void takeImages(files);
+      }}
+      onDrop={(e) => {
+        const files = e.dataTransfer?.files;
+        if (!onPasteImage || !hasImage(files)) return;
+        e.preventDefault();
+        // Where it was dropped, not where the caret happened to be.
+        const range = document.caretRangeFromPoint?.(e.clientX, e.clientY);
+        if (range) {
+          const sel = window.getSelection();
+          sel?.removeAllRanges();
+          sel?.addRange(range);
+        }
+        void takeImages(files);
+      }}
     />
   );
+}
+
+function hasImage(files: FileList | null | undefined): boolean {
+  return Array.from(files ?? []).some((f) => f.type.startsWith("image/"));
 }
 
 function TextBox({
   box,
   onChange,
+  onPasteImage,
 }: {
   box: CanvasBox;
   onChange: (patch: Record<string, unknown>) => void;
+  onPasteImage?: (file: File) => Promise<string | null>;
 }) {
   return (
     <RichText
@@ -514,6 +609,7 @@ function TextBox({
       className="nb-text"
       editable
       onCommit={(html) => onChange({ html })}
+      onPasteImage={onPasteImage}
     />
   );
 }

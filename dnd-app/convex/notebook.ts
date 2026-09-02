@@ -2,6 +2,8 @@ import { v } from "convex/values";
 import { mutation, query, MutationCtx } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { requireMember, requireUser } from "./auth";
+import { canonicalInlineImages } from "../components/boxHtml";
+import { deleteInlineImages, withImages } from "./inlineImages";
 
 /**
  * The Notebook.
@@ -91,7 +93,9 @@ export const getPage = query({
           w: b.w,
           h: b.h,
           order: b.order,
-          html: b.html ?? null,
+          // A pasted picture's key becomes a src here, on every read,
+          // the same as the image box's below. See convex/inlineImages.
+          html: b.html ? await withImages(ctx, b.html) : null,
           // Resolved here so the client never handles storage ids.
           src: b.storageId ? await ctx.storage.getUrl(b.storageId) : null,
           rotate: b.rotate ?? 0,
@@ -253,8 +257,10 @@ export const deleteNode = mutation({
         .take(300);
       for (const b of boxes) {
         // Drop the stored image too, or the file outlives every
-        // reference to it and nothing will ever clean it up.
+        // reference to it and nothing will ever clean it up. The
+        // pictures pasted into a text box are files of the same kind.
         if (b.storageId) await ctx.storage.delete(b.storageId);
+        await deleteInlineImages(ctx, b.html);
         await ctx.db.delete(b._id);
       }
       await ctx.db.delete(nodeId);
@@ -294,6 +300,9 @@ export const addBox = mutation({
     const { pageId, ...rest } = args;
     return await ctx.db.insert("notebookBoxes", {
       ...rest,
+      // Not sanitized — a notebook is private — but a pasted picture
+      // is stored as its key alone, or the read side cannot find it.
+      html: rest.html === undefined ? undefined : canonicalInlineImages(rest.html),
       pageId,
       userId: page.userId,
       order,
@@ -332,6 +341,10 @@ export const updateBox = mutation({
       patch[key] = value === null ? undefined : value;
     }
     if (Object.keys(patch).length === 0) return;
+    // See addBox: the pasted picture's key, and only its key.
+    if (typeof patch.html === "string") {
+      patch.html = canonicalInlineImages(patch.html);
+    }
 
     await ctx.db.patch(boxId, patch as Partial<Doc<"notebookBoxes">>);
   },
@@ -342,6 +355,7 @@ export const deleteBox = mutation({
   handler: async (ctx, args) => {
     const box = await ownedBox(ctx, args.boxId);
     if (box.storageId) await ctx.storage.delete(box.storageId);
+    await deleteInlineImages(ctx, box.html);
     await ctx.db.delete(args.boxId);
   },
 });

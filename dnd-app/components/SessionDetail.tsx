@@ -24,6 +24,7 @@ import {
   MAX_TAB_TITLE,
   TabKey,
   activeTabKey,
+  moveKey,
   pageBoxId,
   pageTabKey,
 } from "@/components/sessionTabs";
@@ -54,11 +55,12 @@ import {
  * The notes are on TABS, three of them built in and as many more as
  * anybody makes:
  *
- *   GM notes       what you knew and the table did not.
- *   GM Prep        what you mean to run. Also the GM's, and separate
+ *   Notes          what you knew and the table did not. GM-only, and
+ *                  tagged so on the strip rather than in its name.
+ *   Prep           what you mean to run. Also the GM's, and separate
  *                  because prep is written before the night and notes
  *                  during it.
- *   Player notes   the shared account of the night, which any member
+ *   Player Notes   the shared account of the night, which any member
  *                  may write. The same rule the NPC record's player
  *                  notes run on.
  *
@@ -165,6 +167,7 @@ export function SessionDetail({
   const createTab = useMutation(api.sessions.createTab);
   const renameTab = useUndoableMutation(api.sessions.renameTab);
   const deleteTab = useMutation(api.sessions.deleteTab);
+  const reorderTabs = useMutation(api.sessions.reorderTabs);
 
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -179,24 +182,27 @@ export function SessionDetail({
      back afterwards. A player is not sent it and lands on their own. */
   const [tab, setTab] = useState<TabKey>(DEFAULT_TAB);
 
-  /* Making a tab, renaming one, and the confirm before deleting one.
-     Three narrow states rather than one mode enum: they are mutually
-     exclusive on screen but not in meaning, and a mode called "adding"
-     that also has to remember which tab is being renamed is a mode that
-     will one day be both. */
+  /* The quick way to make a tab — the + on the strip — and the editor,
+     which is every other thing that can be done to the strip. Two
+     states rather than one, because they are two doors: the + is the
+     one people reach for, and the editor is where the rest live so
+     the strip itself stays a row of names. */
   const [adding, setAdding] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newDmOnly, setNewDmOnly] = useState(false);
-  const [renaming, setRenaming] = useState<TabKey | null>(null);
-  const [renameText, setRenameText] = useState("");
-  const [confirmTab, setConfirmTab] = useState<TabKey | null>(null);
+  const [editing, setEditing] = useState(false);
 
+  /* True on success, so a form in the editor knows whether to close.
+     The message itself goes to the record's error line, which is above
+     the tabs where every other error on this screen lands. */
   const run = useCallback(async (fn: () => Promise<unknown>) => {
     try {
       setError(null);
       await fn();
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "That didn't work.");
+      return false;
     }
   }, []);
 
@@ -350,6 +356,23 @@ export function SessionDetail({
   const side: TabKey = activeTabKey(tabs, tab);
   const current = tabs.find((t) => t.key === side) ?? null;
 
+  /**
+   * Rearranging: the strip's keys, and one call that saves a new order.
+   *
+   * Every way of moving a tab in the editor — a drop, Move up, Move
+   * down — is moveKey over these keys, and moveKey hands back the same
+   * array when there is nothing to do, so a drop onto the tab's own
+   * place or a Move up at the top is no round trip rather than a write
+   * of what is already there. The server settles the order against the
+   * strip it SENT, so a list built from `tabs` is the only list it
+   * will accept.
+   */
+  const keys = tabs.map((t) => t.key);
+  const arrange = (next: TabKey[]) => {
+    if (next === keys) return;
+    void run(() => reorderTabs({ sessionId: session._id, order: next }));
+  };
+
   const title = `Session ${session.number}`;
 
   return (
@@ -367,7 +390,7 @@ export function SessionDetail({
           (confirmDelete ? (
             <span className="record-confirm">
               <span className="settings-note">
-                Delete this session and both sets of notes?
+                Delete this session and every tab of its notes?
               </span>
               <button
                 type="button"
@@ -448,8 +471,8 @@ export function SessionDetail({
 
         <section
           /* The red edge follows the TAB's visibility, not its name:
-             GM Prep and a hidden tab somebody made are as much "not for
-             the table" as GM notes, and a page that looks identical to
+             Prep and a hidden tab somebody made are as much "not for
+             the table" as Notes, and a page that looks identical to
              the shared one is a page you will paste the wrong thing
              into. */
           className={`session-notes${current?.dmOnly ? " dm-notes" : ""}`}
@@ -466,10 +489,17 @@ export function SessionDetail({
           {notes && tabs.length > 0 && (
             <div className="session-tabs">
               {/* The tablist holds tabs and nothing else — the add
-                  button and the rename/delete pair are not pages you
-                  can switch to. `display: contents` keeps it out of the
-                  layout, so the strip is still one flex row and the
-                  open tab still breaks the rule underneath it. */}
+                  button and the pencil are not pages you can switch
+                  to. `display: contents` keeps it out of the layout,
+                  so the strip is still one flex row and the open tab
+                  still breaks the rule underneath it.
+
+                  The strip is a row of NAMES, and only that. What can
+                  be done to them — moved, renamed, deleted — is behind
+                  the pencil, so a tab does not carry a toolbar and the
+                  line does not change length depending on which one is
+                  open. Reported: the actions beside the tabs read as
+                  part of the page. */}
               <div className="session-tab-strip" role="tablist">
                 {tabs.map((t) => (
                   <button
@@ -478,11 +508,7 @@ export function SessionDetail({
                     role="tab"
                     aria-selected={t.key === side}
                     className={`session-tab${t.key === side ? " on" : ""}`}
-                    onClick={() => {
-                      setTab(t.key);
-                      setRenaming(null);
-                      setConfirmTab(null);
-                    }}
+                    onClick={() => setTab(t.key)}
                   >
                     {t.title}
                     {t.dmOnly && <span className="dm-tag">GM</span>}
@@ -491,65 +517,99 @@ export function SessionDetail({
               </div>
 
               {/* Where a new tab goes is where the last one is, which
-                  is the one place people already look for it. */}
+                  is the one place people already look for it. Kept on
+                  the strip, apart from the editor, because making a
+                  tab is the thing people do most and should not need
+                  a menu opened first. */}
               <button
                 type="button"
                 className="session-tab-add"
-                title="Add a tab"
-                aria-label="Add a tab"
+                title="Add a Tab"
+                aria-label="Add a Tab"
                 onClick={() => {
                   setAdding(true);
                   setNewTitle("");
                   setNewDmOnly(false);
-                  setRenaming(null);
-                  setConfirmTab(null);
+                  setEditing(false);
                 }}
               >
                 +
               </button>
 
-              {/* Only for a tab that is somebody's to change: the
-                  built-ins are nobody's, and a tab a player made is
-                  theirs and the GM's. The server decides which, and
-                  sends the answer with the tab. */}
-              {current?.canManage && (
-                <span className="session-tab-actions">
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={() => {
-                      setRenaming(side);
-                      setRenameText(current.title);
-                      setAdding(false);
-                      setConfirmTab(null);
-                    }}
-                  >
-                    Rename
-                  </button>
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={() => {
-                      setConfirmTab(side);
-                      setAdding(false);
-                      setRenaming(null);
-                    }}
-                  >
-                    Delete tab
-                  </button>
-                </span>
+              {/* Discreet: a dim pencil at the end of the row, which
+                  opens the editor. Everything else the strip can have
+                  done to it is in there. */}
+              <button
+                type="button"
+                className={`session-tab-edit${editing ? " open" : ""}`}
+                title="Edit Tabs"
+                aria-label="Edit Tabs"
+                aria-expanded={editing}
+                onClick={() => {
+                  setEditing((v) => !v);
+                  setAdding(false);
+                }}
+              >
+                ✎
+              </button>
+
+              {editing && (
+                <>
+                  {/* Closes on a click anywhere else, which is the
+                      gesture everybody already tries. */}
+                  <span className="view-scrim" onClick={() => setEditing(false)} />
+                  <TabEditor
+                    tabs={tabs}
+                    canHide={notes.isDm}
+                    onArrange={arrange}
+                    onRename={(key, title) =>
+                      run(() => {
+                        const tabId = key as Id<"sessionTabs">;
+                        const was =
+                          tabs.find((t) => t.key === key)?.title ?? title;
+                        return renameTab(
+                          { tabId, title },
+                          { tabId, title: was },
+                          `Name of tab ${was}`
+                        );
+                      })
+                    }
+                    onDelete={(key) =>
+                      run(async () => {
+                        await deleteTab({ tabId: key as Id<"sessionTabs"> });
+                        // Back to the first tab, which activeTabKey
+                        // would do anyway — said here too so the want
+                        // does not sit pointing at a tab that is gone.
+                        if (key === side) setTab(DEFAULT_TAB);
+                      })
+                    }
+                    onAdd={(title, dmOnly) =>
+                      run(async () => {
+                        const key = await createTab({
+                          sessionId: session._id,
+                          title,
+                          dmOnly,
+                        });
+                        // Onto the tab you just made, because you
+                        // made it to write on it.
+                        setTab(key);
+                      })
+                    }
+                    onClose={() => setEditing(false)}
+                  />
+                </>
               )}
             </div>
           )}
 
           {adding && (
             <TabNameForm
-              label="Name this tab"
+              label="Name This Tab"
               value={newTitle}
               onChange={setNewTitle}
               secret={notes?.isDm ? newDmOnly : null}
               onSecret={setNewDmOnly}
-              submitLabel="Add tab"
+              submitLabel="Add Tab"
               onCancel={() => setAdding(false)}
               onSubmit={() =>
                 void run(async () => {
@@ -565,61 +625,6 @@ export function SessionDetail({
                 })
               }
             />
-          )}
-
-          {renaming !== null && (
-            <TabNameForm
-              label="Rename this tab"
-              value={renameText}
-              onChange={setRenameText}
-              secret={null}
-              submitLabel="Rename"
-              onCancel={() => setRenaming(null)}
-              onSubmit={() =>
-                void run(async () => {
-                  const tabId = renaming as Id<"sessionTabs">;
-                  const was =
-                    tabs.find((t) => t.key === renaming)?.title ?? renameText;
-                  await renameTab(
-                    { tabId, title: renameText },
-                    { tabId, title: was },
-                    `Name of tab ${was}`
-                  );
-                  setRenaming(null);
-                })
-              }
-            />
-          )}
-
-          {confirmTab !== null && (
-            <p className="record-confirm session-tab-confirm">
-              <span className="settings-note">
-                Delete “{current?.title}” and everything written on it?
-              </span>
-              <button
-                type="button"
-                className="npc-btn"
-                onClick={() => setConfirmTab(null)}
-              >
-                Keep
-              </button>
-              <button
-                type="button"
-                className="npc-btn danger"
-                onClick={() =>
-                  void run(async () => {
-                    await deleteTab({ tabId: confirmTab as Id<"sessionTabs"> });
-                    setConfirmTab(null);
-                    // Back to the first tab, which activeTabKey would do
-                    // anyway — said here too so the want does not sit
-                    // pointing at a tab that is gone.
-                    setTab(DEFAULT_TAB);
-                  })
-                }
-              >
-                Delete
-              </button>
-            </p>
           )}
 
           {/* Under the tabs rather than above them: it acts on the page
@@ -673,6 +678,7 @@ export function SessionDetail({
               boxes={current?.boxes ?? []}
               canEdit
               tools="elsewhere"
+              inlineImages
               page={{
                 id: pageBoxId(side),
                 html: current?.body ?? "",
@@ -687,6 +693,259 @@ export function SessionDetail({
   );
 }
 
+/** One tab as the server sent it, as far as the editor needs to know. */
+type EditableTab = {
+  key: TabKey;
+  title: string;
+  dmOnly: boolean;
+  builtin: boolean;
+  canManage: boolean;
+};
+
+/**
+ * The tab editor: every tab as a row, and everything that can be done
+ * to the strip.
+ *
+ * Move by dragging a row, or by the up and down arrows — the arrows
+ * are the keyboard's and a touchscreen's way of doing what the drag
+ * does. Rename and delete are on the rows that are somebody's to
+ * change; a built-in shows why it is not. And a new tab, at the
+ * bottom, because "add" belongs on the list it adds to.
+ *
+ * Declared at MODULE scope, which the drag needs: a component defined
+ * inside SessionDetail would be a new type on every render, and the
+ * parent re-renders on every server echo mid-drag — see DndColumns.
+ * setData on dragstart is what lets WebKit start the drag at all.
+ *
+ * The rows are the tabs the server SENT, in the order it sent them —
+ * the editor holds no list of its own and moves nothing locally. A
+ * move is a round trip, and the rows reorder when the strip does, so
+ * what the editor shows and what the strip shows cannot disagree.
+ *
+ * The callbacks answer true on success. That is how a rename knows to
+ * close its field and a confirm knows to go away, without the editor
+ * seeing the error, which the record shows above the tabs.
+ */
+function TabEditor({
+  tabs,
+  canHide,
+  onArrange,
+  onRename,
+  onDelete,
+  onAdd,
+  onClose,
+}: {
+  tabs: EditableTab[];
+  /** Whether "Only I Can See This" is on offer — the GM's, not a player's. */
+  canHide: boolean;
+  onArrange: (next: TabKey[]) => void;
+  onRename: (key: TabKey, title: string) => Promise<boolean>;
+  onDelete: (key: TabKey) => Promise<boolean>;
+  onAdd: (title: string, dmOnly: boolean) => Promise<boolean>;
+  onClose: () => void;
+}) {
+  const keys = tabs.map((t) => t.key);
+
+  /* A row in the air, and the row it is over. Both gone when the drag
+     ends however it ends — a drop outside the list fires dragend and
+     nothing else, and a row left marked "over" is a stripe that never
+     goes away. */
+  const [dragKey, setDragKey] = useState<TabKey | null>(null);
+  const [overKey, setOverKey] = useState<TabKey | null>(null);
+
+  /* Renaming one, the confirm before deleting one, and the add form.
+     Three narrow states rather than one mode enum: they are mutually
+     exclusive on screen but not in meaning. */
+  const [renaming, setRenaming] = useState<TabKey | null>(null);
+  const [renameText, setRenameText] = useState("");
+  const [confirmKey, setConfirmKey] = useState<TabKey | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newDmOnly, setNewDmOnly] = useState(false);
+
+  const only = (what: "rename" | "confirm" | "add" | null, key?: TabKey) => {
+    setRenaming(what === "rename" ? (key ?? null) : null);
+    setConfirmKey(what === "confirm" ? (key ?? null) : null);
+    setAdding(what === "add");
+  };
+
+  return (
+    <div className="session-tab-editor" role="dialog" aria-label="Edit Tabs">
+      <div className="session-tab-editor-head">
+        <span>Tabs</span>
+        <button type="button" className="text-button" onClick={onClose}>
+          Done
+        </button>
+      </div>
+
+      {tabs.map((t, idx) => (
+        <div key={t.key}>
+          {renaming === t.key ? (
+            <TabNameForm
+              label="Rename This Tab"
+              value={renameText}
+              onChange={setRenameText}
+              secret={null}
+              submitLabel="Rename"
+              onCancel={() => only(null)}
+              onSubmit={() =>
+                void onRename(t.key, renameText).then((ok) => {
+                  if (ok) only(null);
+                })
+              }
+            />
+          ) : (
+            <div
+              className={`dnd-row session-tab-row${
+                t.key === dragKey ? " dragging" : ""
+              }${t.key === overKey && t.key !== dragKey ? " over" : ""}`}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData("text/plain", t.key);
+                e.dataTransfer.effectAllowed = "move";
+                setDragKey(t.key);
+              }}
+              onDragOver={(e) => {
+                if (dragKey === null) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                if (overKey !== t.key) setOverKey(t.key);
+              }}
+              onDragLeave={() => {
+                if (overKey === t.key) setOverKey(null);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (dragKey !== null) onArrange(moveKey(keys, dragKey, idx));
+                setDragKey(null);
+                setOverKey(null);
+              }}
+              onDragEnd={() => {
+                setDragKey(null);
+                setOverKey(null);
+              }}
+            >
+              <span className="dnd-grip" title="Drag to Move">
+                ⋮⋮
+              </span>
+              <span className="session-tab-row-title">{t.title}</span>
+              {t.dmOnly && <span className="dm-tag">GM</span>}
+              {t.builtin && <span className="dnd-structural">Built In</span>}
+
+              <span className="session-tab-row-btns">
+                <button
+                  type="button"
+                  className="dnd-rowbtn"
+                  title="Move Up"
+                  aria-label="Move Up"
+                  disabled={idx === 0}
+                  onClick={() => onArrange(moveKey(keys, t.key, idx - 1))}
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  className="dnd-rowbtn"
+                  title="Move Down"
+                  aria-label="Move Down"
+                  disabled={idx === keys.length - 1}
+                  onClick={() => onArrange(moveKey(keys, t.key, idx + 1))}
+                >
+                  ▼
+                </button>
+                {/* Only on a tab that is somebody's to change: the
+                    built-ins are nobody's, and a tab a player made is
+                    theirs and the GM's. The server decides which, and
+                    sends the answer with the tab. */}
+                {t.canManage && (
+                  <>
+                    <button
+                      type="button"
+                      className="dnd-rowbtn"
+                      title="Rename"
+                      aria-label={`Rename ${t.title}`}
+                      onClick={() => {
+                        setRenameText(t.title);
+                        only("rename", t.key);
+                      }}
+                    >
+                      ✎
+                    </button>
+                    <button
+                      type="button"
+                      className="dnd-rowbtn"
+                      title="Delete Tab"
+                      aria-label={`Delete ${t.title}`}
+                      onClick={() => only("confirm", t.key)}
+                    >
+                      ×
+                    </button>
+                  </>
+                )}
+              </span>
+            </div>
+          )}
+
+          {confirmKey === t.key && (
+            <p className="record-confirm session-tab-confirm">
+              <span className="settings-note">
+                Delete “{t.title}” and everything written on it?
+              </span>
+              <button
+                type="button"
+                className="npc-btn"
+                onClick={() => only(null)}
+              >
+                Keep
+              </button>
+              <button
+                type="button"
+                className="npc-btn danger"
+                onClick={() =>
+                  void onDelete(t.key).then((ok) => {
+                    if (ok) only(null);
+                  })
+                }
+              >
+                Delete
+              </button>
+            </p>
+          )}
+        </div>
+      ))}
+
+      {adding ? (
+        <TabNameForm
+          label="Name This Tab"
+          value={newTitle}
+          onChange={setNewTitle}
+          secret={canHide ? newDmOnly : null}
+          onSecret={setNewDmOnly}
+          submitLabel="Add Tab"
+          onCancel={() => only(null)}
+          onSubmit={() =>
+            void onAdd(newTitle, newDmOnly).then((ok) => {
+              if (ok) only(null);
+            })
+          }
+        />
+      ) : (
+        <button
+          type="button"
+          className="dnd-row session-tab-row session-tab-row-add"
+          onClick={() => {
+            setNewTitle("");
+            setNewDmOnly(false);
+            only("add");
+          }}
+        >
+          + Add a Tab
+        </button>
+      )}
+    </div>
+  );
+}
+
 /**
  * Naming a tab — the one form, used to add and to rename.
  *
@@ -694,7 +953,7 @@ export function SessionDetail({
  * controls with different words on them, and the interesting behaviour
  * is behaviour neither would get by being written out twice: Enter
  * submits, Escape backs out, and the field takes focus so a click on
- * "Add a tab" is followed by typing rather than by another click.
+ * "Add a Tab" is followed by typing rather than by another click.
  *
  * `secret` is null where the choice does not exist — renaming never
  * changes who can see a tab, and a player is not offered a hidden one
@@ -752,7 +1011,7 @@ function TabNameForm({
             checked={secret}
             onChange={(e) => onSecret?.(e.target.checked)}
           />
-          Only I can see this
+          Only I Can See This
         </label>
       )}
 

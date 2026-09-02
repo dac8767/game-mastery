@@ -339,6 +339,20 @@ export default defineSchema({
      */
     milestone: v.optional(v.number()),
     description: v.optional(v.string()),
+    /**
+     * The tabs as somebody arranged them: keys, in strip order. Absent
+     * on a session nobody has rearranged, which is most of them — the
+     * default order is computed, not stored, so 53 imported sessions
+     * did not need 53 copies of the same three words.
+     *
+     * Keys rather than positions on the tab rows, because the built-in
+     * tabs have no rows to hold a position on and may be moved all the
+     * same. A key here that names nothing (a deleted tab) is skipped by
+     * orderTabs; a tab not here comes after everything that is. See
+     * sessions.reorderTabs for who may write it and how a player's
+     * order is merged around the tabs they cannot see.
+     */
+    tabOrder: v.optional(v.array(v.string())),
   }).index("by_campaign", ["campaignId"]),
 
   /**

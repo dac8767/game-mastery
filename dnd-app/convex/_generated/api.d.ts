@@ -17,6 +17,7 @@ import type * as dice from "../dice.js";
 import type * as dmscreen from "../dmscreen.js";
 import type * as groups from "../groups.js";
 import type * as http from "../http.js";
+import type * as inlineImages from "../inlineImages.js";
 import type * as locations from "../locations.js";
 import type * as lookup from "../lookup.js";
 import type * as maps from "../maps.js";
@@ -46,6 +47,7 @@ declare const fullApi: ApiFromModules<{
   dmscreen: typeof dmscreen;
   groups: typeof groups;
   http: typeof http;
+  inlineImages: typeof inlineImages;
   locations: typeof locations;
   lookup: typeof lookup;
   maps: typeof maps;

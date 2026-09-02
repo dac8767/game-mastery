@@ -6398,6 +6398,72 @@ export const unit = {
         "an event handler is not an attribute this emits",
         !clean('<p onclick="alert(1)">hi</p>').includes("onclick")
       );
+
+      // Pictures pasted into the page. What is kept is the storage
+      // KEY, never a src: a data: URL is a megabyte in a document, an
+      // external URL is a request to somebody's server from every
+      // member's browser, and a blob: URL is dead by the next reload —
+      // which was the report, word for word. The URL is minted on read.
+      const A = "kg2aaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+      const B = "kg2bbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+      check(
+        "a pasted picture keeps its storage key and loses its src",
+        clean(`<img src="blob:http://x/1" data-storage="${A}">`) ===
+          `<img data-storage="${A}">`
+      );
+      check(
+        "a picture with no storage key is nothing at all, not a broken icon",
+        clean('<p>a</p><img src="https://evil.example/pixel.gif"><p>b</p>') ===
+          "<p>a</p><p>b</p>"
+      );
+      check(
+        "a storage key is letters and digits or it is not one",
+        clean('<img data-storage="../x"><img data-storage="kg2 onerror=alert(1)">') ===
+          ""
+      );
+      check(
+        "a picture is a void tag — no </img> to unbalance what follows",
+        clean(`<p>x <img data-storage="${A}"> y</p>`) ===
+          `<p>x <img data-storage="${A}"> y</p>`
+      );
+      const twoPics = `<p><img data-storage="${A}"><img data-storage="${B}"><img data-storage="${A}"></p>`;
+      check(
+        "imageStorageIds names each key once",
+        JSON.stringify(bh.imageStorageIds(twoPics)) === JSON.stringify([A, B])
+      );
+      check(
+        "withImageSrcs writes a src for a file that exists and marks one that is gone",
+        bh.withImageSrcs(twoPics, new Map([[A, "https://h/a"], [B, null]])) ===
+          `<p><img data-storage="${A}" src="https://h/a"><img data-storage="${B}" alt="Image missing"><img data-storage="${A}" src="https://h/a"></p>`
+      );
+      check(
+        "and a page read and written back is the stored form again — no URL is ever stored",
+        clean(bh.withImageSrcs(twoPics, new Map([[A, "https://h/a"]]))) === twoPics
+      );
+
+      // The notebook is not sanitized, so its pasted pictures are put
+      // in the stored form by hand and everything else is left alone —
+      // including a data: URL picture pasted there before any of this.
+      const canon = (h) => bh.canonicalInlineImages(h);
+      check(
+        "a pasted picture in a notebook box is stored as its key alone",
+        canon(`<p>x <img data-storage="${A}" src="blob:http://x/1"> y</p>`) ===
+          `<p>x <img data-storage="${A}"> y</p>` &&
+          canon(`<img src="blob:http://x/1" data-storage="${A}">`) ===
+            `<img data-storage="${A}">`
+      );
+      check(
+        "and a notebook's older pictures and markup are untouched",
+        canon('<p style="color: red"><img src="data:image/png;base64,AAAA"></p>') ===
+          '<p style="color: red"><img src="data:image/png;base64,AAAA"></p>' &&
+          canon('<img data-storage="not a key" src="x">') ===
+            '<img data-storage="not a key" src="x">'
+      );
+      check(
+        "the stored form is what withImageSrcs matches",
+        bh.withImageSrcs(canon(`<img src="blob:x" data-storage="${A}">`), new Map([[A, "https://h/a"]])) ===
+          `<img data-storage="${A}" src="https://h/a">`
+      );
       check(
         "an image cannot ask for a url",
         clean('<img src="http://x/pixel.gif">') === ""
@@ -9605,6 +9671,85 @@ export const unit = {
         st
           .orderTabs(false, [])
           .every((t) => t.dmOnly === false)
+      );
+
+      // An arrangement somebody made, over the default order. Built-ins
+      // move like any other tab; a key naming nothing is skipped; a tab
+      // the arrangement never heard of goes last, in default order.
+      const keysOf = (tabs) => JSON.stringify(tabs.map((t) => t.key));
+      check(
+        "an arrangement moves the built-ins too",
+        keysOf(st.orderTabs(true, [tab("a")], ["player", "a", "prep", "dm"])) ===
+          JSON.stringify(["player", "a", "prep", "dm"])
+      );
+      check(
+        "a tab the arrangement does not name comes after the ones it does",
+        keysOf(st.orderTabs(true, [tab("a"), tab("b", { order: 2 })], ["b", "dm"])) ===
+          JSON.stringify(["b", "dm", "prep", "player", "a"])
+      );
+      check(
+        "a key that no longer names a tab is skipped, not an error",
+        keysOf(st.orderTabs(true, [], ["gone", "player", "dm"])) ===
+          JSON.stringify(["player", "dm", "prep"])
+      );
+      check(
+        "and a player's strip is the arrangement minus what they cannot see",
+        keysOf(st.orderTabs(false, [tab("a")], ["a", "prep", "player", "dm"])) ===
+          JSON.stringify(["a", "player"])
+      );
+      check(
+        "no arrangement is the default order",
+        keysOf(st.orderTabs(true, [tab("a")], null)) ===
+          keysOf(st.orderTabs(true, [tab("a")]))
+      );
+
+      const four = ["dm", "prep", "player", "a"];
+      check(
+        "moveKey puts a key where it was asked and keeps the rest in order",
+        JSON.stringify(st.moveKey(four, "a", 0)) ===
+          JSON.stringify(["a", "dm", "prep", "player"]) &&
+          JSON.stringify(st.moveKey(four, "dm", 2)) ===
+            JSON.stringify(["prep", "player", "dm", "a"])
+      );
+      check(
+        "left of the first tab is the first tab, and past the end is the end",
+        JSON.stringify(st.moveKey(four, "prep", -5)) ===
+          JSON.stringify(["prep", "dm", "player", "a"]) &&
+          JSON.stringify(st.moveKey(four, "prep", 99)) ===
+            JSON.stringify(["dm", "player", "a", "prep"])
+      );
+      check(
+        "a move that changes nothing hands back the same array",
+        st.moveKey(four, "prep", 1) === four &&
+          st.moveKey(four, "dm", -1) === four &&
+          st.moveKey(four, "nope", 0) === four
+      );
+
+      check(
+        "a permutation is the same keys once each, in any order",
+        st.samePermutation(["a", "b", "c"], ["c", "a", "b"]) &&
+          !st.samePermutation(["a", "b", "c"], ["a", "b"]) &&
+          !st.samePermutation(["a", "b", "c"], ["a", "b", "b"]) &&
+          !st.samePermutation(["a", "b", "c"], ["a", "b", "z"]) &&
+          !st.samePermutation(["a", "a"], ["a", "a"])
+      );
+
+      // A player rearranges what they see; the GM's tabs stay put.
+      check(
+        "a player's order fills the visible slots and leaves the hidden ones",
+        JSON.stringify(
+          st.mergeOrder(
+            ["dm", "player", "prep", "a", "b"],
+            ["player", "a", "b"],
+            ["b", "player", "a"]
+          )
+        ) === JSON.stringify(["dm", "b", "prep", "player", "a"])
+      );
+      check(
+        "and for the GM, who sees everything, the order is the order",
+        JSON.stringify(
+          st.mergeOrder(["dm", "prep", "player"], ["dm", "prep", "player"], ["player", "dm", "prep"])
+        ) === JSON.stringify(["player", "dm", "prep"])
       );
 
       check(

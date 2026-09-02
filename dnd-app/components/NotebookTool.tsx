@@ -311,6 +311,7 @@ export function NotebookTool({
               )
             }
             onUploadImage={uploadImage}
+            inlineImages
           >
             <span className="nb-page-title">{page?.title ?? ""}</span>
           </BoxCanvas>

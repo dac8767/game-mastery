@@ -10,13 +10,16 @@ import { Doc, Id } from "./_generated/dataModel";
 import { requireDm, requireMember } from "./auth";
 import { getSettings } from "./settings";
 import { sanitizeBoxHtml } from "../components/boxHtml";
+import { deleteInlineImages, withImages } from "./inlineImages";
 import {
   BUILTIN_TABS,
   MAX_CUSTOM_TABS,
   TabDef,
   builtinTab,
   isValidTitle,
+  mergeOrder,
   orderTabs,
+  samePermutation,
   tabTitle,
 } from "../components/sessionTabs";
 
@@ -247,7 +250,7 @@ export const getNotes = query({
             q.eq("sessionId", args.sessionId).eq("dmOnly", false)
           )
           .take(MAX_CUSTOM_TABS);
-    const visible = orderTabs(isDm, custom);
+    const visible = orderTabs(isDm, custom, session.tabOrder ?? null);
 
     const side = async (which: Side) => {
       const boxes = await ctx.db
@@ -267,7 +270,7 @@ export const getNotes = query({
             w: b.w,
             h: b.h,
             order: b.order,
-            html: b.html ?? null,
+            html: b.html ? await withImages(ctx, b.html) : null,
             // Resolved here so the client never handles storage ids.
             src: b.storageId ? await ctx.storage.getUrl(b.storageId) : null,
             rotate: b.rotate ?? 0,
@@ -291,7 +294,7 @@ export const getNotes = query({
           q.eq("sessionId", args.sessionId).eq("side", which)
         )
         .first();
-      return page?.html ?? "";
+      return await withImages(ctx, page?.html ?? "");
     };
 
     return {
@@ -544,6 +547,7 @@ export const deleteSession = mutation({
       .take(MAX_BOXES * MAX_TABS);
     for (const box of boxes) {
       if (box.storageId) await ctx.storage.delete(box.storageId);
+      await deleteInlineImages(ctx, box.html);
       await ctx.db.delete(box._id);
     }
 
@@ -554,7 +558,10 @@ export const deleteSession = mutation({
       .query("sessionPages")
       .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
       .take(MAX_TABS * 2);
-    for (const page of pages) await ctx.db.delete(page._id);
+    for (const page of pages) {
+      await deleteInlineImages(ctx, page.html);
+      await ctx.db.delete(page._id);
+    }
 
     // And the tabs themselves, whose rows would otherwise be the only
     // thing left of a session nobody can reach.
@@ -637,7 +644,7 @@ export const renameTab = mutation({
 export const deleteTab = mutation({
   args: { tabId: v.id("sessionTabs") },
   handler: async (ctx, args) => {
-    const { tab } = await requireTabOwner(ctx, args.tabId);
+    const { tab, session } = await requireTabOwner(ctx, args.tabId);
 
     const boxes = await ctx.db
       .query("sessionBoxes")
@@ -647,6 +654,7 @@ export const deleteTab = mutation({
       .take(MAX_BOXES);
     for (const box of boxes) {
       if (box.storageId) await ctx.storage.delete(box.storageId);
+      await deleteInlineImages(ctx, box.html);
       await ctx.db.delete(box._id);
     }
 
@@ -656,9 +664,71 @@ export const deleteTab = mutation({
         q.eq("sessionId", tab.sessionId).eq("side", tab._id)
       )
       .take(2);
-    for (const page of pages) await ctx.db.delete(page._id);
+    for (const page of pages) {
+      await deleteInlineImages(ctx, page.html);
+      await ctx.db.delete(page._id);
+    }
+
+    // Its place in the arrangement goes too. orderTabs would skip a key
+    // naming nothing, so this is tidiness rather than correctness — but
+    // an arrangement that keeps every tab ever deleted is a list that
+    // only grows.
+    if (session.tabOrder?.includes(tab._id)) {
+      await ctx.db.patch(session._id, {
+        tabOrder: session.tabOrder.filter((k) => k !== tab._id),
+      });
+    }
 
     await ctx.db.delete(args.tabId);
+  },
+});
+
+/**
+ * The strip, rearranged.
+ *
+ * `order` is every tab the caller can see, in the order they want them
+ * — the built-ins included, which may be moved but not removed. It is
+ * checked against the strip this person was SENT before it is believed:
+ * a list that drops a tab, doubles one, or names another session's is
+ * refused, so a stale window cannot write a strip with a tab missing.
+ *
+ * Any member may rearrange, as any member may make a tab. A player's
+ * order names only the shared tabs, and the GM's hidden ones keep their
+ * slots — mergeOrder refills the visible slots and leaves the rest —
+ * so a player never moves a tab they cannot see. The hidden rows are
+ * read here for their KEYS, to know which slots are theirs; nothing of
+ * them is returned, which is the line getNotes holds and this keeps.
+ *
+ * A GM previewing as a player is sent the player's strip and so sends
+ * back the player's order, and is merged like a player; the preview
+ * stays what a player would get.
+ */
+export const reorderTabs = mutation({
+  args: { sessionId: v.id("sessions"), order: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const session = await ownedSession(ctx, args.sessionId);
+    const { userId, isDm: isCampaignDm } = await requireMember(
+      ctx,
+      session.campaignId
+    );
+    const { viewAsPlayer } = await getSettings(ctx, userId);
+    const isDm = isCampaignDm && !viewAsPlayer;
+
+    const custom = await ctx.db
+      .query("sessionTabs")
+      .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+      .take(MAX_CUSTOM_TABS);
+    const arranged = session.tabOrder ?? null;
+    const full = orderTabs(true, custom, arranged).map((t) => t.key);
+    const visible = orderTabs(isDm, custom, arranged).map((t) => t.key);
+
+    if (!samePermutation(visible, args.order)) {
+      throw new Error("The tabs changed under you — reload and try again.");
+    }
+
+    const next = mergeOrder(full, visible, args.order);
+    if (next.join("\u0000") === full.join("\u0000")) return;
+    await ctx.db.patch(session._id, { tabOrder: next });
   },
 });
 

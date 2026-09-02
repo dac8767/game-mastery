@@ -69,7 +69,12 @@ const NUKE = new Set([
   "math",
 ]);
 
-const VOID = new Set(["br"]);
+/* Tags with no closing half. An <img> the browser serialises has no
+   slash, and without this it would be pushed as open and closed with
+   a </img> at the end of the note — harmless to a browser, but not the
+   canonical form the storage-key helpers in boxHtml match on. The note
+   policy allows no img, so this changes nothing a note emits. */
+const VOID = new Set(["br", "img"]);
 
 /**
  * Text, made safe to put back into HTML.
