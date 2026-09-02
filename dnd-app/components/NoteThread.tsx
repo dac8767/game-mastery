@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useUndoableMutation } from "@/components/useUndoable";
 import { UiText } from "@/components/UiEditor";
 import { Id } from "@/convex/_generated/dataModel";
 import {
@@ -192,7 +193,7 @@ function NoteCard({
   onEdit: () => void;
   onDone: () => void;
 }) {
-  const editNote = useMutation(api.npcs.editNote);
+  const editNote = useUndoableMutation(api.npcs.editNote);
   const removeNote = useMutation(api.npcs.deleteNote);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -213,11 +214,16 @@ function NoteCard({
             setBusy(true);
             try {
               setError(null);
-              await editNote({
-                noteId: note._id as Id<"npcNotes">,
-                body,
-                imageIds,
-              });
+              const noteId = note._id as Id<"npcNotes">;
+              await editNote(
+                { noteId, body, imageIds },
+                {
+                  noteId,
+                  body: note.body,
+                  imageIds: note.images.map((i) => i.id as Id<"_storage">),
+                },
+                `Note by ${note.authorName}`
+              );
               onDone();
               return true;
             } catch (e) {

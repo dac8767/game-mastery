@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import { useUndoableMutation } from "@/components/useUndoable";
 import Link from "next/link";
 import {
   MAX_TEXT,
@@ -301,9 +302,9 @@ export function TodoList({
   reorderable?: boolean;
   emptyNote?: string;
 }) {
-  const setDone = useMutation(api.todo.setDone);
-  const updateTodo = useMutation(api.todo.updateTodo);
-  const setFavorite = useMutation(api.todo.setFavorite);
+  const setDone = useUndoableMutation(api.todo.setDone);
+  const updateTodo = useUndoableMutation(api.todo.updateTodo);
+  const setFavorite = useUndoableMutation(api.todo.setFavorite);
   const reorderTodos = useMutation(api.todo.reorderTodos);
   const deleteTodo = useMutation(api.todo.deleteTodo);
   const { error, run } = useRunner();
@@ -380,10 +381,11 @@ export function TodoList({
                   aria-label={item.done ? "Not done after all" : "Done"}
                   onChange={(e) =>
                     run(() =>
-                      setDone({
-                        todoId: item._id as Id<"todos">,
-                        done: e.target.checked,
-                      })
+                      setDone(
+                        { todoId: item._id as Id<"todos">, done: e.target.checked },
+                        { todoId: item._id as Id<"todos">, done: item.done },
+                        `Done: ${item.text}`
+                      )
                     )
                   }
                 />
@@ -432,7 +434,11 @@ export function TodoList({
                         setEditing(null);
                         if (text && text !== item.text) {
                           run(() =>
-                            updateTodo({ todoId: item._id as Id<"todos">, text })
+                            updateTodo(
+                              { todoId: item._id as Id<"todos">, text },
+                              { todoId: item._id as Id<"todos">, text: item.text },
+                              "Text of a to-do"
+                            )
                           );
                         }
                       }}
@@ -512,10 +518,11 @@ export function TodoList({
                   aria-pressed={item.favorite}
                   onClick={() =>
                     run(() =>
-                      setFavorite({
-                        todoId: item._id as Id<"todos">,
-                        favorite: !item.favorite,
-                      })
+                      setFavorite(
+                        { todoId: item._id as Id<"todos">, favorite: !item.favorite },
+                        { todoId: item._id as Id<"todos">, favorite: item.favorite },
+                        `Star: ${item.text}`
+                      )
                     )
                   }
                 >
@@ -556,7 +563,11 @@ export function TodoList({
                   board={board}
                   onChange={(patch) =>
                     run(() =>
-                      updateTodo({ todoId: item._id as Id<"todos">, ...patch })
+                      updateTodo(
+                        { todoId: item._id as Id<"todos">, ...patch },
+                        { todoId: item._id as Id<"todos">, ...todoBefore(item, patch) },
+                        todoPatchLabel(patch)
+                      )
                     )
                   }
                 />
@@ -567,6 +578,40 @@ export function TodoList({
       </ul>
     </>
   );
+}
+
+type TodoPatch = {
+  due?: string;
+  notes?: string;
+  projectId?: Id<"todoProjects"> | null;
+  priority?: number | null;
+  labelIds?: Id<"todoLabels">[];
+};
+
+/**
+ * The same keys a patch changes, carrying what the row has now — the
+ * way back for Cmd+Z. Absent values go as the same "clear" each field
+ * sends from its own control: "" for the dates and notes, null for the
+ * project and priority, so undoing a set clears and undoing a clear
+ * sets.
+ */
+function todoBefore(item: TodoItem, patch: TodoPatch): TodoPatch {
+  const before: TodoPatch = {};
+  if (patch.due !== undefined) before.due = item.due ?? "";
+  if (patch.notes !== undefined) before.notes = item.notes ?? "";
+  if (patch.projectId !== undefined) before.projectId = item.projectId ?? null;
+  if (patch.priority !== undefined) before.priority = item.priority ?? null;
+  if (patch.labelIds !== undefined) before.labelIds = item.labelIds;
+  return before;
+}
+
+function todoPatchLabel(patch: TodoPatch): string {
+  if (patch.due !== undefined) return "Due date of a to-do";
+  if (patch.notes !== undefined) return "Notes of a to-do";
+  if (patch.projectId !== undefined) return "Project of a to-do";
+  if (patch.priority !== undefined) return "Priority of a to-do";
+  if (patch.labelIds !== undefined) return "Labels of a to-do";
+  return "A to-do";
 }
 
 /**
@@ -693,6 +738,7 @@ function TodoDetail({
         <span>Notes</span>
         <textarea
           className="todo-note-edit"
+          key={item.notes ?? ""}
           defaultValue={item.notes ?? ""}
           rows={2}
           placeholder="Anything that does not fit on one line"

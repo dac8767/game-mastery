@@ -26,6 +26,7 @@ import {
   toggleSectionCollapsed,
   visibleSidebar,
 } from "@/components/sidebarLayout";
+import { clearHistory } from "@/components/undoHistory";
 
 /**
  * The application frame: navigation on the left, the selected thing on
@@ -429,7 +430,10 @@ export function AppShell({
             type="button"
             className="nav-item subtle as-button"
             title="Sign out"
-            onClick={() => signOut()}
+            onClick={() => {
+              clearHistory();
+              void signOut();
+            }}
           >
             <span className="nav-icon">⏻</span>
             <span className="nav-label">Sign out</span>

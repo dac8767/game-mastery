@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
+import { useUndoableMutation } from "@/components/useUndoable";
 import { Id } from "@/convex/_generated/dataModel";
 import { useViewPrefs } from "@/components/useViewPrefs";
 import { Pager } from "@/components/Pager";
@@ -114,9 +115,9 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const settings = useQuery(api.settings.mySettings);
 
   const prefs = useViewPrefs(campaignId, "npcs", isDm);
-  const updateNpc = useMutation(api.npcs.updateNpc);
+  const updateNpc = useUndoableMutation(api.npcs.updateNpc);
   const createNpc = useMutation(api.npcs.createNpc);
-  const setPlayerNotes = useMutation(api.npcs.setPlayerNotes);
+  const setPlayerNotes = useUndoableMutation(api.npcs.setPlayerNotes);
 
   const [search, setSearch] = useState("");
   /**
@@ -411,18 +412,32 @@ export function NpcTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   async function commitEdit(npc: Npc, def: ColumnDef, text: string) {
     setEditing(null);
     const value = fromInput(def, text);
+    // The way back: what the cell showed before, through the same
+    // conversion, so a cleared cell clears on undo as it did on commit.
+    const raw = cell(npc, def.key);
+    const shown = Array.isArray(raw)
+      ? (raw as string[]).join(", ")
+      : raw === null || raw === undefined
+        ? ""
+        : String(raw);
+    const before = fromInput(def, shown);
+    const label = `${def.label} of ${npc.name || "this NPC"}`;
     try {
       setError(null);
       if (def.key === "playerNotes" && !isDm) {
-        await setPlayerNotes({
-          npcId: npc._id,
-          playerNotes: value as string | null,
-        });
+        await setPlayerNotes(
+          { npcId: npc._id, playerNotes: value as string | null },
+          { npcId: npc._id, playerNotes: before as string | null },
+          label
+        );
         return;
       }
-      await updateNpc({ npcId: npc._id, [def.key]: value } as unknown as {
-        npcId: typeof npc._id;
-      });
+      type Args = { npcId: typeof npc._id };
+      await updateNpc(
+        { npcId: npc._id, [def.key]: value } as unknown as Args,
+        { npcId: npc._id, [def.key]: before } as unknown as Args,
+        label
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save that change.");
     }

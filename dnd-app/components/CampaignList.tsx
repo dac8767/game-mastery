@@ -11,6 +11,7 @@ import {
   formatCardDate,
   untilSession,
 } from "@/components/campaignCard";
+import { clearHistory } from "@/components/undoHistory";
 
 /**
  * The front door: every campaign you are in, as a card you can read
@@ -51,7 +52,10 @@ export function CampaignList() {
           >
             New campaign
           </button>
-          <button type="button" className="text-button" onClick={() => signOut()}>
+          <button type="button" className="text-button" onClick={() => {
+              clearHistory();
+              void signOut();
+            }}>
             Sign out
           </button>
         </div>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
+import { useUndoableMutation } from "@/components/useUndoable";
 import { useSearchParams } from "next/navigation";
 import { Id } from "@/convex/_generated/dataModel";
 import {
@@ -73,7 +74,7 @@ export function LocationsTool({
 }) {
   const data = useQuery(api.locations.listForCampaign, { campaignId });
   const createLocation = useMutation(api.locations.createLocation);
-  const updateLocation = useMutation(api.locations.updateLocation);
+  const updateLocation = useUndoableMutation(api.locations.updateLocation);
   const deleteLocation = useMutation(api.locations.deleteLocation);
   const setPin = useMutation(api.locations.setPin);
 
@@ -376,10 +377,11 @@ export function LocationsTool({
               }
               onChange={(patch) =>
                 void run(() =>
-                  updateLocation({
-                    locationId: selected._id,
-                    ...patch,
-                  })
+                  updateLocation(
+                    { locationId: selected._id, ...patch },
+                    { locationId: selected._id, ...patchBefore(selected, patch) },
+                    `${patchLabel(patch)} of ${selected.name}`
+                  )
                 )
               }
               onDelete={() =>
@@ -515,6 +517,39 @@ function LocationList({
   );
 }
 
+/** What the record panel can change, one or more fields at a time. */
+type LocPatch = {
+  name?: string;
+  description?: string | null;
+  dmNotes?: string | null;
+  hidden?: boolean;
+  parentId?: Id<"locations"> | null;
+};
+
+/**
+ * The same fields as they stood before a patch: what an undo sends.
+ * Absent text is null on the way back because null is how the panel
+ * clears a field on the way in; a missing `hidden` is an unhidden one.
+ */
+function patchBefore(loc: Loc, patch: LocPatch): LocPatch {
+  const before: LocPatch = {};
+  if ("name" in patch) before.name = loc.name;
+  if ("description" in patch) before.description = loc.description ?? null;
+  if ("dmNotes" in patch) before.dmNotes = loc.dmNotes ?? null;
+  if ("hidden" in patch) before.hidden = Boolean(loc.hidden);
+  if ("parentId" in patch) before.parentId = loc.parentId ?? null;
+  return before;
+}
+
+function patchLabel(patch: LocPatch): string {
+  if ("name" in patch) return "Name";
+  if ("description" in patch) return "Description";
+  if ("dmNotes" in patch) return "GM notes";
+  if ("hidden" in patch) return "Hidden";
+  if ("parentId" in patch) return "Parent";
+  return "Field";
+}
+
 function LocationDetail({
   loc,
   rows,
@@ -538,19 +573,20 @@ function LocationDetail({
   canPlace: boolean;
   placingThis: boolean;
   onPlace: () => void;
-  onChange: (patch: {
-    name?: string;
-    description?: string | null;
-    dmNotes?: string | null;
-    hidden?: boolean;
-    parentId?: Id<"locations"> | null;
-  }) => void;
+  onChange: (patch: LocPatch) => void;
   onDelete: () => void;
   onMove: (x: number, y: number) => void;
 }) {
   const [name, setName] = useState(loc.name);
   const [description, setDescription] = useState(loc.description ?? "");
   const [dmNotes, setDmNotes] = useState(loc.dmNotes ?? "");
+
+  // Follow the row when the server redelivers it — an undo, chiefly.
+  // Safe from the cursor: these save on blur, so the value only moves
+  // while nobody is typing in the box.
+  useEffect(() => setName(loc.name), [loc.name]);
+  useEffect(() => setDescription(loc.description ?? ""), [loc.description]);
+  useEffect(() => setDmNotes(loc.dmNotes ?? ""), [loc.dmNotes]);
 
   // isPinned rather than a fourth spelling of the same test: the map
   // layer, the strip and this button have to agree on what "placed"

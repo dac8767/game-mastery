@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import { useUndoableMutation } from "@/components/useUndoable";
 import { useRunner, useTodoBoard } from "@/components/TodoTool";
 import {
   MAX_TITLE,
@@ -29,7 +30,7 @@ import {
 export function TodoLabels({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const board = useTodoBoard(campaignId);
   const addLabel = useMutation(api.todo.addLabel);
-  const updateLabel = useMutation(api.todo.updateLabel);
+  const updateLabel = useUndoableMutation(api.todo.updateLabel);
   const deleteLabel = useMutation(api.todo.deleteLabel);
   const { error, run } = useRunner();
 
@@ -103,13 +104,22 @@ export function TodoLabels({ campaignId }: { campaignId: Id<"campaigns"> }) {
                 </span>
                 <input
                   className="proj-name-edit"
+                  /* Keyed on the title so a name put back by Cmd+Z
+                     redraws an uncontrolled input. */
+                  key={l.title}
                   defaultValue={l.title}
                   maxLength={MAX_TITLE}
                   aria-label="Label name"
                   onBlur={(e) => {
                     const title = e.target.value.trim();
                     if (title && title !== l.title) {
-                      run(() => updateLabel({ labelId: l._id, title }));
+                      run(() =>
+                        updateLabel(
+                          { labelId: l._id, title },
+                          { labelId: l._id, title: l.title },
+                          "Label name"
+                        )
+                      );
                     } else {
                       e.target.value = l.title;
                     }
@@ -126,9 +136,17 @@ export function TodoLabels({ campaignId }: { campaignId: Id<"campaigns"> }) {
                       style={{ background: colorOf(id) }}
                       title={id}
                       aria-label={`${l.title}: ${id}`}
-                      onClick={() =>
-                        run(() => updateLabel({ labelId: l._id, color: id }))
-                      }
+                      onClick={() => {
+                        // A palette id both ways, never a colour string.
+                        const was = l.color;
+                        run(() =>
+                          updateLabel(
+                            { labelId: l._id, color: id },
+                            { labelId: l._id, color: was },
+                            `Colour of ${l.title}`
+                          )
+                        );
+                      }}
                     />
                   ))}
                 </span>

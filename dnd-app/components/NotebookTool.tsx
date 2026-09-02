@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { FunctionReturnType } from "convex/server";
+import { FunctionArgs, FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import {
@@ -13,7 +13,15 @@ import {
   isAncestor,
   visibleNodes,
 } from "@/components/notebookTree";
-import { BoxCanvas, ContextMenu } from "@/components/BoxCanvas";
+import {
+  BoxCanvas,
+  ContextMenu,
+  boxPatchInverse,
+  boxPatchLabel,
+  releaseBox,
+} from "@/components/BoxCanvas";
+import { useUndoableMutation } from "@/components/useUndoable";
+import { record } from "@/components/undoHistory";
 import { NotebookFormatBar } from "@/components/NotebookFormatBar";
 import {
   registerScrapbookSaver,
@@ -81,8 +89,8 @@ export function NotebookTool({
   );
 
   const addNode = useMutation(api.notebook.addNode);
-  const renameNode = useMutation(api.notebook.renameNode);
-  const setNodeColor = useMutation(api.notebook.setNodeColor);
+  const renameNode = useUndoableMutation(api.notebook.renameNode);
+  const setNodeColor = useUndoableMutation(api.notebook.setNodeColor);
   const setCollapsed = useMutation(api.notebook.setCollapsed);
   const moveNode = useMutation(api.notebook.moveNode);
   const deleteNode = useMutation(api.notebook.deleteNode);
@@ -120,6 +128,46 @@ export function NotebookTool({
     }
   }, []);
 
+  /**
+   * One door for every change to a box, so every one of them can be
+   * taken back. The way back is the same keys with what the box holds
+   * NOW, read at the moment of the change — through a ref, because the
+   * format toolbar's saver is registered once and would otherwise see
+   * the page as it was when it mounted.
+   */
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  const patchBox = useCallback(
+    async (boxId: string, patch: Record<string, unknown>) => {
+      type Args = FunctionArgs<typeof api.notebook.updateBox>;
+      const id = boxId as Id<"notebookBoxes">;
+      const box = pageRef.current?.boxes.find((b) => b._id === boxId);
+      const next = { boxId: id, ...patch } as Args;
+      const prev = {
+        boxId: id,
+        ...(box ? boxPatchInverse(box, patch) : {}),
+      } as Args;
+      await updateBox(next);
+      const label = `${boxPatchLabel(patch, box?.type ?? "text")} on ${
+        pageRef.current?.title ?? "this page"
+      }`;
+      // A box you are standing in refuses the server's text; step out
+      // of it first, so what comes back is seen.
+      record({
+        label,
+        undo: () => {
+          releaseBox(boxId);
+          return updateBox(prev);
+        },
+        redo: () => {
+          releaseBox(boxId);
+          return updateBox(next);
+        },
+      });
+    },
+    [updateBox]
+  );
+
   // The format toolbar acts on whichever box the caret is in, and the
   // caret is gone by the time a button's click would fire — so the
   // selection is tracked continuously instead.
@@ -135,11 +183,9 @@ export function NotebookTool({
   useEffect(
     () =>
       registerScrapbookSaver((boxId, html) =>
-        void run(() =>
-          updateBox({ boxId: boxId as Id<"notebookBoxes">, html })
-        )
+        void run(() => patchBox(boxId, { html }))
       ),
-    [run, updateBox]
+    [run, patchBox]
   );
 
   /** Upload and hand the id back; the canvas places the box. */
@@ -258,11 +304,7 @@ export function NotebookTool({
                 })
               )
             }
-            onUpdate={(boxId, patch) =>
-              void run(() =>
-                updateBox({ boxId: boxId as Id<"notebookBoxes">, ...patch })
-              )
-            }
+            onUpdate={(boxId, patch) => void run(() => patchBox(boxId, patch))}
             onDelete={(boxId) =>
               void run(() =>
                 deleteBox({ boxId: boxId as Id<"notebookBoxes"> })
@@ -285,11 +327,13 @@ export function NotebookTool({
               const title = window.prompt("Name", menu.node.title);
               setMenu(null);
               if (title !== null) {
+                const nodeId = menu.node._id as Id<"notebookNodes">;
                 void run(() =>
-                  renameNode({
-                    nodeId: menu.node._id as Id<"notebookNodes">,
-                    title,
-                  })
+                  renameNode(
+                    { nodeId, title },
+                    { nodeId, title: menu.node.title },
+                    `Name of ${menu.node.title}`
+                  )
                 );
               }
             }}
@@ -325,11 +369,13 @@ export function NotebookTool({
                     title={c ?? "No colour"}
                     onClick={() => {
                       setMenu(null);
+                      const nodeId = menu.node._id as Id<"notebookNodes">;
                       void run(() =>
-                        setNodeColor({
-                          nodeId: menu.node._id as Id<"notebookNodes">,
-                          color: c,
-                        })
+                        setNodeColor(
+                          { nodeId, color: c },
+                          { nodeId, color: menu.node.color ?? null },
+                          `Colour of ${menu.node.title}`
+                        )
                       );
                     }}
                   >

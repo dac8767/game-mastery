@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
+import { useUndoableMutation } from "@/components/useUndoable";
 import { Id } from "@/convex/_generated/dataModel";
 import { COLUMNS, COLUMN_BY_KEY, ColumnDef, portraitSrc } from "@/components/npcColumns";
 import {
@@ -139,8 +140,8 @@ export function NpcDetail({
   onOpenNamed?: (name: string) => boolean;
 }) {
   const ui = useUi();
-  const updateNpc = useMutation(api.npcs.updateNpc);
-  const setPlayerNotes = useMutation(api.npcs.setPlayerNotes);
+  const updateNpc = useUndoableMutation(api.npcs.updateNpc);
+  const setPlayerNotes = useUndoableMutation(api.npcs.setPlayerNotes);
   const stored = useQuery(api.npcs.getTemplate, { campaignId });
   const noteData = useQuery(api.npcs.listNotes, { npcId: npc._id });
   const [error, setError] = useState<string | null>(null);
@@ -186,18 +187,27 @@ export function NpcDetail({
 
   async function commit(col: ColumnDef, text: string) {
     const value = fromInput(col, text);
+    // The way back is the same field with what it showed before, read
+    // through the same conversion, so a cleared field clears on undo
+    // the way it cleared on commit.
+    const before = fromInput(col, toInput(npc, col));
+    const label = `${col.label} of ${npc.name || "this NPC"}`;
     try {
       setError(null);
       if (col.key === "playerNotes" && !isDm) {
-        await setPlayerNotes({
-          npcId: npc._id,
-          playerNotes: value as string | null,
-        });
+        await setPlayerNotes(
+          { npcId: npc._id, playerNotes: value as string | null },
+          { npcId: npc._id, playerNotes: before as string | null },
+          label
+        );
         return;
       }
-      await updateNpc({ npcId: npc._id, [col.key]: value } as unknown as {
-        npcId: typeof npc._id;
-      });
+      type Args = { npcId: typeof npc._id };
+      await updateNpc(
+        { npcId: npc._id, [col.key]: value } as unknown as Args,
+        { npcId: npc._id, [col.key]: before } as unknown as Args,
+        label
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save that change.");
     }

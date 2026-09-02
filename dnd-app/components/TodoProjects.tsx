@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import { useUndoableMutation } from "@/components/useUndoable";
 import {
   QuickAddField,
   TodoList,
@@ -39,7 +40,7 @@ import {
 export function TodoProjects({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const board = useTodoBoard(campaignId);
   const addProject = useMutation(api.todo.addProject);
-  const updateProject = useMutation(api.todo.updateProject);
+  const updateProject = useUndoableMutation(api.todo.updateProject);
   const deleteProject = useMutation(api.todo.deleteProject);
   const reorderProjects = useMutation(api.todo.reorderProjects);
   const { error, run } = useRunner();
@@ -149,19 +150,37 @@ export function TodoProjects({ campaignId }: { campaignId: Id<"campaigns"> }) {
           >
             <ColorPicker
               value={p.color}
-              onPick={(color) =>
-                run(() => updateProject({ projectId: p._id, color }))
-              }
+              onPick={(color) => {
+                // A palette id both ways, never a colour string.
+                const was = p.color;
+                run(() =>
+                  updateProject(
+                    { projectId: p._id, color },
+                    { projectId: p._id, color: was },
+                    `Colour of ${p.title}`
+                  )
+                );
+              }}
             />
             <input
               className="proj-name-edit"
+              /* Keyed on the title so a name put back by Cmd+Z redraws
+                 an uncontrolled input that would otherwise keep showing
+                 what was typed. */
+              key={p.title}
               defaultValue={p.title}
               maxLength={MAX_TITLE}
               aria-label="Project name"
               onBlur={(e) => {
                 const title = e.target.value.trim();
                 if (title && title !== p.title) {
-                  run(() => updateProject({ projectId: p._id, title }));
+                  run(() =>
+                    updateProject(
+                      { projectId: p._id, title },
+                      { projectId: p._id, title: p.title },
+                      "Project name"
+                    )
+                  );
                 } else {
                   e.target.value = p.title;
                 }
@@ -179,7 +198,13 @@ export function TodoProjects({ campaignId }: { campaignId: Id<"campaigns"> }) {
               className="text-button"
               title="Keep it, out of the way"
               onClick={() =>
-                run(() => updateProject({ projectId: p._id, archived: true }))
+                run(() =>
+                  updateProject(
+                    { projectId: p._id, archived: true },
+                    { projectId: p._id, archived: false },
+                    `Archive ${p.title}`
+                  )
+                )
               }
             >
               Archive
@@ -226,7 +251,11 @@ export function TodoProjects({ campaignId }: { campaignId: Id<"campaigns"> }) {
                     className="text-button"
                     onClick={() =>
                       run(() =>
-                        updateProject({ projectId: p._id, archived: false })
+                        updateProject(
+                          { projectId: p._id, archived: false },
+                          { projectId: p._id, archived: true },
+                          `Bring back ${p.title}`
+                        )
                       )
                     }
                   >

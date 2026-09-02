@@ -26,6 +26,7 @@ import {
 } from "@/components/ribbonTokens";
 import { RibbonCustomize } from "@/components/RibbonCustomize";
 import { FeedbackForm } from "@/components/FeedbackForm";
+import { clearHistory } from "@/components/undoHistory";
 
 /**
  * The ribbon: a Word-style toolbar organised into sections, where every
@@ -101,7 +102,10 @@ export function RibbonBar({
     (commandId: string) => {
       if (commandId === "feedback") setFeedbackOpen(true);
       if (commandId === "campaigns") router.push("/");
-      if (commandId === "signOut") void signOut();
+      if (commandId === "signOut") {
+        clearHistory();
+        void signOut();
+      }
     },
     [router, signOut]
   );

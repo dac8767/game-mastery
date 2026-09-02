@@ -3,9 +3,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
+import { FunctionArgs } from "convex/server";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
-import { BoxCanvas, BoxTools, NewBox } from "@/components/BoxCanvas";
+import {
+  BoxCanvas,
+  BoxTools,
+  NewBox,
+  boxPatchInverse,
+  boxPatchLabel,
+  releaseBox,
+} from "@/components/BoxCanvas";
+import { useUndoableMutation } from "@/components/useUndoable";
+import { record } from "@/components/undoHistory";
 import { NoteLinkPicker } from "@/components/NoteLinkPicker";
 import { NoteMentions } from "@/components/NoteMentions";
 import { linkTargets } from "@/components/noteLinks";
@@ -145,7 +155,7 @@ export function SessionDetail({
     [allSessions, session.number, session.milestone]
   );
 
-  const updateSession = useMutation(api.sessions.updateSession);
+  const updateSession = useUndoableMutation(api.sessions.updateSession);
   const deleteSession = useMutation(api.sessions.deleteSession);
   const addBox = useMutation(api.sessions.addBox);
   const updateBox = useMutation(api.sessions.updateBox);
@@ -153,7 +163,7 @@ export function SessionDetail({
   const setBody = useMutation(api.sessions.setBody);
   const generateUploadUrl = useMutation(api.sessions.generateUploadUrl);
   const createTab = useMutation(api.sessions.createTab);
-  const renameTab = useMutation(api.sessions.renameTab);
+  const renameTab = useUndoableMutation(api.sessions.renameTab);
   const deleteTab = useMutation(api.sessions.deleteTab);
 
   const [error, setError] = useState<string | null>(null);
@@ -190,6 +200,74 @@ export function SessionDetail({
     }
   }, []);
 
+  /**
+   * One door for every change to a box or a page body, so every one of
+   * them can be taken back. The way back is what the tab holds NOW,
+   * read at the moment of the change — through a ref, because the
+   * format toolbar's saver is registered once and would otherwise see
+   * the tabs as they were when it mounted.
+   */
+  const tabsRef = useRef<NonNullable<typeof notes>["tabs"]>([]);
+  tabsRef.current = notes?.tabs ?? [];
+  const sessionName = `Session ${session.number}`;
+
+  const patchBox = useCallback(
+    async (boxId: string, patch: Record<string, unknown>) => {
+      type Args = FunctionArgs<typeof api.sessions.updateBox>;
+      const id = boxId as Id<"sessionBoxes">;
+      const home = tabsRef.current.find((t) =>
+        t.boxes.some((b) => b._id === boxId)
+      );
+      const box = home?.boxes.find((b) => b._id === boxId);
+      const next = { boxId: id, ...patch } as Args;
+      const prev = {
+        boxId: id,
+        ...(box ? boxPatchInverse(box, patch) : {}),
+      } as Args;
+      await updateBox(next);
+      const label = `${boxPatchLabel(patch, box?.type ?? "text")} on ${
+        home?.title ?? "a tab"
+      } of ${sessionName}`;
+      // A box you are standing in refuses the server's text; step out
+      // of it first, so what comes back is seen.
+      record({
+        label,
+        undo: () => {
+          releaseBox(boxId);
+          return updateBox(prev);
+        },
+        redo: () => {
+          releaseBox(boxId);
+          return updateBox(next);
+        },
+      });
+    },
+    [updateBox, sessionName]
+  );
+
+  const saveBody = useCallback(
+    async (side: TabKey, html: string) => {
+      const tab = tabsRef.current.find((t) => t.key === side);
+      const next = { sessionId: session._id, side, html };
+      const prev = { sessionId: session._id, side, html: tab?.body ?? "" };
+      await setBody(next);
+      const label = `Notes on ${tab?.title ?? "a tab"} of ${sessionName}`;
+      const id = pageBoxId(side);
+      record({
+        label,
+        undo: () => {
+          releaseBox(id);
+          return setBody(prev);
+        },
+        redo: () => {
+          releaseBox(id);
+          return setBody(next);
+        },
+      });
+    },
+    [setBody, session._id, sessionName]
+  );
+
   // The format toolbar acts on whichever box the caret is in, and the
   // caret is gone by the time a button's click would fire — so the
   // selection is tracked continuously instead.
@@ -212,12 +290,10 @@ export function SessionDetail({
       registerScrapbookSaver((boxId, html) => {
         const side = pageTabKey(boxId);
         void run(() =>
-          side
-            ? setBody({ sessionId: session._id, side, html })
-            : updateBox({ boxId: boxId as Id<"sessionBoxes">, html })
+          side ? saveBody(side, html) : patchBox(boxId, { html })
         );
       }),
-    [run, updateBox, setBody, session._id]
+    [run, patchBox, saveBody]
   );
 
   const uploadImage = async (
@@ -252,9 +328,7 @@ export function SessionDetail({
         })
       ),
     onUpdate: (boxId: string, patch: Record<string, unknown>) =>
-      void run(() =>
-        updateBox({ boxId: boxId as Id<"sessionBoxes">, ...patch })
-      ),
+      void run(() => patchBox(boxId, patch)),
     onDelete: (boxId: string) =>
       void run(() => deleteBox({ boxId: boxId as Id<"sessionBoxes"> })),
     onUploadImage: (file: File) => uploadImage(side, file),
@@ -357,8 +431,15 @@ export function SessionDetail({
                 // Nothing to write is a normal outcome — a blank
                 // session number, or a word where a number goes.
                 if (Object.keys(patch).length === 0) return;
+                // The way back is the field's old text through the
+                // same conversion, so a blank clears in both directions.
+                const before = sessionPatch(col.key, toInput(session, col.key));
                 void run(() =>
-                  updateSession({ sessionId: session._id, ...patch })
+                  updateSession(
+                    { sessionId: session._id, ...patch },
+                    { sessionId: session._id, ...before },
+                    `${col.label} of ${sessionName}`
+                  )
                 );
               }}
             />
@@ -496,10 +577,14 @@ export function SessionDetail({
               onCancel={() => setRenaming(null)}
               onSubmit={() =>
                 void run(async () => {
-                  await renameTab({
-                    tabId: renaming as Id<"sessionTabs">,
-                    title: renameText,
-                  });
+                  const tabId = renaming as Id<"sessionTabs">;
+                  const was =
+                    tabs.find((t) => t.key === renaming)?.title ?? renameText;
+                  await renameTab(
+                    { tabId, title: renameText },
+                    { tabId, title: was },
+                    `Name of tab ${was}`
+                  );
                   setRenaming(null);
                 })
               }
@@ -591,10 +676,7 @@ export function SessionDetail({
               page={{
                 id: pageBoxId(side),
                 html: current?.body ?? "",
-                onChange: (html) =>
-                  void run(() =>
-                    setBody({ sessionId: session._id, side, html })
-                  ),
+                onChange: (html) => void run(() => saveBody(side, html)),
               }}
               {...canvasProps(side)}
             />

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useUndoableMutation } from "@/components/useUndoable";
 import { Id } from "@/convex/_generated/dataModel";
 import { useViewPrefs } from "@/components/useViewPrefs";
 import { Pager } from "@/components/Pager";
@@ -72,7 +73,7 @@ export function GroupTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const prefs = useViewPrefs(campaignId, "groups", isDm, GROUP_COLUMNS);
   const createGroup = useMutation(api.groups.createGroup);
   const describeGroup = useMutation(api.groups.describeGroup);
-  const updateGroup = useMutation(api.groups.updateGroup);
+  const updateGroup = useUndoableMutation(api.groups.updateGroup);
 
   const [search, setSearch] = useState("");
   const [panel, setPanel] = useState<
@@ -347,11 +348,21 @@ export function GroupTable({ campaignId }: { campaignId: Id<"campaigns"> }) {
       if (!row.groupId) {
         setSelected((cur) => (cur === row.rowId ? groupId : cur));
       }
-      await updateGroup(
-        def.key === "name"
-          ? { groupId, name: value }
-          : { groupId, description: value === "" ? null : value }
-      );
+      // The way back is the row as it stood; a freshly described group
+      // had no description, and null is how that reads on the way in.
+      if (def.key === "name") {
+        await updateGroup(
+          { groupId, name: value },
+          { groupId, name: row.name },
+          `Name of ${row.name}`
+        );
+      } else {
+        await updateGroup(
+          { groupId, description: value === "" ? null : value },
+          { groupId, description: row.description ?? null },
+          `${def.label} of ${row.name}`
+        );
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save that change.");
     }

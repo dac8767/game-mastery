@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import { record } from "@/components/undoHistory";
 
 /**
  * What the campaign's card shows: its picture and its two dates.
@@ -46,6 +47,37 @@ export function CampaignDetails({
   }, [card]);
 
   if (!card) return null;
+
+  /**
+   * Save a date, and register the way back.
+   *
+   * Not `useUndoableMutation`, because these two fields are local
+   * copies seeded once and never re-read from the server (see above),
+   * so a value the server puts back would not show. The undo and redo
+   * set the local copy themselves. "" is what the server takes as
+   * "clear", from either direction.
+   */
+  async function saveDate(
+    key: "startDate" | "nextSessionDate",
+    next: string,
+    prev: string,
+    setLocal: (v: string) => void,
+    label: string
+  ) {
+    if (next === prev) return;
+    await update({ campaignId, [key]: next });
+    record({
+      label,
+      undo: async () => {
+        await update({ campaignId, [key]: prev });
+        setLocal(prev);
+      },
+      redo: async () => {
+        await update({ campaignId, [key]: next });
+        setLocal(next);
+      },
+    });
+  }
 
   const mapServer = process.env.NEXT_PUBLIC_MAP_SERVER ?? "";
   const image =
@@ -126,7 +158,15 @@ export function CampaignDetails({
             type="date"
             value={start}
             onChange={(e) => setStart(e.target.value)}
-            onBlur={() => void update({ campaignId, startDate: start })}
+            onBlur={() =>
+              void saveDate(
+                "startDate",
+                start,
+                card.startDate ?? "",
+                setStart,
+                "Campaign start date"
+              )
+            }
           />
         </label>
 
@@ -136,7 +176,15 @@ export function CampaignDetails({
             type="date"
             value={next}
             onChange={(e) => setNext(e.target.value)}
-            onBlur={() => void update({ campaignId, nextSessionDate: next })}
+            onBlur={() =>
+              void saveDate(
+                "nextSessionDate",
+                next,
+                card.nextSessionDate ?? "",
+                setNext,
+                "Next session date"
+              )
+            }
           />
         </label>
       </div>
