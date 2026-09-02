@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { redo, undo, type UndoOutcome } from "@/components/undoHistory";
+import { useEffect } from "react";
+import { redo, undo } from "@/components/undoHistory";
 
 /**
  * Cmd+Z and Cmd+Shift+Z, everywhere.
  *
  * Mounted once, under the providers, so it is listening on every screen
- * including the campaign list. It owns nothing but the keystroke and a
- * line of feedback; the history itself is `undoHistory`.
+ * including the campaign list. It owns nothing but the keystroke; the
+ * history itself is `undoHistory`. Renders nothing: the field putting
+ * its old value back is the whole feedback, and a line on screen saying
+ * so was noise.
  *
  * The one real decision is who gets the key when a field has focus.
  * The browser's own undo comes first — typing in a box you have not
@@ -25,50 +27,11 @@ import { redo, undo, type UndoOutcome } from "@/components/undoHistory";
  * Outside a field there is nothing to wait for, and the default (which
  * in Chrome is nothing at all) is cancelled so the page does not also
  * try to be helpful.
- *
- * The toast is the part that makes it believable. The field that was
- * put back may be on another screen, or scrolled away, or a table cell
- * with no editor open — without a word saying "Undid · Middle name",
- * the keystroke looks as dead as it did before.
  */
 export function UndoKeys() {
-  const [toast, setToast] = useState<string | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   useEffect(() => {
-    const say = (text: string) => {
-      if (timer.current) clearTimeout(timer.current);
-      setToast(text);
-      timer.current = setTimeout(() => setToast(null), 2200);
-    };
-
-    const report = (outcome: UndoOutcome) => {
-      switch (outcome.kind) {
-        case "undid":
-          say(`Undid · ${outcome.label}`);
-          break;
-        case "redid":
-          say(`Redid · ${outcome.label}`);
-          break;
-        case "nothing":
-          say(outcome.direction === "undo" ? "Nothing to undo" : "Nothing to redo");
-          break;
-        case "failed":
-          say(
-            `Could not ${outcome.direction} ${outcome.label}: ${
-              outcome.error instanceof Error
-                ? outcome.error.message
-                : "the server refused it"
-            }`
-          );
-          break;
-        case "busy":
-          break;
-      }
-    };
-
     const run = (direction: "undo" | "redo") => {
-      void (direction === "undo" ? undo() : redo()).then(report);
+      void (direction === "undo" ? undo() : redo());
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -100,18 +63,10 @@ export function UndoKeys() {
     };
 
     document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      if (timer.current) clearTimeout(timer.current);
-    };
+    return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  if (!toast) return null;
-  return (
-    <div className="undo-toast" role="status" aria-live="polite">
-      {toast}
-    </div>
-  );
+  return null;
 }
 
 /** Where the browser has its own undo stack to try first. */
