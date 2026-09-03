@@ -30,9 +30,11 @@
 # Where it stops, and why:
 #   - the root checkout is not reachable: see above. Nothing has been
 #     touched; run the same line from a terminal.
-#   - the rebase hits a conflict: the worktree is put back as it was;
-#     resolve it by hand (cd there, git fetch origin, git rebase
-#     origin/main), then rerun.
+#   - the rebase hits a conflict the conf's autoresolve rules do not
+#     cover: the worktree is put back as it was; resolve it by hand (cd
+#     there, git fetch origin, git rebase origin/main), then rerun. A
+#     covered one (an append-only log, a literal every branch bumps) is
+#     settled on the spot.
 #   - the check fails: nothing is done until it passes.
 #   - the root has uncommitted edits to tracked files: merging
 #     underneath them is how work gets tangled. Commit or stash there.
@@ -43,8 +45,47 @@ set -u
 root=${0:A:h}
 trees="$root/.claude/worktrees"
 
-check=''; lockfile=''; install=''
+check=''; lockfile=''; install=''; autoresolve=()
 [ -f "$root/worktree-flow.conf" ] && source "$root/worktree-flow.conf"
+
+# Settle a rebase that has stopped on a conflict, using the autoresolve rules
+# from worktree-flow.conf, and carry it through to the end. Returns 0 when the
+# rebase finished; 1 when something the rules do not cover stopped it, in
+# which case the rebase is left stopped and the caller aborts it as before.
+settle_rebase() {
+  local wt=$1 label=$2 f r rule how pat
+  while [ -d "$(git -C "$wt" rev-parse --git-path rebase-merge)" ] \
+     || [ -d "$(git -C "$wt" rev-parse --git-path rebase-apply)" ]; do
+    local files=$(git -C "$wt" diff --name-only --diff-filter=U)
+    [ -z "$files" ] && return 1            # stopped, but nothing unmerged: not ours to guess at
+    for f in ${(f)files}; do
+      rule=''
+      for r in "${autoresolve[@]}"; do [ "${r%% *}" = "$f" ] && rule=$r; done
+      [ -z "$rule" ] && { echo "  $label  conflict in $f, and no rule covers it"; return 1; }
+      how=$(echo "$rule" | awk '{print $2}')
+      pat=$(echo "$rule" | cut -d' ' -f3-)
+      case "$how" in
+        union)
+          awk '/^<<<<<<< /{next} /^=======$/{next} /^>>>>>>> /{next} {print}' \
+            "$wt/$f" > "$wt/$f.settle" && mv "$wt/$f.settle" "$wt/$f" ;;
+        theirs)
+          if ! awk -v pat="$pat" \
+               '/^<<<<<<< /{inb=1;next} /^>>>>>>> /{inb=0;next} /^=======$/{next}
+                inb && $0 !~ pat {bad=1} END{exit bad}' "$wt/$f"; then
+            echo "  $label  conflict in $f goes beyond '$pat'"; return 1
+          fi
+          awk '/^<<<<<<< /{side="ours";next} /^=======$/{side="theirs";next}
+               /^>>>>>>> /{side="";next} side=="ours"{next} {print}' \
+            "$wt/$f" > "$wt/$f.settle" && mv "$wt/$f.settle" "$wt/$f" ;;
+        *) echo "  $label  rule for $f says '$how', which is not a thing"; return 1 ;;
+      esac
+      git -C "$wt" add "$f"
+      echo "  $label  settled $f ($how)"
+    done
+    GIT_EDITOR=true git -C "$wt" rebase --continue >/dev/null 2>&1 || true
+  done
+  return 0
+}
 
 # Which worktree? A name as the first argument wins. Otherwise the
 # folder this was run from, if that is inside a worktree. Otherwise —
@@ -112,7 +153,7 @@ git fetch origin --quiet || exit 1
 behind=$(git rev-list --count HEAD..origin/main)
 if [ "$behind" != "0" ]; then
   echo "rebasing onto origin/main ($behind commits)"
-  if ! git rebase --quiet origin/main; then
+  if ! git rebase --quiet origin/main && ! settle_rebase "$top" "$branch"; then
     git rebase --abort
     echo
     echo "CONFLICT rebasing onto main. The worktree is back as it was."

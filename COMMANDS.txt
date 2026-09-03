@@ -20,6 +20,13 @@ Catch up every worktree with main, without finishing anything.
 ~/Developer/game-mastery/catchup-worktrees.sh
 
 
+Take every worktree into main, one after another: commit what is there, rebase,
+fast-forward main, then the guards once, push, and catch every worktree up.
+Stops on a conflict the rules cannot settle and says what to run; rerun after.
+
+~/Developer/game-mastery/merge-worktrees.sh
+
+
 Launch the app.
 
 cd ~/Developer/game-mastery/dnd-app && pwd
