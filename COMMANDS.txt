@@ -1,0 +1,65 @@
+Any block that starts with "cd ~/Developer/game-mastery" runs in your own
+terminal or in the Claude session opened at the repo root. Never paste it
+into a worktree's Claude session: that session is sandboxed to its own
+folder and cannot reach the root checkout, so it will refuse and hand it
+back. In Claude Code, a ! in front of a line runs it in your shell instead.
+
+
+Finish the worktree you are in (commit, rebase, guards, merge, push, catch up the rest).
+Run from your own terminal, or with a ! in front in Claude Code. Change the message.
+
+~/Developer/game-mastery/finish-worktree.sh "Sessions: what changed"
+
+
+Catch up every worktree with main, without finishing anything.
+
+~/Developer/game-mastery/catchup-worktrees.sh
+
+
+Launch the app.
+
+cd ~/Developer/game-mastery/dnd-app && pwd
+pkill -f "convex dev"
+pkill -f "next dev"
+lsof -ti tcp:3000 | xargs -I{} kill -9 {}
+npm run dev
+
+
+Create a worktree. Pull main first. Change the name.
+
+cd ~/Developer/game-mastery && pwd
+git pull origin main
+claude --worktree sessions
+
+Then in the chat that opens:
+
+cd dnd-app && npm install
+
+
+The block from the chat on 2 September that committed the worktree scripts.
+Already run that day (commit 135448d); rerunning it changes nothing.
+
+cd ~/Developer/game-mastery && pwd
+git add WORKTREES.md catchup-worktrees.sh finish-worktree.sh
+git commit -m "Worktree scripts: finish one, catch up the rest"
+git push origin main
+./catchup-worktrees.sh
+
+
+Commit and push work done in the root checkout itself, then catch the worktrees up.
+
+cd ~/Developer/game-mastery && pwd
+git add -A
+git commit -m "What changed"
+git push origin main
+./catchup-worktrees.sh
+
+
+Where everything stands.
+
+cd ~/Developer/game-mastery && pwd
+git fetch origin
+git worktree list
+git branch --no-merged main
+git log --oneline -1 main
+git log --oneline -1 origin/main
