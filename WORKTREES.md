@@ -200,6 +200,19 @@ pull.
    have taken in its work.
 3. Carry on in whichever worktree is next.
 
+## Using the same scripts in another repo
+
+The two scripts find their repo from where they live, so copying them
+to another repo's root is the whole install. The one file that
+differs per repo is `worktree-flow.conf` beside them: the command that
+must pass before a merge, and (for a Node app) the lockfile and
+install command. Soul Harvest's says `check='python3 tests/run_all.py'`
+and leaves the other two empty.
+
+```bash
+cp ~/Developer/game-mastery/finish-worktree.sh ~/Developer/game-mastery/catchup-worktrees.sh ~/Developer/soul-harvest/
+```
+
 ## Keeping conflicts rare
 
 Conflicts are not caused by main moving. They are caused by two

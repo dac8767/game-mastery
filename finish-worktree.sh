@@ -1,15 +1,20 @@
 #!/bin/zsh
-# Finish the worktree you are standing in: commit, rebase onto main,
-# run the guards, merge into main, push, then rebase every other
-# worktree so they all take in the work.
+# Finish a worktree: commit, rebase onto main, run the check, merge
+# into main, push, then rebase every other worktree so they all take
+# in the work.
 #
-# From anywhere, naming the worktree:
+# The repo is the folder this script lives in, so the same file works
+# in any repo it is copied to. Per-repo settings come from
+# worktree-flow.conf beside it: `check` is the command that must pass
+# before anything is merged.
 #
-#   ~/Developer/game-mastery/finish-worktree.sh sessions "Sessions: what changed"
+# From anywhere, naming the worktree (the folder under .claude/worktrees):
+#
+#   <repo>/finish-worktree.sh sessions "Sessions: what changed"
 #
 # From inside a worktree, the name can be left off:
 #
-#   ~/Developer/game-mastery/finish-worktree.sh "Sessions: what changed"
+#   <repo>/finish-worktree.sh "Sessions: what changed"
 #
 # With no name and not inside a worktree, it lists them and asks. The
 # message is the commit message; without one the script asks for that
@@ -25,18 +30,21 @@
 # Where it stops, and why:
 #   - the root checkout is not reachable: see above. Nothing has been
 #     touched; run the same line from a terminal.
-#   - run from the root checkout: there is nothing to merge main into.
 #   - the rebase hits a conflict: the worktree is put back as it was;
-#     resolve it by hand (WORKTREES.md, "Keep one worktree current").
-#   - a guard is red: nothing is done until they are green.
+#     resolve it by hand (cd there, git fetch origin, git rebase
+#     origin/main), then rerun.
+#   - the check fails: nothing is done until it passes.
 #   - the root has uncommitted edits to tracked files: merging
 #     underneath them is how work gets tangled. Commit or stash there.
 # Nothing after a stop has happened; the script is safe to rerun.
 
 set -u
 
-root=~/Developer/game-mastery
+root=${0:A:h}
 trees="$root/.claude/worktrees"
+
+check=''; lockfile=''; install=''
+[ -f "$root/worktree-flow.conf" ] && source "$root/worktree-flow.conf"
 
 # Which worktree? A name as the first argument wins. Otherwise the
 # folder this was run from, if that is inside a worktree. Otherwise —
@@ -62,12 +70,7 @@ else
   esac
 fi
 top=$(git rev-parse --show-toplevel)
-
 branch=$(git rev-parse --abbrev-ref HEAD)
-case "$branch" in
-  worktree-*) ;;
-  *) echo "On '$branch', not a worktree-* branch. Stopping."; exit 1 ;;
-esac
 
 # Before anything else: can this shell reach the root checkout? A
 # Claude session inside a worktree cannot — its sandbox stops at the
@@ -81,7 +84,7 @@ if ! ( git -C "$root" rev-parse --show-toplevel >/dev/null 2>&1 \
   echo "sandboxed to its own folder. Nothing has been changed."
   echo
   echo "Run the same line from your own terminal:"
-  echo "  ~/Developer/game-mastery/finish-worktree.sh ${top:t} \"${1:-Tool: what changed}\""
+  echo "  $root/finish-worktree.sh ${top:t} \"${1:-Tool: what changed}\""
   echo "In Claude Code, put a ! in front and it runs in your shell."
   exit 1
 fi
@@ -93,7 +96,7 @@ if [ -z "$message" ] && [ -n "$(git status --porcelain)" ]; then
   [ -z "$message" ] && { echo "No message. Stopping."; exit 1; }
 fi
 
-echo "== $branch"
+echo "== ${top:t} ($branch)"
 
 # 1. Commit whatever is here.
 if [ -n "$(git status --porcelain)" ]; then
@@ -114,6 +117,7 @@ if [ "$behind" != "0" ]; then
     echo
     echo "CONFLICT rebasing onto main. The worktree is back as it was."
     echo "Resolve it by hand, then rerun this script:"
+    echo "  cd $top"
     echo "  git fetch origin"
     echo "  git rebase origin/main"
     exit 1
@@ -128,13 +132,15 @@ if [ "$ahead" = "0" ]; then
   exit 0
 fi
 
-# 3. Guards, on exactly what main is about to become.
-echo "guards"
-(cd "$top/dnd-app" && npm run guards) || {
-  echo
-  echo "A guard is red. Nothing merged. Fix it, then rerun."
-  exit 1
-}
+# 3. The check, on exactly what main is about to become.
+if [ -n "$check" ]; then
+  echo "check: $check"
+  (cd "$top" && eval "$check") || {
+    echo
+    echo "The check failed. Nothing merged. Fix it, then rerun."
+    exit 1
+  }
+fi
 
 # 4. Merge into main at the root, and push.
 if [ -n "$(git -C "$root" status --porcelain --untracked-files=no)" ]; then
