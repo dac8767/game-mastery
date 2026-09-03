@@ -5,10 +5,14 @@ folder and cannot reach the root checkout, so it will refuse and hand it
 back. In Claude Code, a ! in front of a line runs it in your shell instead.
 
 
-Finish the worktree you are in (commit, rebase, guards, merge, push, catch up the rest).
-Run from your own terminal, or with a ! in front in Claude Code. Change the message.
+Finish a worktree (commit, rebase, guards, merge, push, catch up the rest).
+Run from any terminal. Change the worktree name and the message.
 
-~/Developer/game-mastery/finish-worktree.sh "Sessions: what changed"
+~/Developer/game-mastery/finish-worktree.sh sessions "Sessions: what changed"
+
+Inside the worktree's own Claude session, with a ! in front, the name can be left off:
+
+! ~/Developer/game-mastery/finish-worktree.sh "Sessions: what changed"
 
 
 Catch up every worktree with main, without finishing anything.

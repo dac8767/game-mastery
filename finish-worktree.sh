@@ -3,11 +3,17 @@
 # run the guards, merge into main, push, then rebase every other
 # worktree so they all take in the work.
 #
-# Run from inside any worktree (anywhere under it):
+# From anywhere, naming the worktree:
+#
+#   ~/Developer/game-mastery/finish-worktree.sh sessions "Sessions: what changed"
+#
+# From inside a worktree, the name can be left off:
 #
 #   ~/Developer/game-mastery/finish-worktree.sh "Sessions: what changed"
 #
-# The message is the commit message. Without one the script asks.
+# With no name and not inside a worktree, it lists them and asks. The
+# message is the commit message; without one the script asks for that
+# too.
 #
 # Run it from YOUR terminal, not from the Claude session inside the
 # worktree. That session is sandboxed to its own checkout and cannot
@@ -30,15 +36,32 @@
 set -u
 
 root=~/Developer/game-mastery
-top=$(git rev-parse --show-toplevel 2>/dev/null) || {
-  echo "not inside a git checkout"; exit 1
-}
+trees="$root/.claude/worktrees"
 
-if [ "$top" = "$root" ]; then
-  echo "This is the root checkout (main). Run it from inside a worktree:"
-  git worktree list | awk 'NR>1{print "  " $1}'
-  exit 1
+# Which worktree? A name as the first argument wins. Otherwise the
+# folder this was run from, if that is inside a worktree. Otherwise —
+# a fresh terminal opens in ~ and knows nothing — list them and ask.
+if [ -n "${1:-}" ] && [ -d "$trees/$1" ]; then
+  cd "$trees/$1" || exit 1
+  shift
+else
+  top=$(git rev-parse --show-toplevel 2>/dev/null || true)
+  case "$top" in
+    "$trees"/*) ;;
+    *)
+      if [ "$top" = "$root" ]; then
+        echo "This is the root checkout (main); it has nothing to merge into itself."
+      fi
+      echo "Which worktree?"
+      ls -1 "$trees" | sed 's/^/  /'
+      printf "Name: "
+      read -r name
+      [ -d "$trees/$name" ] || { echo "No worktree called '$name'. Stopping."; exit 1; }
+      cd "$trees/$name" || exit 1
+      ;;
+  esac
 fi
+top=$(git rev-parse --show-toplevel)
 
 branch=$(git rev-parse --abbrev-ref HEAD)
 case "$branch" in
@@ -58,7 +81,7 @@ if ! ( git -C "$root" rev-parse --show-toplevel >/dev/null 2>&1 \
   echo "sandboxed to its own folder. Nothing has been changed."
   echo
   echo "Run the same line from your own terminal:"
-  echo "  ~/Developer/game-mastery/finish-worktree.sh \"${1:-Tool: what changed}\""
+  echo "  ~/Developer/game-mastery/finish-worktree.sh ${top:t} \"${1:-Tool: what changed}\""
   echo "In Claude Code, put a ! in front and it runs in your shell."
   exit 1
 fi

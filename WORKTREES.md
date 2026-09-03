@@ -46,11 +46,16 @@ cd dnd-app && npm install
 
 ## Finish a worktree, in one command
 
-From anywhere inside the worktree:
+From any terminal, naming the worktree:
 
 ```bash
-~/Developer/game-mastery/finish-worktree.sh "Sessions: what changed"
+~/Developer/game-mastery/finish-worktree.sh sessions "Sessions: what changed"
 ```
+
+From inside the worktree the name can be left off, and with no name
+from anywhere else it lists the worktrees and asks. A new terminal
+opens in `~` and knows nothing about where you were working, which is
+why the name is there.
 
 It commits everything in the worktree with that message, rebases onto
 origin/main, runs the guards, fast-forwards main to it at the root,
