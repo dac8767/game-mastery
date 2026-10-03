@@ -50,14 +50,45 @@ import {
   setActiveTab,
   toggleMaximized,
 } from "@/components/dmScreenModel";
-import { LookupTool } from "@/components/LookupTool";
-import { ChatTool } from "@/components/ChatTool";
-import { RulesLawyerTool } from "@/components/RulesLawyerTool";
-import { CalendarTool } from "@/components/CalendarTool";
-import { LocationsTool } from "@/components/LocationsTool";
-import { GroupTable } from "@/components/GroupTable";
-import { NpcTable } from "@/components/NpcTable";
-import { SessionTable } from "@/components/SessionTable";
+import dynamic from "next/dynamic";
+
+/* The panel tools, each loaded the first time a panel shows it rather
+   than with the screen. A saved layout opens a handful of the eight;
+   importing them all up front made this the heaviest route in the app,
+   paying for tools that may not be on screen at all. */
+const panelLoading = () => <p className="centered-note">Loading…</p>;
+const LookupTool = dynamic(
+  () => import("@/components/LookupTool").then((m) => m.LookupTool),
+  { loading: panelLoading }
+);
+const ChatTool = dynamic(
+  () => import("@/components/ChatTool").then((m) => m.ChatTool),
+  { loading: panelLoading }
+);
+const RulesLawyerTool = dynamic(
+  () => import("@/components/RulesLawyerTool").then((m) => m.RulesLawyerTool),
+  { loading: panelLoading }
+);
+const CalendarTool = dynamic(
+  () => import("@/components/CalendarTool").then((m) => m.CalendarTool),
+  { loading: panelLoading }
+);
+const LocationsTool = dynamic(
+  () => import("@/components/LocationsTool").then((m) => m.LocationsTool),
+  { loading: panelLoading }
+);
+const GroupTable = dynamic(
+  () => import("@/components/GroupTable").then((m) => m.GroupTable),
+  { loading: panelLoading }
+);
+const NpcTable = dynamic(
+  () => import("@/components/NpcTable").then((m) => m.NpcTable),
+  { loading: panelLoading }
+);
+const SessionTable = dynamic(
+  () => import("@/components/SessionTable").then((m) => m.SessionTable),
+  { loading: panelLoading }
+);
 
 /**
  * The GM Screen — the physical screen you sit behind, made of windows.

@@ -9,7 +9,9 @@
 # The image is large — WhisperX pulls PyTorch — so expect five or six
 # gigabytes and a long first build. It is built once.
 
-FROM python:3.11-slim
+# Pinned to the Debian release as well as the Python one: `3.11-slim`
+# alone moves to a new Debian (and a new ffmpeg) whenever upstream does.
+FROM python:3.11-slim-trixie
 
 # ffmpeg decodes the browser's WebM and resamples to what the models
 # want. git is here because some pinned model helpers install from a
@@ -26,10 +28,18 @@ WORKDIR /app
 # load. For a GPU box, build with:
 #   docker compose build --build-arg TORCH_INDEX=https://download.pytorch.org/whl/cu124
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
-RUN pip install --no-cache-dir torch torchaudio --index-url ${TORCH_INDEX}
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# requirements.lock, when it exists, is the exact working set frozen
+# from a build that worked (see requirements.txt), and it wins: the
+# loose ranges are only for the first build. The bracket makes the lock
+# optional — COPY copies it if it is there and does not fail if not.
+COPY requirements.txt requirements.loc[k] ./
+RUN if [ -f requirements.lock ]; then \
+      pip install --no-cache-dir -r requirements.lock --extra-index-url ${TORCH_INDEX}; \
+    else \
+      pip install --no-cache-dir torch torchaudio --index-url ${TORCH_INDEX} \
+      && pip install --no-cache-dir -r requirements.txt; \
+    fi
 
 COPY server.py worker.py ./
 

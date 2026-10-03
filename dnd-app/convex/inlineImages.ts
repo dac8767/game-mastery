@@ -113,11 +113,14 @@ export async function withImages(
 ): Promise<string> {
   const ids = imageStorageIds(html);
   if (ids.length === 0) return html;
-  const urls = new Map<string, string | null>();
-  for (const id of ids) {
-    const sid = ctx.db.system.normalizeId("_storage", id);
-    urls.set(id, sid ? await ctx.storage.getUrl(sid) : null);
-  }
+  const urls = new Map<string, string | null>(
+    await Promise.all(
+      ids.map(async (id): Promise<[string, string | null]> => {
+        const sid = ctx.db.system.normalizeId("_storage", id);
+        return [id, sid ? await ctx.storage.getUrl(sid) : null];
+      })
+    )
+  );
   return withImageSrcs(html, urls);
 }
 

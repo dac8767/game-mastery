@@ -15,10 +15,15 @@
 # (/srv/originals, /srv/web) are fixed — the Caddyfile refers to those,
 # so moving to another disk later is a change to these two lines and a
 # `docker compose up -d`, and nothing else.
+#
+# Images are pinned to exact releases, never `latest`: a rebuild or a
+# `docker compose pull` should change nothing unless this file did, or
+# the stack can break on game night from an upstream change nobody
+# chose. To update, change the tag here on purpose and test it.
 
 services:
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    image: cloudflare/cloudflared:2026.9.3
     container_name: maps-cloudflared
     restart: unless-stopped
     command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
@@ -28,7 +33,7 @@ services:
       - caddy
 
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2.11.6-alpine
     container_name: maps-caddy
     restart: unless-stopped
     networks:

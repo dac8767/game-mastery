@@ -7,6 +7,16 @@ import {
 } from "./_generated/server";
 import { requireDm, requireMember } from "./auth";
 import { Doc, Id } from "./_generated/dataModel";
+// Relative, not "@/": the Convex tsconfig does not carry the app's alias.
+import {
+  applyHpChange as hpAfter,
+  checkAc,
+  checkHpChange,
+  checkInitiative,
+  checkMaxHp,
+  checkTempHp,
+  nextTurn as turnAfter,
+} from "../components/combatRules";
 
 /**
  * Combat tracker — the reactive core of the app.
@@ -21,6 +31,8 @@ import { Doc, Id } from "./_generated/dataModel";
  * - hidden combatants are omitted entirely
  * - HP is masked into status buckets unless showHpToPlayers
  * - dmNotes never leave the server for non-GM callers
+ * - the active combatant is not named while they are hidden, or the
+ *   turn marker would give away that something unseen is acting
  */
 
 // ---------- Encounter lifecycle (GM only) ----------
@@ -119,18 +131,19 @@ export const addCombatant = mutation({
     const encounter = await ctx.db.get(args.encounterId);
     if (!encounter) throw new Error("Encounter not found");
     await requireDm(ctx, encounter.campaignId);
+    const maxHp = checkMaxHp(args.maxHp);
 
     return await ctx.db.insert("combatants", {
       encounterId: args.encounterId,
       name: args.name,
       kind: args.kind,
       characterId: args.characterId,
-      initiative: args.initiative,
+      initiative: checkInitiative(args.initiative),
       tiebreak: 0,
-      maxHp: args.maxHp,
-      currentHp: args.maxHp,
+      maxHp,
+      currentHp: maxHp,
       tempHp: 0,
-      ac: args.ac,
+      ac: args.ac === undefined ? undefined : checkAc(args.ac),
       conditions: [],
       hidden: args.hidden ?? args.kind === "monster",
       showHpToPlayers: args.showHpToPlayers ?? args.kind === "pc",
@@ -148,8 +161,10 @@ export const setInitiative = mutation({
   handler: async (ctx, args) => {
     await dmForCombatant(ctx, args.combatantId);
     await ctx.db.patch(args.combatantId, {
-      initiative: args.initiative,
-      ...(args.tiebreak !== undefined ? { tiebreak: args.tiebreak } : {}),
+      initiative: checkInitiative(args.initiative),
+      ...(args.tiebreak !== undefined
+        ? { tiebreak: checkInitiative(args.tiebreak, "Tiebreak") }
+        : {}),
     });
   },
 });
@@ -162,18 +177,10 @@ export const applyHpChange = mutation({
   args: { combatantId: v.id("combatants"), amount: v.number() },
   handler: async (ctx, args) => {
     const { combatant } = await dmForCombatant(ctx, args.combatantId);
-
-    let { currentHp, tempHp } = combatant;
-    if (args.amount > 0) {
-      // damage
-      const fromTemp = Math.min(tempHp, args.amount);
-      tempHp -= fromTemp;
-      currentHp = Math.max(0, currentHp - (args.amount - fromTemp));
-    } else {
-      // healing (cannot exceed max)
-      currentHp = Math.min(combatant.maxHp, currentHp - args.amount);
-    }
-    await ctx.db.patch(args.combatantId, { currentHp, tempHp });
+    await ctx.db.patch(
+      args.combatantId,
+      hpAfter(combatant, checkHpChange(args.amount))
+    );
   },
 });
 
@@ -182,7 +189,7 @@ export const setTempHp = mutation({
   handler: async (ctx, args) => {
     await dmForCombatant(ctx, args.combatantId);
     await ctx.db.patch(args.combatantId, {
-      tempHp: Math.max(0, args.tempHp),
+      tempHp: checkTempHp(args.tempHp),
     });
   },
 });
@@ -227,9 +234,10 @@ export const removeCombatant = mutation({
       ctx,
       args.combatantId
     );
-    // If it's their turn, advance first so activeCombatantId stays valid.
+    // If it's their turn, hand it on — skipping them, so the last one
+    // standing leaves no active combatant rather than one that is gone.
     if (encounter.activeCombatantId === combatant._id) {
-      await advanceTurn(ctx, encounter);
+      await advanceTurn(ctx, encounter, combatant._id);
     }
     await ctx.db.delete(args.combatantId);
   },
@@ -267,6 +275,8 @@ export const getEncounterView = query({
     if (!isDm && encounter.status === "prep") return null;
 
     const combatants = await sortedCombatants(ctx, args.encounterId);
+    const active = combatants.find((c) => c._id === encounter.activeCombatantId);
+    const activeShown = isDm || (active !== undefined && !active.hidden);
 
     const shaped = combatants
       .filter((c) => isDm || !c.hidden)
@@ -305,7 +315,9 @@ export const getEncounterView = query({
       name: encounter.name,
       status: encounter.status,
       round: encounter.round,
-      activeCombatantId: encounter.activeCombatantId ?? null,
+      activeCombatantId: activeShown
+        ? (encounter.activeCombatantId ?? null)
+        : null,
       combatants: shaped,
     };
   },
@@ -356,19 +368,19 @@ async function dmForCombatant(
   return { combatant, encounter };
 }
 
-async function advanceTurn(ctx: MutationCtx, encounter: Doc<"encounters">) {
+async function advanceTurn(
+  ctx: MutationCtx,
+  encounter: Doc<"encounters">,
+  excluding?: Id<"combatants">
+) {
   const order = await sortedCombatants(ctx, encounter._id);
-  if (order.length === 0) return;
-
-  const idx = order.findIndex(
-    (c) => c._id === encounter.activeCombatantId
+  const { active, wrapped } = turnAfter(
+    order.map((c) => c._id),
+    encounter.activeCombatantId,
+    excluding
   );
-  const nextIdx = idx === -1 ? 0 : (idx + 1) % order.length;
-  // Round advances when the turn order wraps back to the top.
-  const wrapped = idx !== -1 && nextIdx === 0;
-
   await ctx.db.patch(encounter._id, {
-    activeCombatantId: order[nextIdx]._id,
+    activeCombatantId: active,
     round: wrapped ? encounter.round + 1 : encounter.round,
   });
 }

@@ -326,18 +326,21 @@ export const getSchedule = query({
       for (const minute of slotsOf(window)) live.add(slotKey(day, minute));
     }
 
-    const respondents = [];
-    for (const m of members) {
-      const person = await ctx.db.get(m.userId);
-      const answer = byUser.get(m.userId);
-      respondents.push({
-        userId: m.userId,
-        name: person?.name ?? person?.email ?? "Someone",
-        isDm: campaign.dmId === m.userId,
-        answered: Boolean(answer),
-        slots: (answer?.slots ?? []).filter((s) => live.has(s)),
-      });
-    }
+    // Fetched together rather than one after another: each lookup is
+    // independent, and a full table is sixty of them.
+    const respondents = await Promise.all(
+      members.map(async (m) => {
+        const person = await ctx.db.get(m.userId);
+        const answer = byUser.get(m.userId);
+        return {
+          userId: m.userId,
+          name: person?.name ?? person?.email ?? "Someone",
+          isDm: campaign.dmId === m.userId,
+          answered: Boolean(answer),
+          slots: (answer?.slots ?? []).filter((s) => live.has(s)),
+        };
+      })
+    );
 
     return {
       ...window,

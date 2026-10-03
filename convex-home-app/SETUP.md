@@ -16,7 +16,16 @@ npx convex dev   # creates the Convex project, keeps schema synced
 ```
 
 Copy the files from this scaffold's `convex/` directory into your project's
-`convex/` directory. `npx convex dev` will push the schema and generate types.
+`convex/` directory — `tsconfig.json` included, since `auth.ts` reads an
+environment variable and Convex's default config has no Node types.
+`npx convex dev` will push the schema and generate types.
+
+This directory is a scaffold, not a runnable project: it has no
+`package.json` of its own, so it is not installed or checked in place. It
+was last verified by copying `convex/` into a scratch project with the
+packages above plus `@types/node` and running
+`CONVEX_AGENT_MODE=anonymous npx convex dev --once`, which typechecks the
+functions and pushes them to a throwaway local backend without an account.
 
 ## 2. Convex Auth
 

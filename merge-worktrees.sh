@@ -88,6 +88,43 @@ settle_rebase() {
 # where it came from; the date says when it was swept up.
 sweep_message() { echo "$1: uncommitted work taken in on $(date +%Y-%m-%d)"; }
 
+# Refuse to sweep in a new file that looks like a credential, a database
+# or a build artefact. `git add -A` takes everything a worktree was left
+# with, which is the point; this is the one thing it must not take.
+# Called after the add, before the commit. On a hit everything is
+# unstaged again (the files themselves are untouched) and it returns 1
+# with the paths listed.
+sweep_guard() {
+  local dir=$1 f size
+  local -a bad
+  # NUL-separated: the plain listing C-quotes any path with a non-ASCII
+  # byte ("Kart\303\253.png"), and a quoted name matches none of the
+  # patterns below and has no size to look up.
+  for f in ${(0)"$(git -C "$dir" diff --cached --name-only -z --diff-filter=A)"}; do
+    [ -z "$f" ] && continue
+    case ${f:t} in
+      *.example|*.sample|*.template) continue ;;
+      .env|.env.*|*.pem|*.key|*.p12|*.pfx|id_rsa*|id_ed25519*|*.keystore|*.sqlite|*.sqlite3|*.db)
+        bad+=("$f"); continue ;;
+    esac
+    # A size that cannot be read is a hit, not a zero: failing open here
+    # is how a large file got past this check.
+    if ! size=$(git -C "$dir" cat-file -s ":$f" 2>/dev/null); then
+      bad+=("$f (could not read its size)")
+    elif (( size > 5242880 )); then
+      bad+=("$f ($(( size / 1048576 )) MB)")
+    fi
+  done
+  (( ${#bad} == 0 )) && return 0
+  git -C "$dir" reset --quiet
+  echo "  refusing to commit new files that look like credentials, a"
+  echo "  database or build output:"
+  printf '    %s\n' "${bad[@]}"
+  echo "  Add them to .gitignore, or commit them by hand if they belong."
+  echo "  Nothing was committed."
+  return 1
+}
+
 if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   echo "The root checkout has uncommitted edits to tracked files:"
   git status --short --untracked-files=no | sed 's/^/  /'
@@ -123,6 +160,7 @@ for wt in "$trees"/*(/N); do
   # 1. Commit whatever was left there.
   if [ -n "$(git -C "$wt" status --porcelain)" ]; then
     git -C "$wt" add -A
+    sweep_guard "$wt" || exit 1
     git -C "$wt" commit --quiet -m "$(sweep_message "$name")" || exit 1
     echo "  committed: $(sweep_message "$name")"
   fi

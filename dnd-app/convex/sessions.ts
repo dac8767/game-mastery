@@ -9,6 +9,7 @@ import {
 import { Doc, Id } from "./_generated/dataModel";
 import { requireDm, requireMember } from "./auth";
 import { getSettings } from "./settings";
+import { groupKey } from "./groups";
 import { sanitizeBoxHtml } from "../components/boxHtml";
 import {
   claimFile,
@@ -67,6 +68,12 @@ import {
  */
 
 /** Ceiling on one campaign's sessions in a single subscription. */
+/* The same ceilings the three list queries use, so linkNames can never
+   offer a name its destination screen would have cut off. */
+const LINK_MAX_NPCS = 1000;
+const LINK_MAX_LOCATIONS = 1000;
+const LINK_MAX_GROUPS = 500;
+
 const MAX_SESSIONS = 500;
 
 /** Same ceiling a notebook page uses. Per TAB, not per session. */
@@ -183,6 +190,70 @@ async function requireTabOwner(
   }
   return { tab, session };
 }
+
+/**
+ * The names session notes can link to — NPCs, locations, groups — and
+ * nothing else.
+ *
+ * The note editor only ever needs names. It used to subscribe to the
+ * three full list queries for them, which meant every rich NPC row, every
+ * location's description and picture URLs, and the NPC table read twice
+ * (once for the roster, once again to infer the groups), re-sent in full
+ * whenever any of them changed — for as long as a session was open.
+ *
+ * The visibility rules are those lists' own, line for line, so a name
+ * offered here is a name the destination screen will find:
+ *   - NPCs: hidden ones dropped unless GM, with view-as-player honoured
+ *   - locations: hidden ones dropped unless GM
+ *   - groups: every described group, plus every group a visible NPC is
+ *     tagged with
+ */
+export const linkNames = query({
+  args: { campaignId: v.id("campaigns") },
+  handler: async (ctx, args) => {
+    const { userId, isDm: isCampaignDm } = await requireMember(
+      ctx,
+      args.campaignId
+    );
+    const { viewAsPlayer } = await getSettings(ctx, userId);
+    const npcDm = isCampaignDm && !viewAsPlayer;
+
+    const npcRows = await ctx.db
+      .query("npcs")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
+      .take(LINK_MAX_NPCS);
+    const visibleNpcs = npcRows.filter((n) => npcDm || !n.hidden);
+
+    const locationRows = await ctx.db
+      .query("locations")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
+      .take(LINK_MAX_LOCATIONS);
+
+    const described = await ctx.db
+      .query("groups")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
+      .take(LINK_MAX_GROUPS);
+
+    const groups: { name: string }[] = described.map((g) => ({ name: g.name }));
+    const taken = new Set(described.map((g) => groupKey(g.name)));
+    for (const npc of visibleNpcs) {
+      for (const raw of npc.groups) {
+        const key = groupKey(raw);
+        if (!key || taken.has(key)) continue;
+        taken.add(key);
+        groups.push({ name: raw.replace(/\s+/g, " ").trim() });
+      }
+    }
+
+    return {
+      npcs: visibleNpcs.map((n) => ({ name: n.name })),
+      locations: locationRows
+        .filter((l) => isCampaignDm || !l.hidden)
+        .map((l) => ({ name: l.name })),
+      groups,
+    };
+  },
+});
 
 export const listForCampaign = query({
   args: { campaignId: v.id("campaigns") },

@@ -5,8 +5,9 @@
 # rebuilt often enough for a lockfile to be maintained honestly. What IS
 # worth doing, once a build works: run
 #   docker compose exec recorder-api pip freeze > requirements.lock
-# and keep that beside this file, so the working set can be restored
-# exactly even if the ranges below drift.
+# and commit that beside this file. The Dockerfile installs from the lock
+# whenever it exists, so every later rebuild gets exactly the working
+# set, even after the ranges below have drifted.
 
 fastapi>=0.110
 uvicorn[standard]>=0.27

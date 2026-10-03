@@ -9990,6 +9990,74 @@ export const unit = {
       uh.clearHistory();
     }
 
+    // ---- combat arithmetic ------------------------------------------
+    {
+      const cr = await import(
+        pathToFileURL(
+          join(compile("components/combatRules.ts"), "combatRules.js")
+        ).href
+      );
+      const throws = (fn) => {
+        try {
+          fn();
+          return false;
+        } catch {
+          return true;
+        }
+      };
+
+      check(
+        "max HP refuses zero, negative, fractional and non-finite values",
+        [0, -5, 2.5, NaN, Infinity].every((n) => throws(() => cr.checkMaxHp(n)))
+      );
+      check("max HP accepts a whole positive number", cr.checkMaxHp(27) === 27);
+      check(
+        "initiative may be negative but must sort",
+        cr.checkInitiative(-2) === -2 &&
+          throws(() => cr.checkInitiative(NaN)) &&
+          throws(() => cr.checkInitiative(-Infinity))
+      );
+      check(
+        "temp HP may be zero, never negative",
+        cr.checkTempHp(0) === 0 && throws(() => cr.checkTempHp(-1))
+      );
+
+      const hp = { currentHp: 10, tempHp: 5, maxHp: 20 };
+      let r = cr.applyHpChange(hp, 7);
+      check("damage takes temp HP first", r.tempHp === 0 && r.currentHp === 8);
+      r = cr.applyHpChange(hp, 100);
+      check("damage stops at 0", r.currentHp === 0);
+      r = cr.applyHpChange(hp, -50);
+      check(
+        "healing stops at max and leaves temp HP alone",
+        r.currentHp === 20 && r.tempHp === 5
+      );
+      check(
+        "a zero change changes nothing",
+        cr.applyHpChange(hp, 0).currentHp === 10
+      );
+
+      let t = cr.nextTurn(["a", "b", "c"], "b");
+      check("the turn passes down the order", t.active === "c" && !t.wrapped);
+      t = cr.nextTurn(["a", "b", "c"], "c");
+      check("and wraps to the top, turning the round", t.active === "a" && t.wrapped);
+      t = cr.nextTurn(["a", "b"], undefined);
+      check("with nobody active, the top goes first", t.active === "a" && !t.wrapped);
+      t = cr.nextTurn(["a", "b", "c"], "b", "b");
+      check("removing the active combatant hands the turn on", t.active === "c");
+      t = cr.nextTurn(["a", "b", "c"], "c", "a");
+      check(
+        "skipping the one being removed at the top still wraps",
+        t.active === "b" && t.wrapped
+      );
+      t = cr.nextTurn(["a"], "a", "a");
+      check(
+        "removing the last combatant leaves nobody active, not a deleted one",
+        t.active === undefined
+      );
+      check("an empty order has nobody active", cr.nextTurn([], undefined).active === undefined);
+    }
+
     return problems;
   },
 };

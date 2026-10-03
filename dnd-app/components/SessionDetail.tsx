@@ -121,20 +121,12 @@ export function SessionDetail({
   const members = useQuery(api.campaigns.listMembers, { campaignId });
   const characters = useQuery(api.campaigns.listCharacters, { campaignId });
 
-  /* What the notes can link to. The same three lists their own screens
-     subscribe to, so a name here is a name the destination will find. */
-  const npcs = useQuery(api.npcs.listForCampaign, { campaignId });
-  const locations = useQuery(api.locations.listForCampaign, { campaignId });
-  const groups = useQuery(api.groups.listForCampaign, { campaignId });
-  const targets = useMemo(
-    () =>
-      linkTargets({
-        npcs: npcs?.npcs,
-        locations: locations?.locations,
-        groups: groups?.groups,
-      }),
-    [npcs, locations, groups]
-  );
+  /* What the notes can link to: names only, from one query that applies
+     the NPC, location and group screens' own visibility rules — so a
+     name here is a name the destination will find, without holding the
+     three full lists open for as long as the session is. */
+  const linkNames = useQuery(api.sessions.linkNames, { campaignId });
+  const targets = useMemo(() => linkTargets(linkNames ?? {}), [linkNames]);
   const router = useRouter();
   const players = useMemo(
     () => campaignPlayers(members, characters),

@@ -476,6 +476,14 @@ export const purgeCampaign = internalMutation({
       ) {
         return await more();
       }
+
+      // And its custom tabs. They are keyed by session alone, so once the
+      // session row is gone nothing could ever find them again.
+      const tabs = await ctx.db
+        .query("sessionTabs")
+        .withIndex("by_session", (q) => q.eq("sessionId", session._id))
+        .take(left);
+      if (await sweep(tabs)) return await more();
     }
     if (await sweep(sessions)) return await more();
 

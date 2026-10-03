@@ -1,13 +1,19 @@
 name: guards
 
 # The guard suite is the audit trail a chat transcript could not be:
-# every push gets the same six checks, from a clean clone, and the
+# every push gets the same seven checks, from a clean clone, and the
 # result is recorded against the commit.
 
 on:
   push:
     branches: ["**"]
   pull_request:
+
+# Read-only. The guards check out code and run it; nothing here writes
+# to the repository, so the token should not be able to either —
+# whatever the repository's default token permissions happen to be.
+permissions:
+  contents: read
 
 jobs:
   guards:
@@ -16,17 +22,28 @@ jobs:
       run:
         working-directory: dnd-app
     steps:
-      - uses: actions/checkout@v4
+      # Pinned to a commit, not a tag: a tag can be moved to different
+      # code after the fact, a commit cannot. The comment says which
+      # release it is, for whoever updates it.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          # Next.js 16 requires >= 20.9.
-          node-version: "22"
+          # Next.js 16 requires >= 20.9; npm 12 requires >= 22.22.2.
+          node-version: "22.22"
           cache: npm
           cache-dependency-path: dnd-app/package-lock.json
 
+      # The npm the project declares (package.json `packageManager`),
+      # not the one Node 22 ships. npm 12 is what enforces the
+      # `allowScripts` list — dependency install scripts not on it are
+      # skipped. The npm bundled with Node 22 ignores that list and runs
+      # them all, so without this step CI is the one place the list does
+      # nothing.
+      - run: npm install -g npm@12.0.2
+
       - run: npm ci
 
-      # Runs all six, build included. The build guard supplies its own
+      # Runs all seven, build included. The build guard supplies its own
       # placeholder NEXT_PUBLIC_CONVEX_URL — no deployment is contacted.
       - run: npm run guards

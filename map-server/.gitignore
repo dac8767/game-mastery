@@ -1,3 +1,7 @@
 # The tunnel token IS the credential — anyone holding it can attach a
 # tunnel to the Cloudflare account. .env.example is the template.
 .env
+
+# Python bytecode — rebuilt per interpreter, never source.
+__pycache__/
+*.pyc
