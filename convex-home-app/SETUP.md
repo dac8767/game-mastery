@@ -24,9 +24,16 @@ Copy the files from this scaffold's `convex/` directory into your project's
 npx @convex-dev/auth   # one-time setup: generates keys, wires middleware
 ```
 
-Create two accounts (you and your wife) through your sign-in page, then don't
-expose a signup route in the UI. For belt-and-suspenders, add an email
-allowlist inside the Password provider config in `convex/auth.ts`.
+Sign-up is refused for any email not on the `HOUSEHOLD_EMAILS` deployment
+variable (see `convex/auth.ts`), so set it before creating the accounts:
+
+```bash
+npx convex env set HOUSEHOLD_EMAILS "you@example.com,wife@example.com"
+```
+
+Then create the two accounts through your sign-in page, and don't expose a
+signup route in the UI. Emails are not verified, so a listed address belongs
+to whoever registers it first — register both before anything relies on it.
 
 ## 3. Cloudflare R2
 

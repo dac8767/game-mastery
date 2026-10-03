@@ -106,18 +106,63 @@ const escapeText = (s: string) =>
     .replace(/>/g, "&gt;");
 
 /**
+ * An attribute value as the browser will read it.
+ *
+ * The browser decodes character references in an href before it looks
+ * at the scheme, so `javascript&colon;` and `javascript&#58` (numeric
+ * references need no semicolon) both arrive as `javascript:`. A check
+ * on the raw text sees no colon and lets them through. One pass, as
+ * the browser does it: `&amp;#58;` is the literal text `&#58;`, not a
+ * colon.
+ *
+ * Named references this does not know become `unknown` rather than
+ * being left in place, so the caller can make "something unknown was
+ * here" fail its own check instead of guessing what it decodes to.
+ */
+const NAMED_REFS: Record<string, string> = {
+  amp: "&",
+  colon: ":",
+  sol: "/",
+  bsol: "\\",
+  tab: "\t",
+  newline: "\n",
+  period: ".",
+  quot: '"',
+  apos: "'",
+  lt: "<",
+  gt: ">",
+};
+
+export function decodeCharRefs(s: string, unknown: string): string {
+  return s.replace(
+    /&#[xX]([0-9a-fA-F]+);?|&#(\d+);?|&([a-zA-Z][a-zA-Z0-9]*);/g,
+    (_m, hex?: string, dec?: string, name?: string) => {
+      if (name !== undefined) return NAMED_REFS[name.toLowerCase()] ?? unknown;
+      const code = parseInt(hex ?? dec ?? "", hex !== undefined ? 16 : 10);
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff
+        ? String.fromCodePoint(code)
+        : unknown;
+    }
+  );
+}
+
+/**
  * A link target that is safe to put in an href.
  *
  * `javascript:` is the obvious one. The subtle ones are the encodings
  * of it — a tab or a newline inside the scheme, which browsers strip
- * before resolving — so the scheme is read after removing every
- * character that cannot legally appear in one.
+ * before resolving, and character references like `&colon;`, which
+ * browsers decode first — so the scheme is read from the decoded value
+ * after removing every character that cannot legally appear in one.
  */
 function safeHref(raw: string): string | null {
-    // Escapes, not literals: every character below 0x21 is stripped
+  // An unknown named reference reads as a colon: it might decode to
+  // one, and an unknown scheme is refused anyway.
+  const decoded = decodeCharRefs(raw, ":");
+  // Escapes, not literals: every character below 0x21 is stripped
   // before the scheme is read, because a browser strips them too —
   // "java\\tscript:" resolves as javascript: and would otherwise pass.
-  const cleaned = raw.replace(/[\u0000-\u0020]/g, "").toLowerCase();
+  const cleaned = decoded.replace(/[\u0000-\u0020]/g, "").toLowerCase();
   if (/^(https?:|mailto:)/.test(cleaned)) return raw.trim();
   // A bare path or anchor is fine; anything else with a colon is a
   // scheme this does not know, and unknown schemes are not allowed.

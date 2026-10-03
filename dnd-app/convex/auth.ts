@@ -33,7 +33,7 @@ export async function requireUser(ctx: Ctx): Promise<Id<"users">> {
 }
 
 /**
- * Who may break glass, read from the ADMIN_EMAILS deployment variable.
+ * Who may break glass, read from the ADMIN_USER_IDS deployment variable.
  *
  * Deliberately NOT a table and NOT a mutation. Every other way of
  * granting this — a row, a flag, a settings field — is something a bug
@@ -42,28 +42,33 @@ export async function requireUser(ctx: Ctx): Promise<Id<"users">> {
  * means changing who is an admin requires deployment access, not app
  * access.
  *
- *   npx convex env set ADMIN_EMAILS "you@example.com"
+ *   npx convex env set ADMIN_USER_IDS "<your user id>"
+ *
+ * Settings shows each person their own id to copy.
+ *
+ * User ids, not emails. Sign-up is open and the Password provider
+ * neither verifies nor normalises the address, so an email list can be
+ * claimed by anyone who registers a listed address first, or a
+ * differently-capitalised copy of one — which is a separate account
+ * with the same lower-cased email. An id names exactly one account and
+ * cannot be chosen by whoever signs up.
  *
  * Unset (the default) means nobody is eligible, which is the right
  * failure direction.
  */
-function adminEmails(): string[] {
-  return (process.env.ADMIN_EMAILS ?? "")
+function adminUserIds(): string[] {
+  return (process.env.ADMIN_USER_IDS ?? "")
     .split(",")
-    .map((s) => s.trim().toLowerCase())
+    .map((s) => s.trim())
     .filter(Boolean);
 }
 
 /** Is this account allowed to turn admin access on at all? */
 export async function isAdminEligible(
-  ctx: Ctx,
+  _ctx: Ctx,
   userId: Id<"users">
 ): Promise<boolean> {
-  const allowed = adminEmails();
-  if (allowed.length === 0) return false;
-  const user = await ctx.db.get(userId);
-  const email = user?.email?.toLowerCase();
-  return Boolean(email && allowed.includes(email));
+  return adminUserIds().includes(userId);
 }
 
 /**

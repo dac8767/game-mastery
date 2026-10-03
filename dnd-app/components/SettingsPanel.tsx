@@ -185,13 +185,17 @@ export function SettingsPanel({
                 You are also a <strong>platform admin</strong>.
               </p>
             )}
+
+            <p className="settings-note">
+              Your account id: <code>{settings.userId}</code>
+            </p>
           </section>
 
           {settings.adminEligible && (
             <section className="settings-block admin-block">
               <h2>Platform admin</h2>
               <p className="settings-note">
-                You&apos;re on the <code>ADMIN_EMAILS</code> list for this
+                You&apos;re on the <code>ADMIN_USER_IDS</code> list for this
                 deployment, which is the only place this can be granted — no
                 mutation, table, or setting can hand it to anyone, so changing
                 who is an admin needs deployment access rather than app access.

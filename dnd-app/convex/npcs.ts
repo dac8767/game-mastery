@@ -9,6 +9,7 @@ import {
   sanitizeNoteHtml,
 } from "../components/noteFormat";
 import { getSettings } from "./settings";
+import { claimFile, releaseFile } from "./inlineImages";
 
 /**
  * The NPC roster.
@@ -342,12 +343,12 @@ export const deleteNpc = mutation({
       .collect();
     for (const note of notes) {
       for (const image of note.imageIds ?? []) {
-        await ctx.storage.delete(image);
+        await releaseFile(ctx, image);
       }
       await ctx.db.delete(note._id);
     }
 
-    if (npc.portraitId) await ctx.storage.delete(npc.portraitId);
+    if (npc.portraitId) await releaseFile(ctx, npc.portraitId);
     await ctx.db.delete(args.npcId);
   },
 });
@@ -379,12 +380,16 @@ export const setPortrait = mutation({
   handler: async (ctx, args) => {
     const npc = await ctx.db.get(args.npcId);
     if (!npc) throw new Error("NPC not found");
-    await requireDm(ctx, npc.campaignId);
+    const userId = await requireDm(ctx, npc.campaignId);
+
+    if (args.storageId && args.storageId !== npc.portraitId) {
+      await claimFile(ctx, args.storageId, { campaignId: npc.campaignId, userId });
+    }
 
     // Replacing a portrait drops the old file. Skipping this leaves an
     // image nothing references and nothing will ever clean up.
     if (npc.portraitId && npc.portraitId !== args.storageId) {
-      await ctx.storage.delete(npc.portraitId);
+      await releaseFile(ctx, npc.portraitId);
     }
 
     await ctx.db.patch(args.npcId, {
@@ -605,13 +610,20 @@ export const addNote = mutation({
       throw new Error("That thread is full — tidy some notes up first");
     }
 
+    // Each picture must be the author's own fresh upload: deleteNote
+    // deletes them, so an id read off somebody else's note must not get in.
+    const imageIds = [...new Set(args.imageIds ?? [])].slice(0, NOTE_LIMITS.images);
+    for (const id of imageIds) {
+      await claimFile(ctx, id, { campaignId: npc.campaignId, userId });
+    }
+
     return await ctx.db.insert("npcNotes", {
       campaignId: npc.campaignId,
       npcId: args.npcId,
       authorId: userId,
       channel: args.channel,
       body,
-      imageIds: (args.imageIds ?? []).slice(0, NOTE_LIMITS.images),
+      imageIds,
     });
   },
 });
@@ -750,12 +762,20 @@ export const editNote = mutation({
     await requireChannel(ctx, note.campaignId, note.channel);
 
     const body = sanitizeNoteHtml(args.body);
-    const images = (args.imageIds ?? note.imageIds ?? []).slice(
+    const images = [...new Set(args.imageIds ?? note.imageIds ?? [])].slice(
       0,
       NOTE_LIMITS.images
     );
     if (isEmptyNote(body) && images.length === 0) {
       throw new Error("A note needs something in it");
+    }
+    // Pictures already on the note are its own; a new one must be a
+    // fresh upload of the author's — see addNote.
+    const had = new Set<string>(note.imageIds ?? []);
+    for (const id of images) {
+      if (!had.has(id)) {
+        await claimFile(ctx, id, { campaignId: note.campaignId, userId });
+      }
     }
 
     await ctx.db.patch(args.noteId, {
@@ -780,7 +800,7 @@ export const deleteNote = mutation({
     await requireChannel(ctx, note.campaignId, note.channel);
 
     for (const id of note.imageIds ?? []) {
-      await ctx.storage.delete(id);
+      await releaseFile(ctx, id);
     }
     await ctx.db.delete(args.noteId);
   },

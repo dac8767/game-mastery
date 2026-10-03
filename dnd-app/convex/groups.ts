@@ -3,6 +3,7 @@ import { MutationCtx, mutation, query } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { requireDm, requireMember } from "./auth";
 import { getSettings } from "./settings";
+import { claimFile, releaseFile } from "./inlineImages";
 
 /**
  * Groups — the factions, guilds, families and mobs an NPC belongs to.
@@ -327,7 +328,7 @@ export const deleteGroup = mutation({
     const group = await ownedGroup(ctx, args.groupId);
     await requireDm(ctx, group.campaignId);
 
-    for (const id of group.attachmentIds ?? []) await ctx.storage.delete(id);
+    for (const id of group.attachmentIds ?? []) await releaseFile(ctx, id);
     await retagNpcs(ctx, group.campaignId, group.name, null);
     await ctx.db.delete(args.groupId);
   },
@@ -388,14 +389,20 @@ export const addAttachment = mutation({
   },
   handler: async (ctx, args) => {
     const group = await ownedGroup(ctx, args.groupId);
-    await requireDm(ctx, group.campaignId);
+    const userId = await requireDm(ctx, group.campaignId);
+    // Claimed first: the over-the-limit branch below deletes the upload,
+    // and must only ever delete one the caller actually made.
+    await claimFile(ctx, args.storageId, {
+      campaignId: group.campaignId,
+      userId,
+    });
 
     const current = group.attachmentIds ?? [];
     if (current.length >= MAX_ATTACHMENTS) {
       // Refuse rather than silently dropping the upload that just
       // finished — and delete the orphan, since nothing would ever
       // reference it again.
-      await ctx.storage.delete(args.storageId);
+      await releaseFile(ctx, args.storageId);
       throw new Error(`A group holds at most ${MAX_ATTACHMENTS} pictures.`);
     }
     await ctx.db.patch(args.groupId, {
@@ -413,11 +420,13 @@ export const removeAttachment = mutation({
     const group = await ownedGroup(ctx, args.groupId);
     await requireDm(ctx, group.campaignId);
 
+    // Only a file this group holds. The id is the caller's; deleting it
+    // unchecked would delete any file whose id they knew.
+    const current = group.attachmentIds ?? [];
+    if (!current.includes(args.storageId)) return;
     await ctx.db.patch(args.groupId, {
-      attachmentIds: (group.attachmentIds ?? []).filter(
-        (id) => id !== args.storageId
-      ),
+      attachmentIds: current.filter((id) => id !== args.storageId),
     });
-    await ctx.storage.delete(args.storageId);
+    await releaseFile(ctx, args.storageId);
   },
 });

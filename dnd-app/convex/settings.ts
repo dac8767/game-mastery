@@ -87,6 +87,8 @@ export const mySettings = query({
     return {
       ...settings,
       displayName: profile?.displayName ?? null,
+      // Your own id, so it can be copied into ADMIN_USER_IDS.
+      userId,
       adminEligible: await isAdminEligible(ctx, userId),
     };
   },

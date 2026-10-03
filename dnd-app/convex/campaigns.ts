@@ -11,6 +11,7 @@ import {
 // alias. One definition of "absent means active", shared with the
 // screens, rather than the same comparison written out in each.
 import { isActive } from "../components/rosterModel";
+import { claimFile, deleteInlineImages, releaseFile } from "./inlineImages";
 
 /**
  * Campaigns, membership, and characters.
@@ -229,14 +230,21 @@ export const setCampaignImage = mutation({
     storageId: v.union(v.id("_storage"), v.null()),
   },
   handler: async (ctx, args) => {
-    await requireDm(ctx, args.campaignId);
+    const userId = await requireDm(ctx, args.campaignId);
     const campaign = await ctx.db.get(args.campaignId);
     if (!campaign) throw new Error("Campaign not found");
+
+    if (args.storageId && args.storageId !== campaign.imageId) {
+      await claimFile(ctx, args.storageId, {
+        campaignId: args.campaignId,
+        userId,
+      });
+    }
 
     // The old blob is nobody's after this, and file storage is the part
     // of the free tier worth not littering.
     if (campaign.imageId && campaign.imageId !== args.storageId) {
-      await ctx.storage.delete(campaign.imageId);
+      await releaseFile(ctx, campaign.imageId);
     }
     await ctx.db.patch(args.campaignId, {
       imageId: args.storageId ?? undefined,
@@ -269,7 +277,7 @@ export const deleteCampaign = mutation({
       );
     }
 
-    if (campaign.imageId) await ctx.storage.delete(campaign.imageId);
+    if (campaign.imageId) await releaseFile(ctx, campaign.imageId);
     await ctx.db.delete(args.campaignId);
     await ctx.scheduler.runAfter(0, internal.campaigns.purgeCampaign, {
       campaignId: args.campaignId,
@@ -336,6 +344,9 @@ export const purgeCampaign = internalMutation({
   handler: async (ctx, args) => {
     const { campaignId } = args;
     let left = PURGE_BATCH;
+    // Everything pasted into this campaign's text goes with it, whoever
+    // pasted it — the campaign's own claims, and only those.
+    const purgeAuthority = { campaignId, userId: null, isDm: true };
 
     /** Delete up to the remaining budget; report whether more remain. */
     const sweep = async <T extends { _id: any }>(
@@ -393,7 +404,8 @@ export const purgeCampaign = internalMutation({
         .take(left);
       if (
         await sweep(boxes, async (b) => {
-          if (b.storageId) await ctx.storage.delete(b.storageId);
+          if (b.storageId) await releaseFile(ctx, b.storageId);
+          await deleteInlineImages(ctx, b.html, purgeAuthority);
         })
       ) {
         return await more();
@@ -411,7 +423,7 @@ export const purgeCampaign = internalMutation({
       .take(left);
     if (
       await sweep(npcs, async (n) => {
-        if (n.portraitId) await ctx.storage.delete(n.portraitId);
+        if (n.portraitId) await releaseFile(ctx, n.portraitId);
       })
     ) {
       return await more();
@@ -423,8 +435,8 @@ export const purgeCampaign = internalMutation({
       .take(left);
     if (
       await sweep(locations, async (l) => {
-        if (l.mapId) await ctx.storage.delete(l.mapId);
-        for (const id of l.pictureIds ?? []) await ctx.storage.delete(id);
+        if (l.mapId) await releaseFile(ctx, l.mapId);
+        for (const id of l.pictureIds ?? []) await releaseFile(ctx, id);
       })
     ) {
       return await more();
@@ -444,20 +456,26 @@ export const purgeCampaign = internalMutation({
         .take(left);
       if (
         await sweep(boxes, async (b) => {
-          if (b.storageId) await ctx.storage.delete(b.storageId);
+          if (b.storageId) await releaseFile(ctx, b.storageId);
+          await deleteInlineImages(ctx, b.html, purgeAuthority);
         })
       ) {
         return await more();
       }
 
-      // And the page those boxes sat on. It holds no files, so it
-      // sweeps without the storage callback — but it holds the text,
-      // which is the part somebody asked to be rid of.
+      // And the page those boxes sat on, with the pictures pasted into
+      // its text — the part somebody asked to be rid of.
       const pages = await ctx.db
         .query("sessionPages")
         .withIndex("by_session", (q) => q.eq("sessionId", session._id))
         .take(left);
-      if (await sweep(pages)) return await more();
+      if (
+        await sweep(pages, async (p) => {
+          await deleteInlineImages(ctx, p.html, purgeAuthority);
+        })
+      ) {
+        return await more();
+      }
     }
     if (await sweep(sessions)) return await more();
 
@@ -467,7 +485,7 @@ export const purgeCampaign = internalMutation({
       .take(left);
     if (
       await sweep(groups, async (g) => {
-        for (const id of g.attachmentIds ?? []) await ctx.storage.delete(id);
+        for (const id of g.attachmentIds ?? []) await releaseFile(ctx, id);
       })
     ) {
       return await more();
@@ -479,7 +497,7 @@ export const purgeCampaign = internalMutation({
       .take(left);
     if (
       await sweep(characters, async (c) => {
-        if (c.portraitId) await ctx.storage.delete(c.portraitId);
+        if (c.portraitId) await releaseFile(ctx, c.portraitId);
       })
     ) {
       return await more();
@@ -503,7 +521,7 @@ export const purgeCampaign = internalMutation({
       .take(left);
     if (
       await sweep(npcNotes, async (n) => {
-        for (const id of n.imageIds ?? []) await ctx.storage.delete(id);
+        for (const id of n.imageIds ?? []) await releaseFile(ctx, id);
       })
     ) {
       return await more();
@@ -565,6 +583,24 @@ export const purgeCampaign = internalMutation({
       .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
       .take(left);
     if (await sweep(uiOverrides)) return await more();
+
+    // Whatever this campaign's files still claim after every record above
+    // released its own: a picture removed from a note's text but kept for
+    // undo, or one a page held that something else swept. The file goes
+    // with its claim — nothing outside this campaign can own it.
+    const claims = await ctx.db
+      .query("storageClaims")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
+      .take(left);
+    if (
+      await sweep(claims, async (c) => {
+        if (await ctx.db.system.get(c.storageId)) {
+          await ctx.storage.delete(c.storageId);
+        }
+      })
+    ) {
+      return await more();
+    }
 
     const todos = await ctx.db
       .query("todos")
@@ -811,7 +847,7 @@ export const deleteCharacter = mutation({
     const character = await ctx.db.get(args.characterId);
     if (!character) return;
     await requireDm(ctx, character.campaignId);
-    if (character.portraitId) await ctx.storage.delete(character.portraitId);
+    if (character.portraitId) await releaseFile(ctx, character.portraitId);
     await ctx.db.delete(args.characterId);
   },
 });
@@ -837,8 +873,14 @@ export const setCharacterPortrait = mutation({
     if (!isDm && character.playerId !== userId) {
       throw new Error("You can only change your own character");
     }
+    if (args.storageId && args.storageId !== character.portraitId) {
+      await claimFile(ctx, args.storageId, {
+        campaignId: character.campaignId,
+        userId,
+      });
+    }
     if (character.portraitId && character.portraitId !== args.storageId) {
-      await ctx.storage.delete(character.portraitId);
+      await releaseFile(ctx, character.portraitId);
     }
     await ctx.db.patch(args.characterId, {
       portraitId: args.storageId ?? undefined,

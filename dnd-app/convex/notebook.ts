@@ -3,7 +3,13 @@ import { mutation, query, MutationCtx } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { requireMember, requireUser } from "./auth";
 import { canonicalInlineImages } from "../components/boxHtml";
-import { deleteInlineImages, withImages } from "./inlineImages";
+import {
+  claimFile,
+  claimInlineImages,
+  deleteInlineImages,
+  releaseFile,
+  withImages,
+} from "./inlineImages";
 
 /**
  * The Notebook.
@@ -43,6 +49,15 @@ async function ownedBox(
   const box = await ctx.db.get(boxId);
   if (!box || box.userId !== userId) throw new Error("Not found");
   return box;
+}
+
+/** Whose files a box's pictures are: its page's campaign, its owner. */
+async function boxOwner(
+  ctx: MutationCtx,
+  box: Doc<"notebookBoxes">
+): Promise<{ campaignId: Id<"campaigns">; userId: Id<"users"> } | null> {
+  const page = await ctx.db.get(box.pageId);
+  return page ? { campaignId: page.campaignId, userId: box.userId } : null;
 }
 
 /** The whole tree, flat. The client assembles and repairs it. */
@@ -259,8 +274,12 @@ export const deleteNode = mutation({
         // Drop the stored image too, or the file outlives every
         // reference to it and nothing will ever clean it up. The
         // pictures pasted into a text box are files of the same kind.
-        if (b.storageId) await ctx.storage.delete(b.storageId);
-        await deleteInlineImages(ctx, b.html);
+        if (b.storageId) await releaseFile(ctx, b.storageId);
+        await deleteInlineImages(ctx, b.html, {
+          campaignId: node.campaignId,
+          userId: node.userId,
+          isDm: false,
+        });
         await ctx.db.delete(b._id);
       }
       await ctx.db.delete(nodeId);
@@ -297,6 +316,10 @@ export const addBox = mutation({
     }
     const order = existing.reduce((max, b) => Math.max(max, b.order), 0) + 1;
 
+    const owner = { campaignId: page.campaignId, userId: page.userId };
+    if (args.storageId) await claimFile(ctx, args.storageId, owner);
+    await claimInlineImages(ctx, args.html, owner);
+
     const { pageId, ...rest } = args;
     return await ctx.db.insert("notebookBoxes", {
       ...rest,
@@ -332,7 +355,7 @@ export const updateBox = mutation({
     shading: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
-    await ownedBox(ctx, args.boxId);
+    const box = await ownedBox(ctx, args.boxId);
     const { boxId, ...rest } = args;
 
     const patch: Record<string, unknown> = {};
@@ -344,6 +367,8 @@ export const updateBox = mutation({
     // See addBox: the pasted picture's key, and only its key.
     if (typeof patch.html === "string") {
       patch.html = canonicalInlineImages(patch.html);
+      const owner = await boxOwner(ctx, box);
+      if (owner) await claimInlineImages(ctx, patch.html as string, owner);
     }
 
     await ctx.db.patch(boxId, patch as Partial<Doc<"notebookBoxes">>);
@@ -354,8 +379,11 @@ export const deleteBox = mutation({
   args: { boxId: v.id("notebookBoxes") },
   handler: async (ctx, args) => {
     const box = await ownedBox(ctx, args.boxId);
-    if (box.storageId) await ctx.storage.delete(box.storageId);
-    await deleteInlineImages(ctx, box.html);
+    if (box.storageId) await releaseFile(ctx, box.storageId);
+    const owner = await boxOwner(ctx, box);
+    if (owner) {
+      await deleteInlineImages(ctx, box.html, { ...owner, isDm: false });
+    }
     await ctx.db.delete(args.boxId);
   },
 });

@@ -578,7 +578,7 @@ export default defineSchema({
     /**
      * Break-glass switch for a platform admin. Storing it here is safe
      * because it does nothing on its own: eligibility comes from the
-     * ADMIN_EMAILS deployment variable, which no mutation can write, and
+     * ADMIN_USER_IDS deployment variable, which no mutation can write, and
      * auth.hasActiveAdmin requires both. Optional so rows written before
      * admin existed still validate.
      */
@@ -1824,5 +1824,27 @@ export default defineSchema({
     ),
   })
     .index("by_recording", ["recordingId", "index"])
+    .index("by_campaign", ["campaignId"]),
+
+  /**
+   * Who an uploaded file belongs to.
+   *
+   * Every mutation that attaches a file takes a bare `v.id("_storage")`,
+   * and every delete deletes whatever id its record holds — so without
+   * this, a member who learned another file's id (several list queries
+   * hand them out) could attach it to their own note and delete the
+   * note, deleting the file from under the record that really owns it.
+   *
+   * A file is claimed the first time it is attached, and only while
+   * its upload is fresh, so an older file nobody claimed — anything
+   * uploaded before this table existed — cannot be claimed by anyone.
+   * See convex/inlineImages.ts.
+   */
+  storageClaims: defineTable({
+    storageId: v.id("_storage"),
+    campaignId: v.id("campaigns"),
+    userId: v.id("users"),
+  })
+    .index("by_storage", ["storageId"])
     .index("by_campaign", ["campaignId"]),
 });

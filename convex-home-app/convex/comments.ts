@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { canSeeParent } from "./visibility";
 
 /**
  * Comments — the module that shows off why Convex fits this app.
@@ -23,6 +24,10 @@ export const listForParent = query({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) return [];
+    // A private task's thread is as private as the task.
+    if (!(await canSeeParent(ctx, userId, args.parentType, args.parentId))) {
+      return [];
+    }
 
     const comments = await ctx.db
       .query("comments")
@@ -63,6 +68,9 @@ export const add = mutation({
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
       throw new Error("Must be signed in to comment");
+    }
+    if (!(await canSeeParent(ctx, userId, args.parentType, args.parentId))) {
+      throw new Error("Not found");
     }
     const body = args.body.trim();
     if (body.length === 0) {

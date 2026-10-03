@@ -620,13 +620,23 @@ export const dmVisibility = {
 
     // ---- admin must not be grantable from inside the app -----------
     const authSrc = read("convex", "auth.ts");
-    if (!/process\.env\.ADMIN_EMAILS/.test(authSrc)) {
+    if (!/process\.env\.ADMIN_USER_IDS/.test(authSrc)) {
       problems.push(
-        "admin eligibility must come from the ADMIN_EMAILS deployment " +
+        "admin eligibility must come from the ADMIN_USER_IDS deployment " +
           "variable — a table or mutation could be written by a bug"
       );
     }
-    if (/ctx\.db[\s\S]{0,80}(adminEmails|isAdminEligible)/.test(authSrc)) {
+    // Emails are chosen by whoever signs up (no verification, no
+    // normalisation), so they can never be what grants admin.
+    if (/process\.env\.ADMIN_EMAILS|\.email\b/.test(
+      (authSrc.match(/export async function isAdminEligible[\s\S]*?\n}/) ?? [""])[0]
+    )) {
+      problems.push(
+        "isAdminEligible must not decide by email — sign-up lets anyone " +
+          "claim an address or a case variant of one"
+      );
+    }
+    if (/ctx\.db[\s\S]{0,80}(adminUserIds|isAdminEligible)/.test(authSrc)) {
       problems.push(
         "admin eligibility appears to be read from the database rather " +
           "than the environment"

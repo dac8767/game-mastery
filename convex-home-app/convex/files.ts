@@ -1,8 +1,10 @@
 import { R2 } from "@convex-dev/r2";
 import { v } from "convex/values";
 import { components } from "./_generated/api";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, QueryCtx } from "./_generated/server";
+import { Doc, Id } from "./_generated/dataModel";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { canSeeParent } from "./visibility";
 
 /**
  * Cloudflare R2 file storage via the official Convex R2 component.
@@ -14,6 +16,10 @@ import { getAuthUserId } from "@convex-dev/auth/server";
  *  3. Client calls registerAttachment with the returned key to create the
  *     metadata row that the rest of the app queries against.
  *  4. To display, call getAttachmentUrl (returns a signed R2 URL).
+ *
+ * Access follows the parent: an attachment on a private task or note is
+ * as private as the task or note. Only whoever uploaded a file may
+ * delete it.
  *
  * Required environment variables (set via `npx convex env set`):
  *  R2_BUCKET, R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
@@ -33,6 +39,28 @@ export const { generateUploadUrl, syncMetadata } = r2.clientApi({
   },
 });
 
+const parentTypeValidator = v.union(
+  v.literal("task"),
+  v.literal("note"),
+  v.literal("comment")
+);
+
+/**
+ * May this person see this attachment?
+ *
+ * The uploader always can. A linked one follows its parent; an unlinked
+ * one (a shared library file) is shared, like `visibleTo` undefined.
+ */
+async function canSeeAttachment(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+  row: Doc<"attachments">
+): Promise<boolean> {
+  if (row.uploadedBy === userId) return true;
+  if (row.parentType === undefined || row.parentId === undefined) return true;
+  return await canSeeParent(ctx, userId, row.parentType, row.parentId);
+}
+
 /**
  * After a successful upload, create the attachment metadata record.
  * Optionally link it to a task, note, or comment right away.
@@ -43,15 +71,33 @@ export const registerAttachment = mutation({
     fileName: v.string(),
     contentType: v.optional(v.string()),
     sizeBytes: v.optional(v.number()),
-    parentType: v.optional(
-      v.union(v.literal("task"), v.literal("note"), v.literal("comment"))
-    ),
+    parentType: v.optional(parentTypeValidator),
     parentId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
       throw new Error("Must be signed in");
+    }
+    if ((args.parentType === undefined) !== (args.parentId === undefined)) {
+      throw new Error("parentType and parentId go together");
+    }
+    if (
+      args.parentType !== undefined &&
+      args.parentId !== undefined &&
+      !(await canSeeParent(ctx, userId, args.parentType, args.parentId))
+    ) {
+      throw new Error("Not found");
+    }
+    // One row per object. A second row naming somebody else's key would
+    // make that key "uploaded by" the caller, and deleteAttachment would
+    // then delete their file.
+    const existing = await ctx.db
+      .query("attachments")
+      .withIndex("by_key", (q) => q.eq("r2Key", args.r2Key))
+      .first();
+    if (existing) {
+      throw new Error("That file is already registered");
     }
     return await ctx.db.insert("attachments", {
       r2Key: args.r2Key,
@@ -72,16 +118,15 @@ export const registerAttachment = mutation({
  */
 export const listForParent = query({
   args: {
-    parentType: v.union(
-      v.literal("task"),
-      v.literal("note"),
-      v.literal("comment")
-    ),
+    parentType: parentTypeValidator,
     parentId: v.string(),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) return [];
+    if (!(await canSeeParent(ctx, userId, args.parentType, args.parentId))) {
+      return [];
+    }
 
     const rows = await ctx.db
       .query("attachments")
@@ -101,19 +146,40 @@ export const listForParent = query({
 });
 
 /**
- * Get a signed URL for a single attachment (e.g. avatar display).
+ * Get a signed URL for a single file (e.g. avatar display).
+ *
+ * Only for a key the app knows about and the caller may see: a
+ * registered attachment, or somebody's profile avatar. An arbitrary key
+ * is refused rather than signed.
  */
 export const getAttachmentUrl = query({
   args: { r2Key: v.string() },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) return null;
-    return await r2.getUrl(args.r2Key);
+
+    const row = await ctx.db
+      .query("attachments")
+      .withIndex("by_key", (q) => q.eq("r2Key", args.r2Key))
+      .first();
+    if (row) {
+      return (await canSeeAttachment(ctx, userId, row))
+        ? await r2.getUrl(args.r2Key)
+        : null;
+    }
+
+    // Avatars are shown to the whole household. Profiles are one row
+    // per person, so this scan is two rows.
+    const profiles = await ctx.db.query("profiles").collect();
+    return profiles.some((p) => p.avatarKey === args.r2Key)
+      ? await r2.getUrl(args.r2Key)
+      : null;
   },
 });
 
 /**
  * Delete an attachment: removes both the R2 object and the metadata row.
+ * Only whoever uploaded it.
  */
 export const deleteAttachment = mutation({
   args: { attachmentId: v.id("attachments") },
@@ -124,6 +190,9 @@ export const deleteAttachment = mutation({
     }
     const row = await ctx.db.get(args.attachmentId);
     if (!row) return;
+    if (row.uploadedBy !== userId) {
+      throw new Error("You can only delete files you uploaded");
+    }
     await r2.deleteObject(ctx, row.r2Key);
     await ctx.db.delete(args.attachmentId);
   },

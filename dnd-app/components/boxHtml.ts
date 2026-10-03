@@ -30,7 +30,7 @@
    — once by the Next.js app, which knows the alias, and once by the
    Convex backend, whose tsconfig does not. convex/npcs.ts imports
    noteFormat the same way for the same reason. */
-import { HtmlPolicy, sanitizeHtml } from "./noteFormat";
+import { HtmlPolicy, decodeCharRefs, sanitizeHtml } from "./noteFormat";
 
 /** Generous for a page of notes, bounded against a paste-bomb. */
 export const BOX_HTML_LIMIT = 40000;
@@ -94,14 +94,18 @@ export function safeStyle(raw: string): string | null {
  */
 export function safeBoxHref(raw: string): string | null {
   const value = String(raw ?? "").trim();
-  if (!value.startsWith("/") || value.startsWith("//")) return null;
+  // Checked as the browser will read it: `/&#47;evil.example` is
+  // `//evil.example` once decoded, an off-site link. An unknown named
+  // reference becomes a control character so the check below refuses it.
+  const decoded = decodeCharRefs(value, "\u0000");
+  if (!decoded.startsWith("/") || decoded.startsWith("//")) return null;
   // Control characters, whitespace and the quoting characters, as
   // ESCAPES rather than as the characters themselves: written
   // literally, the low end of that range put real control bytes in
   // this file and made it binary to grep and to diff. NOT a range
   // like `[ -]` either, which is space-to-hyphen and swallows the
   // "%" in every url-encoded name.
-  if (/[\u0000-\u0020\u007f"'<>\\`]/.test(value)) return null;
+  if (/[\u0000-\u0020\u007f"'<>\\`]/.test(decoded)) return null;
   return value;
 }
 

@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { requireDm, requireMember } from "./auth";
+import { claimFile, releaseFile } from "./inlineImages";
 
 /**
  * Locations — the tree of places, and the maps that link them.
@@ -180,8 +181,8 @@ export const deleteLocation = mutation({
       });
     }
 
-    if (loc.mapId) await ctx.storage.delete(loc.mapId);
-    for (const id of loc.pictureIds ?? []) await ctx.storage.delete(id);
+    if (loc.mapId) await releaseFile(ctx, loc.mapId);
+    for (const id of loc.pictureIds ?? []) await releaseFile(ctx, id);
     await ctx.db.delete(args.locationId);
   },
 });
@@ -220,10 +221,13 @@ export const setMap = mutation({
   },
   handler: async (ctx, args) => {
     const loc = await ownedLocation(ctx, args.locationId);
-    await requireDm(ctx, loc.campaignId);
+    const userId = await requireDm(ctx, loc.campaignId);
 
+    if (args.storageId && args.storageId !== loc.mapId) {
+      await claimFile(ctx, args.storageId, { campaignId: loc.campaignId, userId });
+    }
     if (loc.mapId && loc.mapId !== args.storageId) {
-      await ctx.storage.delete(loc.mapId);
+      await releaseFile(ctx, loc.mapId);
     }
     await ctx.db.patch(args.locationId, {
       mapId: args.storageId ?? undefined,
@@ -238,14 +242,17 @@ export const addPicture = mutation({
   },
   handler: async (ctx, args) => {
     const loc = await ownedLocation(ctx, args.locationId);
-    await requireDm(ctx, loc.campaignId);
+    const userId = await requireDm(ctx, loc.campaignId);
+    // Claimed first: the over-the-limit branch below deletes the upload,
+    // and must only ever delete one the caller actually made.
+    await claimFile(ctx, args.storageId, { campaignId: loc.campaignId, userId });
 
     const pictures = loc.pictureIds ?? [];
     if (pictures.length >= MAX_PICTURES) {
       // Refuse rather than silently dropping the upload the GM just
       // waited for — and delete the orphaned file, since nothing else
       // will ever reference it.
-      await ctx.storage.delete(args.storageId);
+      await releaseFile(ctx, args.storageId);
       throw new Error(`A location holds at most ${MAX_PICTURES} pictures.`);
     }
     await ctx.db.patch(args.locationId, {
@@ -263,10 +270,13 @@ export const removePicture = mutation({
     const loc = await ownedLocation(ctx, args.locationId);
     await requireDm(ctx, loc.campaignId);
 
+    // Only a picture this location holds — see groups.removeAttachment.
+    const pictures = loc.pictureIds ?? [];
+    if (!pictures.includes(args.storageId)) return;
     await ctx.db.patch(args.locationId, {
-      pictureIds: (loc.pictureIds ?? []).filter((id) => id !== args.storageId),
+      pictureIds: pictures.filter((id) => id !== args.storageId),
     });
-    await ctx.storage.delete(args.storageId);
+    await releaseFile(ctx, args.storageId);
   },
 });
 

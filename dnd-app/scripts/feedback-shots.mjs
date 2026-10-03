@@ -16,7 +16,7 @@
  * and the secret one must never reach a repo or a chat log.
  */
 import { writeFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join, resolve, sep } from "node:path";
 
 const URL_BASE = "https://agfdfkpoxnmmisifbrdj.supabase.co";
 const BUCKET = "feedback-shots";
@@ -71,7 +71,16 @@ for (const name of names) {
     console.error(`${name}: ${res.status} ${res.statusText}`);
     continue;
   }
-  const path = join(OUT, name);
+  // The name comes from the feedback row, which whoever filed the report
+  // wrote. Saved under its last path segment, and only inside OUT — a
+  // name like "../../.zshrc" must not decide where on this machine the
+  // bytes land.
+  const safe = basename(name);
+  const path = join(OUT, safe);
+  if (!safe || safe === "." || safe === ".." || !resolve(path).startsWith(resolve(OUT) + sep)) {
+    console.error(`${name}: refused — not a plain file name`);
+    continue;
+  }
   writeFileSync(path, Buffer.from(await res.arrayBuffer()));
   console.log(path);
   ok++;

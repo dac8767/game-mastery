@@ -2009,6 +2009,28 @@ export const unit = {
       "leading spaces do not smuggle a scheme past",
       !has('<a href="  javascript:alert(1)">x</a>', "javascript")
     );
+    // Browsers decode character references before reading the scheme,
+    // and a numeric one needs no semicolon — none of these has a
+    // literal colon, and every one of them runs.
+    check(
+      "a javascript: link written with character references loses its href",
+      [
+        "javascript&colon;alert(1)",
+        "javascript&#58;alert(1)",
+        "javascript&#58alert(1)",
+        "javascript&#x3A;alert(1)",
+        "javascript&#0000058;alert(1)",
+        "JAVASCRIPT&COLON;alert(1)",
+        "java&Tab;script&colon;alert(1)",
+      ].every((h) => !has(`<a href="${h}">x</a>`, "href"))
+    );
+    check(
+      "an escaped ampersand in a query string still links",
+      has(
+        '<a href="https://example.com/?a=1&amp;b=2">x</a>',
+        'href="https://example.com/?a=1&amp;b=2"'
+      )
+    );
     check(
       "a data: link is refused",
       !has('<a href="data:text/html,<script>1</script>">x</a>', "data:")
@@ -6571,6 +6593,13 @@ export const unit = {
       check(
         "and neither is a protocol-relative url",
         !clean('<a href="//evil.example">x</a>').includes("href")
+      );
+      // The same url with its second slash written as a reference: the
+      // browser decodes it to `//evil.example`.
+      check(
+        "nor one whose second slash is a character reference",
+        !clean('<a href="/&#47;evil.example">x</a>').includes("href") &&
+          !clean('<a href="/&sol;evil.example">x</a>').includes("href")
       );
       check(
         "a kind that is not a word cannot reach the route builder",

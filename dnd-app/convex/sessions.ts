@@ -10,7 +10,13 @@ import { Doc, Id } from "./_generated/dataModel";
 import { requireDm, requireMember } from "./auth";
 import { getSettings } from "./settings";
 import { sanitizeBoxHtml } from "../components/boxHtml";
-import { deleteInlineImages, withImages } from "./inlineImages";
+import {
+  claimFile,
+  claimInlineImages,
+  deleteInlineImages,
+  releaseFile,
+  withImages,
+} from "./inlineImages";
 import {
   BUILTIN_TABS,
   MAX_CUSTOM_TABS,
@@ -93,6 +99,12 @@ async function ownedBox(
   const session = await ctx.db.get(box.sessionId);
   if (!session) throw new Error("Not found");
   return { box, session };
+}
+
+/** Who is acting on this session's files, for the claim checks. */
+async function fileAuthority(ctx: MutationCtx, session: Doc<"sessions">) {
+  const { userId, isDm } = await requireMember(ctx, session.campaignId);
+  return { campaignId: session.campaignId, userId, isDm };
 }
 
 /**
@@ -635,7 +647,8 @@ export const deleteSession = mutation({
   args: { sessionId: v.id("sessions") },
   handler: async (ctx, args) => {
     const session = await ownedSession(ctx, args.sessionId);
-    await requireDm(ctx, session.campaignId);
+    const userId = await requireDm(ctx, session.campaignId);
+    const by = { campaignId: session.campaignId, userId, isDm: true };
 
     // Every tab's worth, which is what MAX_TABS boxes means: addBox
     // holds each tab to MAX_BOXES, so the session's true ceiling is
@@ -649,8 +662,8 @@ export const deleteSession = mutation({
       .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
       .take(MAX_BOXES * MAX_TABS);
     for (const box of boxes) {
-      if (box.storageId) await ctx.storage.delete(box.storageId);
-      await deleteInlineImages(ctx, box.html);
+      if (box.storageId) await releaseFile(ctx, box.storageId);
+      await deleteInlineImages(ctx, box.html, by);
       await ctx.db.delete(box._id);
     }
 
@@ -662,7 +675,7 @@ export const deleteSession = mutation({
       .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
       .take(MAX_TABS * 2);
     for (const page of pages) {
-      await deleteInlineImages(ctx, page.html);
+      await deleteInlineImages(ctx, page.html, by);
       await ctx.db.delete(page._id);
     }
 
@@ -748,6 +761,7 @@ export const deleteTab = mutation({
   args: { tabId: v.id("sessionTabs") },
   handler: async (ctx, args) => {
     const { tab, session } = await requireTabOwner(ctx, args.tabId);
+    const by = await fileAuthority(ctx, session);
 
     const boxes = await ctx.db
       .query("sessionBoxes")
@@ -756,8 +770,8 @@ export const deleteTab = mutation({
       )
       .take(MAX_BOXES);
     for (const box of boxes) {
-      if (box.storageId) await ctx.storage.delete(box.storageId);
-      await deleteInlineImages(ctx, box.html);
+      if (box.storageId) await releaseFile(ctx, box.storageId);
+      await deleteInlineImages(ctx, box.html, by);
       await ctx.db.delete(box._id);
     }
 
@@ -768,7 +782,7 @@ export const deleteTab = mutation({
       )
       .take(2);
     for (const page of pages) {
-      await deleteInlineImages(ctx, page.html);
+      await deleteInlineImages(ctx, page.html, by);
       await ctx.db.delete(page._id);
     }
 
@@ -858,6 +872,7 @@ export const setBody = mutation({
     await requireWriter(ctx, session, args.side);
 
     const html = sanitizeBoxHtml(args.html);
+    await claimInlineImages(ctx, html, await fileAuthority(ctx, session));
     const existing = await ctx.db
       .query("sessionPages")
       .withIndex("by_session_side", (q) =>
@@ -906,14 +921,19 @@ export const addBox = mutation({
     }
     const order = existing.reduce((max, b) => Math.max(max, b.order), 0) + 1;
 
-    const { sessionId, html, ...rest } = args;
+    const who = await fileAuthority(ctx, session);
+    if (args.storageId) await claimFile(ctx, args.storageId, who);
+    const clean = args.html === undefined ? undefined : sanitizeBoxHtml(args.html);
+    await claimInlineImages(ctx, clean, who);
+
+    const { sessionId, html: _html, ...rest } = args;
     return await ctx.db.insert("sessionBoxes", {
       ...rest,
       // Rebuilt here, in the mutation, rather than in the editor: a
       // hand-made call would skip an editor-side sanitiser entirely,
       // and the player side is written by any member and read by the
       // GM. See components/boxHtml.ts.
-      html: html === undefined ? undefined : sanitizeBoxHtml(html),
+      html: clean,
       sessionId,
       order,
     });
@@ -958,6 +978,11 @@ export const updateBox = mutation({
     // so it is the one that carries markup most often.
     if (typeof patch.html === "string") {
       patch.html = sanitizeBoxHtml(patch.html);
+      await claimInlineImages(
+        ctx,
+        patch.html as string,
+        await fileAuthority(ctx, session)
+      );
     }
     if (Object.keys(patch).length === 0) return;
 
@@ -971,7 +996,9 @@ export const deleteBox = mutation({
     const { box, session } = await ownedBox(ctx, args.boxId);
     await requireWriter(ctx, session, box.side);
 
-    if (box.storageId) await ctx.storage.delete(box.storageId);
+    if (box.storageId) await releaseFile(ctx, box.storageId);
+    // Its pasted pictures too — the ones the caller may delete.
+    await deleteInlineImages(ctx, box.html, await fileAuthority(ctx, session));
     await ctx.db.delete(args.boxId);
   },
 });
